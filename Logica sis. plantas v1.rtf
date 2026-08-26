@@ -1,0 +1,576 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2870
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 .SFNS-Regular_wdth_opsz160000_GRAD_wght21C0000;\f1\fnil\fcharset0 HelveticaNeue;\f2\fnil\fcharset0 .AppleSystemUIFontMonospaced-Regular;
+}
+{\colortbl;\red255\green255\blue255;\red236\green235\blue231;\red24\green24\blue24;\red118\green116\blue110;
+\red17\green17\blue17;}
+{\*\expandedcolortbl;;\cssrgb\c94118\c93725\c92549;\cssrgb\c12549\c12549\c12157;\cssrgb\c53725\c52941\c50588;
+\cssrgb\c8235\c8235\c8235;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\b\fs44 \cf2 \cb3 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 LOGICA_SISTEMA_PRODUCCION.md\cb1 \
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs24 \cf4 \cb3 \strokec4 25.56 KB\'95557 l\'edneas\cb1 \
+\cb3 El formato puede ser inconsistente con la fuente\cb1 \
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs26 \cf2 \cb5 \strokec2 # L\'f3gica del sistema de producci\'f3n VialTec\
+## Documento de referencia para nueva implementaci\'f3n\
+\
+---\
+\
+## 1. QU\'c9 ES EL SISTEMA Y PARA QU\'c9 SIRVE\
+\
+VialTec es una planta productora de **asfalto y hormig\'f3n**. El sistema gestiona todo el ciclo de producci\'f3n diaria:\
+\
+1. Un encargado de obra **solicita** un pedido de mezcla (tipo, cantidad, fecha)\
+2. El plantista **confirma** que puede producir ese d\'eda\
+3. La planta **despacha** (produce y entrega), registrando la cantidad real producida\
+4. La b\'e1scula **pesa** cada cami\'f3n y emite un vale imprimible\
+5. El sistema **descuenta del stock** los insumos consumidos, seg\'fan la f\'f3rmula de la mezcla\
+\
+El objetivo es tener trazabilidad completa: saber qu\'e9 se pidi\'f3, cu\'e1ndo, cu\'e1nto se produjo realmente, qu\'e9 insumos se consumieron, y qu\'e9 tiene el stock en tiempo real.\
+\
+---\
+\
+## 2. ENTIDADES PRINCIPALES\
+\
+### 2.1 F\'f3rmulas de mezcla\
+\
+Cada mezcla tiene una f\'f3rmula que define su composici\'f3n. Son el n\'facleo t\'e9cnico del sistema.\
+\
+**Campos:**\
+- `id` \'97 identificador \'fanico\
+- `nombre` \'97 nombre de la mezcla (ej: "CAC D19", "Hormig\'f3n H-30", "CAC19 (RAP 15%)")\
+- `tipo` \'97 `"asfalto"` o `"hormigon"`\
+- `unidad` \'97 `"tn"` para asfalto, `"m\'b3"` para hormig\'f3n\
+- `activo` \'97 boolean\
+- `insumos` \'97 array de componentes:\
+  - `nombre` \'97 nombre del material (ej: "Piedra 6/20")\
+  - `cantidad` \'97 cantidad por unidad de producci\'f3n\
+  - `unidad` \'97 unidad del insumo: `"%"` (porcentaje de la tonelada), `"kg"` (por m\'b3), `"tn"`, `"L"`\
+\
+**Conversi\'f3n de insumos a kg (funci\'f3n cr\'edtica):**\
+```\
+si unidad === "%": kg = (cantidad / 100) \'d7 1000 \'d7 cantProducida    (% de tn)\
+si unidad === "tn": kg = cantidad \'d7 1000 \'d7 cantProducida\
+si unidad === "kg" o "L": kg = cantidad \'d7 cantProducida\
+```\
+\
+**Materiales excluidos del stock:** `Agua` y `Purgue` nunca se descuentan (set `SIN_STOCK`).\
+\
+**Ejemplos de f\'f3rmulas reales:**\
+- CAC D19 (asfalto): Piedra 6/20 47%, Arena 0/6 53%, Asfalto CA30 4.5%\
+- CAC19 RAP15% (asfalto): Piedra 6/20 42%, Arena 0/6 43%, Asfalto CA30 4.1%\
+- H-30 (hormig\'f3n): Cemento CPC 40 305kg, Arena 0/6 151kg, Piedra 6/20 567kg, Arena Silicia 668kg, ADD PLAS 2.4kg, Piedra 10/30 492kg (por m\'b3)\
+- H-30 c/6-20 (hormig\'f3n): Cemento 320kg, Arena Silicia 680kg, Arena 0/6 165kg, Piedra 6/20 1050kg, ADD PLAS 2.4kg (por m\'b3)\
+\
+---\
+\
+### 2.2 Pedidos\
+\
+El pedido es el documento central del flujo de trabajo.\
+\
+**Campos:**\
+- `id`\
+- `obra` \'97 nombre de la obra destino (texto libre, denormalizado)\
+- `obraId` \'97 FK a la obra (puede ser vac\'edo en ventas externas)\
+- `encargado` \'97 nombre del encargado que solicita\
+- `formulaId` \'97 FK a la f\'f3rmula\
+- `cantidad` \'97 cantidad solicitada (en la unidad de la f\'f3rmula)\
+- `cantidadReal` \'97 cantidad efectivamente producida/despachada (se llena al despachar)\
+- `fecha` \'97 fecha planificada de despacho (YYYY-MM-DD)\
+- `estado` \'97 ver ciclo de vida abajo\
+- `tipoPedido` \'97 `"venta"` para ventas externas, null/vac\'edo para obras propias\
+- `clienteExterno` \'97 nombre del cliente si es venta externa\
+- `notas` \'97 observaciones\
+- `nroRemito` \'97 n\'famero de remito (hormig\'f3n: primer cami\'f3n; ventas externas: campo global)\
+- `nroVale` \'97 n\'famero de vale de b\'e1scula (asfalto interno: campo global; ventas externas: primer cami\'f3n)\
+- `camiones` \'97 array de cargas individuales (ver abajo)\
+- `motivo` \'97 motivo de postergaci\'f3n o cancelaci\'f3n\
+- `motivoEn` \'97 timestamp del cambio\
+- `historial` \'97 array de eventos `\{estado, fecha, usuario, motivo\}`\
+- `archivado` \'97 boolean\
+- `creadoEn` \'97 timestamp de creaci\'f3n\
+\
+**Ciclo de vida del pedido (estados):**\
+```\
+solicitado \uc0\u8594  confirmado \u8594  despachado\
+          \uc0\u8600  postergado \u8594  confirmado \u8594  despachado\
+          \uc0\u8600  cancelado\
+```\
+- `solicitado`: creado por encargado, esperando confirmaci\'f3n de la planta\
+- `confirmado`: la planta acepta producirlo en esa fecha\
+- `despachado`: producido y entregado, con cantidadReal registrada\
+- `postergado`: se mueve a otra fecha (puede tener nueva fecha)\
+- `cancelado`: requiere motivo obligatorio\
+\
+**Tipos de pedido por comportamiento:**\
+1. **Asfalto interno** (tipoPedido \uc0\u8800  "venta", f\'f3rmula tipo asfalto): N\'b0 vale obligatorio global, sin remito\
+2. **Hormig\'f3n interno** (f\'f3rmula tipo hormig\'f3n): remito por carga (per cami\'f3n), sin vale\
+3. **Venta externa** (tipoPedido === "venta"): vale por carga (per cami\'f3n), remito global opcional\
+\
+**L\'f3gica de cargas m\'faltiples (camiones):**\
+Al despachar se pueden registrar N cargas, cada una con:\
+- `cantidad` \'97 toneladas o m\'b3 de esa carga\
+- `nroRemito` \'97 remito espec\'edfico (hormig\'f3n)\
+- `nroVale` \'97 vale espec\'edfico (ventas de asfalto)\
+- `patente` \'97 opcional\
+\
+La `cantidadReal` del pedido = suma de todas las cargas.\
+\
+**L\'f3gica de pedido dividido:**\
+Si `cantidadReal < cantidad` y el usuario activa "dividir pedido", el sistema crea autom\'e1ticamente un nuevo pedido `confirmado` con la cantidad residual en una fecha futura. El original queda `despachado`.\
+\
+---\
+\
+### 2.3 Stock\
+\
+El stock registra los materiales disponibles en planta.\
+\
+**Regla cr\'edtica: todo en kg internamente.** El display divide por 1000 para mostrar toneladas. Al ingresar: tn\'d71000, kg\'d71, L\'d71, m\'b3\'d71.\
+\
+**Operaciones que modifican stock:**\
+1. **Al despachar** (pedidos): descuenta los insumos de la f\'f3rmula \'d7 cantidadReal\
+2. **Ingreso manual** (StockView): suma kg al material\
+3. **Ingreso de \'e1ridos por b\'e1scula** (BalanzaView): suma al stock usando `cantidadRemito` (cantidad declarada en el remito, NO el peso neto de la b\'e1scula)\
+4. **Egreso manual** (StockView): resta kg\
+\
+**saveStockGuard (protecci\'f3n cr\'edtica):**\
+Antes de guardar, lee el stock actual de la DB (siempre fresco, nunca del estado React). Si el stock nuevo tiene <50% de materiales con valor vs. el actual, O el total cae >90%, cancela el guardado, crea un backup autom\'e1tico con key `vt_stockbak_<timestamp>`, y alerta al usuario. Esto previene bugs que vaciar\'edan el stock.\
+\
+**Al modificar stock siempre leer fresco:** nunca usar el estado React para operar sobre el stock. Siempre hacer `freshStock = await load(SK.stock)` antes de modificar.\
+\
+---\
+\
+### 2.4 Vales de b\'e1scula (asfalto)\
+\
+Los vales son el comprobante de pesaje de cada cami\'f3n de asfalto en la b\'e1scula.\
+\
+**Campos:**\
+- `id`\
+- `numero` \'97 secuencial global (empieza en 9579, incrementa de a 1)\
+- `fecha` \'97 YYYY-MM-DD\
+- `hora` \'97 HH:MM\
+- `pedidoId` \'97 FK al pedido (puede ser null si es despacho sin pedido en sistema)\
+- `obra` \'97 nombre de la obra/destino (denormalizado)\
+- `mezcla` \'97 nombre de la f\'f3rmula (denormalizado)\
+- `patente` \'97 del cami\'f3n\
+- `tipoCamion` \'97 tipo de cami\'f3n\
+- `chofer` \'97 nombre\
+- `pesoBruto` \'97 tn\
+- `tara` \'97 tn\
+- `pesoNeto` \'97 tn (bruto - tara, redondeado 2 decimales)\
+- `temperatura` \'97 \'b0C (opcional)\
+- `operador` \'97 usuario que registr\'f3\
+- `acumulado` \'97 calculado al crear (dead data, ver nota abajo)\
+\
+**C\'e1lculo del neto:** `pesoNeto = redondear2(pesoBruto - tara)` si bruto > tara > 0.\
+\
+**C\'e1lculo del acumulado (en el vale impreso y en pantalla):**\
+```\
+acumulado = suma de pesoNeto de todos los vales donde:\
+  - fecha === este vale's fecha\
+  - pedidoId === este vale's pedidoId  (si existe)\
+  - O bien: obra === este vale's obra  (si no hay pedidoId)\
+  - Y numero \uc0\u8804  este vale's numero\
+```\
+Esto da el total acumulado despacho del d\'eda hasta ese vale, en orden de registro.\
+\
+**Nota:** el campo `vale.acumulado` se guarda pero no se lee en ning\'fan lado. Tanto el imprimible como el historial recalculan din\'e1micamente con la f\'f3rmula de arriba.\
+\
+**Impresi\'f3n del vale:** formato A4 landscape, dos copias por p\'e1gina (planta y chofer). Incluye logo, fecha, n\'famero (8 d\'edgitos con ceros), tipo de mezcla, cliente/obra, cami\'f3n, patente, chofer, bruto/tara/neto, hora, temperatura, acumulado, firma del chofer.\
+\
+**Flujo en b\'e1scula:**\
+1. Se abren "slots" (ranuras de b\'e1scula), cada uno es un despacho independiente en proceso\
+2. Al seleccionar un pedido en el slot, se auto-completa obra y mezcla\
+3. Al seleccionar patente, se auto-completan tara, tipo cami\'f3n y chofer (desde maestros)\
+4. Se ingresan bruto \uc0\u8594  el sistema calcula neto\
+5. Se guarda el vale \uc0\u8594  se imprime autom\'e1ticamente \u8594  el slot se cierra\
+\
+---\
+\
+### 2.5 Ingresos de \'e1ridos (b\'e1scula)\
+\
+Para registrar la entrada de materiales que llegan en cami\'f3n.\
+\
+**Campos:**\
+- `id`, `fecha`, `hora`, `tipo: "ingreso"`\
+- `material` \'97 nombre del insumo\
+- `remito` \'97 n\'famero de remito (validado contra duplicados)\
+- `proveedor`\
+- `patente`\
+- `pesoBruto`, `tara`, `pesoNeto`\
+- `cantidadRemito` \'97 cantidad declarada en el remito (tn)\
+- `diferencia` \'97 pesoNeto - cantidadRemito (para detectar desv\'edos)\
+- `responsable`\
+\
+**Regla de stock:** se suma `cantidadRemito \'d7 1000` (no el pesoNeto). El remito es la cantidad comprometida.\
+\
+**Validaci\'f3n de remito duplicado:** antes de guardar, verifica que el n\'famero de remito no exista en ingAridos ni en movimientos manuales.\
+\
+---\
+\
+### 2.6 Egresos de \'e1ridos (b\'e1scula)\
+\
+Para registrar salidas de material crudo (\'e1ridos) que salen de planta sin ser procesados.\
+\
+**Campos:** id, fecha, hora, material, destino, pesoBruto, tara, pesoNeto, responsable, numero (secuencial propio).\
+\
+El stock se descuenta por `pesoNeto`.\
+\
+---\
+\
+### 2.7 Maestros (datos de referencia)\
+\
+Todos los datos de referencia se guardan en un \'fanico objeto JSON bajo la key `vt_maestros9`:\
+\
+- **obras** \'97 `[\{id, nombre, codigo, activo\}]` \'97 obras internas de VialTec\
+- **encargados** \'97 `[\{id, nombre, activo\}]` \'97 personas que pueden ser encargados en pedidos\
+- **proveedores** \'97 `[\{id, nombre, material\}]` \'97 proveedores de insumos\
+- **materiales** \'97 `[\{id, nombre\}]` \'97 lista extra de materiales (para stock/\'e1ridos que no est\'e1n en f\'f3rmulas)\
+- **patentes** \'97 `[\{id, nombre, tipo, tara, chofer\}]` \'97 camiones de planta con tara conocida\
+- **patenteExternas** \'97 `[\{id, nombre, tipo, tara, chofer\}]` \'97 camiones externos (sin tara predefinida)\
+- **choferes** \'97 `[\{id, nombre\}]` \'97 lista de choferes\
+\
+---\
+\
+### 2.8 Usuarios\
+\
+Guardados en `vt_usuarios9`. El login usa Supabase Auth (email + password real). Despu\'e9s del auth, el sistema busca el usuario por email en esta lista para obtener rol y permisos.\
+\
+**Campos:**\
+- `id`, `nombre`, `email`, `rol`, `activo`\
+- `obraIds` \'97 array de IDs de obras a cargo (solo para encargado y supervisor)\
+- `telefono` \'97 WhatsApp (c\'f3digo pa\'eds + n\'famero, ej: "5491123456789")\
+- `gestionUsuarios` \'97 boolean, puede crear/editar usuarios\
+\
+---\
+\
+## 3. ROLES Y PERMISOS\
+\
+El sistema tiene 7 roles. Los permisos son flags booleanos + lista de tabs visibles.\
+\
+| Rol | Tabs | Crear pedido | Confirmar | Despachar | Stock | Ver ventas |\
+|-----|------|:---:|:---:|:---:|:---:|:---:|\
+| admin | todos | \uc0\u10003  | \u10003  | \u10003  | \u10003  | \u10003  |\
+| plantista | dashboard, pedidos, plan, stock, despachos, formulas, maestros, simulador, balanza | \uc0\u10003  | \u10003  | \u10003  | \u10003  | \u10003  |\
+| encargado | dashboard, pedidos, despachos | \uc0\u10003  | \u10007  | \u10007  | \u10007  | \u10003  |\
+| supervisor | dashboard, pedidos, plan, despachos | \uc0\u10003  | \u10007  | \u10007  | \u10007  | \u10007  |\
+| balancero | balanza, stock, maestros (solo patentes y proveedores) | \uc0\u10007  | \u10007  | \u10007  | ver | \'97 |\
+| gerencia | dashboard, pedidos, plan, stock, despachos, formulas | \uc0\u10007  | \u10007  | \u10007  | ver | \u10003  |\
+| plantista_hormigon | solo tab especial "hormigon" | \uc0\u10007  | \u10007  | \u10007  | \u10007  | \'97 |\
+\
+**Flags relevantes:**\
+- `verTodasObras` \'97 si false, solo ve pedidos de sus obraIds\
+- `modificarSoloSuObra` \'97 puede modificar solo lo de sus obras\
+- `verVentas` \'97 puede ver ventas externas en el listado de pedidos\
+- `soloLectura` \'97 puede ver pero no crear ni modificar nada\
+- `exportar` \'97 puede descargar Excel\
+- `stockIngresar` \'97 puede registrar ingresos de materiales\
+- `maestros` \'97 puede acceder al m\'f3dulo maestros\
+- `maestrosSecciones` \'97 para balancero: solo ciertas secciones del m\'f3dulo\
+\
+**Override por DB:** los permisos base pueden ser modificados por un admin desde el m\'f3dulo "Roles". Los overrides se guardan en `vt_roleperms9` como `\{[rol]: \{tabs, flags...\}\}` y se mergean sobre los permisos base en runtime. El merge reemplaza completamente los arrays de tabs si el override los tiene, y sobreescribe los flags individuales.\
+\
+**Visibilidad de pedidos para encargado:**\
+```\
+si tipoPedido === "venta" \uc0\u8594  mostrar solo si permisos.verVentas === true\
+si tipoPedido !== "venta" \uc0\u8594  mostrar si obraId est\'e1 en usuario.obraIds\
+                           O si obra (nombre) est\'e1 entre sus obras asignadas\
+```\
+\
+---\
+\
+## 4. M\'d3DULOS DEL SISTEMA\
+\
+### 4.1 Dashboard\
+Vista de resumen para el rol logueado.\
+\
+**Para encargados/supervisores:**\
+- Pedidos propios de la semana (solo sus obras)\
+- Estado de cada pedido\
+- Pr\'f3ximos despachos\
+\
+**Para planta/admin/gerencia:**\
+- Pedidos confirmados de la semana actual (lunes a domingo)\
+- Alertas de stock: para cada pedido confirmado de la semana, calcula el consumo proyectado de insumos y lo compara con el stock actual. Si `stock - consumo < 0`: alerta roja (d\'e9ficit). Si `stock - consumo < consumo \'d7 0.2`: alerta amarilla (bajo)\
+- Gr\'e1fico de stock por material (selector de material)\
+- Bot\'f3n r\'e1pido para ir a confirmar pedidos solicitados\
+\
+### 4.2 Pedidos\
+CRUD completo del ciclo de vida del pedido.\
+\
+**Crear pedido:**\
+- Encargado: solo puede crear para sus obras asignadas. Se auto-completa como encargado.\
+- Planta/admin: puede crear para cualquier obra, o como venta externa.\
+- Al crear, se dispara notificaci\'f3n WhatsApp al plantista (si tiene tel\'e9fono configurado).\
+\
+**Venta externa:** se activa un modo especial donde no se selecciona obra interna sino que se escribe el nombre del cliente libre. El campo `obraId` queda vac\'edo.\
+\
+**Modificar estado (transiciones):**\
+- `solicitado \uc0\u8594  confirmado`: solo plantista/admin. Dispara WhatsApp al encargado si tiene tel\'e9fono. Si es hormig\'f3n, dispara WhatsApp adicional a un usuario espec\'edfico ("angel", id hardcodeado "u12").\
+- `confirmado \uc0\u8594  despachado`: solo plantista/admin. Requiere cantidad real. Abre modal de cargas (camiones). Descuenta stock autom\'e1ticamente.\
+- `confirmado \uc0\u8594  postergado`: cualquier autorizado. Puede poner nueva fecha.\
+- `cancelado`: requiere motivo obligatorio.\
+\
+**Archivado:** los pedidos despachados o cancelados de semanas anteriores (antes del lunes actual) pueden archivarse. Pasan a `vt_arch9`. La vista normal no muestra archivados a menos que se active un toggle.\
+\
+**Exportar Excel:** genera un .xls con todos los pedidos (activos + archivados) del per\'edodo, columnas: fecha, obra, encargado, mezcla, cant. pedida, cant. real, diferencia, remito, vale.\
+\
+**Notificaciones WhatsApp (WppToast):** el sistema no env\'eda por API. Abre una confirmaci\'f3n en pantalla con el mensaje pre-armado y un bot\'f3n que abre `wa.me/\{telefono\}?text=\{mensaje\}`. El usuario hace clic para enviarlo desde su WhatsApp.\
+\
+### 4.3 Plan semanal\
+Vista de calendario de la semana (lunes a domingo) con los pedidos confirmados y despachados agrupados por d\'eda.\
+\
+- Muestra por d\'eda: los pedidos de esa fecha\
+- Totales por d\'eda: cu\'e1ntas tn de asfalto y m\'b3 de hormig\'f3n\
+- Vista en grilla: filas = d\'edas, columnas = pedidos\
+- Permite exportar el plan semanal en Excel\
+\
+### 4.4 Stock\
+Vista y gesti\'f3n del inventario de insumos.\
+\
+**Sub-vistas:**\
+1. **Stock actual:** tabla de materiales con su cantidad actual en kg/tn. Permite ingresos manuales y salidas manuales.\
+2. **Ingresos de proveedores:** listado de todos los ingresos registrados, filtrable por material, proveedor y fecha. Permite editar y anular.\
+3. **Historial de movimientos:** log de todas las modificaciones de stock (ingresos manuales, egresos manuales, descuentos por despacho).\
+\
+**Ingreso manual de material:**\
+- Selecciona insumo, proveedor, cantidad, unidad (kg/tn), remito, responsable\
+- Convierte a kg internos y suma al stock\
+- Genera un "slip" de ingreso imprimible\
+\
+**Salida manual:**\
+- Para correcciones o consumos especiales no ligados a pedidos\
+\
+**Simulador de stock:** herramienta para simular cu\'e1ntos pedidos m\'e1s pueden producirse con el stock actual, dado un mix de f\'f3rmulas.\
+\
+### 4.5 Despachos\
+Vista de los pedidos despachados, orientada a la consulta hist\'f3rica.\
+\
+- Lista de despachos filtrable por obra, f\'f3rmula, rango de fechas\
+- Totales del filtro (hormig\'f3n m\'b3, asfalto tn)\
+- Encargado ve solo sus despachos. Gerencia/planta ven todos.\
+- Permite editar cantidadReal, remito, vale, notas de un despacho ya registrado\
+- Exportar el per\'edodo seleccionado en Excel\
+\
+**Vista de detalles del despacho:** muestra un "slip" imprimible con datos del pedido, firma de responsable de planta y firma del encargado.\
+\
+### 4.6 B\'e1scula (Balanza)\
+M\'f3dulo de pesaje en tiempo real. Es el m\'f3dulo m\'e1s complejo operativamente.\
+\
+**Concepto de slots:** la b\'e1scula puede tener varios camiones pesando simult\'e1neamente. Cada "slot" es una posici\'f3n de pesaje independiente. Se pueden abrir N slots en paralelo.\
+\
+**Slot puede registrar 3 tipos de operaci\'f3n:**\
+1. **Vale (despacho asfalto):** pesaje de un cami\'f3n que lleva mezcla asf\'e1ltica\
+2. **Ingreso \'e1ridos:** pesaje de cami\'f3n que trae material (piedra, arena, etc.)\
+3. **Egreso \'e1ridos:** pesaje de cami\'f3n que lleva material crudo fuera de la planta\
+\
+**Para registrar un vale:**\
+1. Seleccionar patente \uc0\u8594  auto-completa tara, tipo cami\'f3n, chofer\
+2. Seleccionar pedido del sistema (opcional) \uc0\u8594  auto-completa obra y mezcla\
+3. O ingresar obra y mezcla manualmente\
+4. Ingresar peso bruto \uc0\u8594  sistema calcula neto\
+5. Ingresar temperatura (opcional)\
+6. Confirmar \uc0\u8594  guarda, genera n\'famero secuencial, imprime autom\'e1ticamente\
+\
+**Para ingreso de \'e1ridos:**\
+1. Seleccionar material, proveedor, remito, cantidadRemito\
+2. Pesar (bruto/tara)\
+3. Validar que remito no est\'e9 duplicado\
+4. Guardar \uc0\u8594  actualiza stock con cantidadRemito (no el neto pesado)\
+\
+**Historial:** tabla unificada de vales + ingresos + egresos del rango de fechas seleccionado. Muestra acumulado din\'e1mico para vales (mismo pedido/obra, mismo d\'eda, numero \uc0\u8804  este). Permite exportar en Excel.\
+\
+**TV Dashboard:** vista especial de solo lectura pensada para una pantalla grande en la planta. Muestra en tiempo real los pedidos del d\'eda, con actualizaci\'f3n autom\'e1tica. Dise\'f1o grande y legible desde lejos.\
+\
+### 4.7 F\'f3rmulas\
+CRUD de f\'f3rmulas de mezcla. Solo plantista/admin.\
+\
+- Crear/editar f\'f3rmulas con sus insumos y cantidades\
+- Activar/desactivar f\'f3rmulas\
+- No se pueden eliminar si tienen pedidos asociados\
+\
+### 4.8 Maestros\
+CRUD de datos de referencia. Acceso por rol.\
+\
+- **Obras:** nombre, c\'f3digo. Se usan en pedidos.\
+- **Encargados:** nombre. Lista para seleccionar en pedidos.\
+- **Proveedores:** nombre, material principal.\
+- **Materiales adicionales:** insumos que no est\'e1n en ninguna f\'f3rmula pero se manejan en stock.\
+- **Patentes:** nombre (patente), tipo cami\'f3n, tara (tn), chofer habitual.\
+- **Patentes externas:** idem pero para camiones de terceros sin tara fija.\
+- **Choferes:** nombre.\
+\
+### 4.9 Usuarios\
+CRUD de usuarios del sistema. Solo quienes tienen `gestionUsuarios = true`.\
+\
+- Crear/editar: nombre, email, rol, obras asignadas, tel\'e9fono, estado activo/inactivo\
+- El email debe registrarse tambi\'e9n en Supabase Auth manualmente (a\'fan no est\'e1 automatizado el invite)\
+\
+### 4.10 Roles (permisos)\
+Interface para ajustar permisos por rol sin tocar c\'f3digo.\
+\
+- Para cada rol, checkboxes de tabs habilitados y flags de acci\'f3n\
+- Los cambios se guardan en `vt_roleperms9` y se mergean sobre los permisos base\
+- Los permisos base en c\'f3digo son el "default"; los de DB son overrides\
+\
+### 4.11 Backup\
+- Muestra los \'faltimos backups autom\'e1ticos (guardados al iniciar la app con key `vt_bak_YYYY-MM-DD`)\
+- Permite descargar el estado completo del sistema como JSON\
+- Permite restaurar un backup (sobreescribe todos los datos)\
+- El backup autom\'e1tico se hace al iniciar la app, una vez por d\'eda\
+\
+### 4.12 Resumen mensual\
+Genera un informe Excel del mes seleccionado con:\
+- Resumen general: tabla por obra (despachos, hormig\'f3n m\'b3, asfalto tn), subtotal interno, ventas externas, total general\
+- Consumo de insumos del mes (calculado desde f\'f3rmulas \'d7 cantidadReal)\
+- Hoja por cada obra interna con detalles de despachos\
+- Hoja de ventas externas\
+\
+---\
+\
+## 5. FLUJOS CR\'cdTICOS DE NEGOCIO\
+\
+### 5.1 Flujo completo de un pedido de asfalto interno\
+```\
+1. Encargado crea pedido: obra=PREVIAL, f\'f3rmula=CAC D19, cantidad=200tn, fecha=ma\'f1ana\
+   \uc0\u8594  estado=solicitado \u8594  WhatsApp al plantista\
+\
+2. Plantista confirma\
+   \uc0\u8594  estado=confirmado \u8594  WhatsApp al encargado\
+\
+3. D\'eda del despacho: plantista inicia despacho\
+   \uc0\u8594  ingresa N cargas (si son 3 camiones: 65tn + 68tn + 67tn = 200tn)\
+   \uc0\u8594  ingresa N\'b0 vale (ej: 9601)\
+   \uc0\u8594  cantidadReal = 200 tn\
+   \uc0\u8594  estado=despachado\
+   \uc0\u8594  stock se descuenta: Piedra 6/20: 200\'d70.47\'d71000=94000kg, Arena 0/6: 200\'d70.53\'d71000=106000kg, CA30: 200\'d70.045\'d71000=9000kg\
+\
+4. En paralelo, balancero pesa cada cami\'f3n en la b\'e1scula:\
+   \uc0\u8594  vale 9599: patente AAA-123, bruto=78.5, tara=13.5, neto=65.0, acumulado=65.0\
+   \uc0\u8594  vale 9600: bruto=82.0, tara=14.0, neto=68.0, acumulado=133.0\
+   \uc0\u8594  vale 9601: bruto=81.0, tara=14.0, neto=67.0, acumulado=200.0\
+\
+5. Cada vale se imprime autom\'e1ticamente y el chofer lo firma\
+```\
+\
+### 5.2 Flujo de venta externa de asfalto\
+```\
+1. Plantista/admin crea pedido con tipoPedido="venta", clienteExterno="MUNICIPALIDAD PILAR", f\'f3rmula=CAC19 RAP15%, cantidad=228.88tn\
+\
+2. Plantista confirma\
+\
+3. Al despachar: se ingresan cargas con N\'b0 vale por carga (porque en ventas, el vale va per cami\'f3n)\
+   \uc0\u8594  carga 1: cantidad=78.5, nroVale=9602\
+   \uc0\u8594  carga 2: cantidad=75.2, nroVale=9603\
+   \uc0\u8594  carga 3: cantidad=75.18, nroVale=9604\
+   \uc0\u8594  cantidadReal=228.88\
+\
+4. Los vales de b\'e1scula para estas cargas tienen el nombre del cliente en "obra"\
+```\
+\
+### 5.3 L\'f3gica de descuento de stock\
+Al despachar:\
+1. Lee `freshStock` directo de la DB (no del estado React)\
+2. Para cada insumo de la f\'f3rmula (excepto SIN_STOCK):\
+   - Convierte cantidadReal a kg de ese insumo usando `insKg(ins, cantidadReal)`\
+   - Resta al stock actual: `nuevoStock[ins] = max(0, stockActual[ins] - consumo)`\
+3. Pasa por `saveStockGuard` antes de guardar\
+4. Guarda y actualiza estado\
+\
+**Regla de max(0):** el stock nunca queda negativo, va a 0 como m\'ednimo.\
+\
+### 5.4 Alertas de stock en dashboard\
+Para cada pedido `confirmado` de la semana:\
+- Calcula el consumo proyectado de cada insumo\
+- Compara contra stock actual\
+- Umbral de alerta: `UMBRAL = 0.2` (si stock tras consumo < 20% del consumo total de la semana \uc0\u8594  amarillo)\
+- Si `stock - consumo < 0` \uc0\u8594  rojo (d\'e9ficit)\
+\
+---\
+\
+## 6. REGLAS DE NEGOCIO ADICIONALES\
+\
+**Pedidos activos vs. archivados:**\
+- La vista de pedidos activos oculta despachados y cancelados de semanas anteriores (antes del lunes de la semana actual)\
+- El archivado manual mueve pedidos despachados de semanas previas a `vt_arch9`\
+- Los archivados a\'fan aparecen en reportes y en el m\'f3dulo de despachos\
+\
+**savePedidos (merge seguro):**\
+Al guardar pedidos, el sistema hace merge con lo que hay en la DB para evitar que sesiones concurrentes se pisen. Si sesi\'f3n A y sesi\'f3n B tienen pedidos distintos en estado local, al guardar sesi\'f3n A no borra los de sesi\'f3n B.\
+\
+**Secuencial de vales:**\
+Es global (un solo contador para toda la planta). Al iniciar la app, carga el \'faltimo n\'famero desde `vt_vale_seq9`. Al crear un vale: `numero = seq + 1`. Se guarda el nuevo seq inmediatamente.\
+\
+**Vale sin pedido:**\
+Se puede registrar un vale en la b\'e1scula sin seleccionar ning\'fan pedido del sistema (campo pedidoId queda null). En ese caso el acumulado se agrupa por nombre de obra/destino.\
+\
+**Permisos de modificaci\'f3n de despacho:**\
+Solo plantista y admin pueden editar cantidadReal despu\'e9s del despacho. Sirve para correcciones post-hecho.\
+\
+**Cronograma semanal (plan):**\
+El sistema considera semana de lunes a domingo. El "lunes" se calcula: fecha actual \uc0\u8594  d\'eda de semana \u8594  restar d\'edas para llegar al lunes anterior.\
+\
+---\
+\
+## 7. DATOS QUE NO SE BORRAN NUNCA\
+\
+- Los pedidos solo se archivan, nunca se eliminan\
+- El historial de estados de un pedido es append-only\
+- Los vales de b\'e1scula nunca se eliminan (solo se pueden editar en campo de datos, no eliminar)\
+- El stock tiene protecci\'f3n extra (`saveStockGuard`) contra borrado accidental\
+\
+---\
+\
+## 8. NOTIFICACIONES\
+\
+El sistema usa WhatsApp como canal de notificaci\'f3n, pero de forma manual:\
+- Al crear pedido \uc0\u8594  se sugiere mensaje para enviar al plantista\
+- Al confirmar \uc0\u8594  se sugiere mensaje para enviar al encargado\
+- Al confirmar pedido de hormig\'f3n \uc0\u8594  se sugiere mensaje adicional para un operador de hormig\'f3n espec\'edfico (usuario con id "u12")\
+\
+El sistema muestra un toast con el mensaje pre-armado y abre `wa.me/` en otra pesta\'f1a. No hay env\'edo autom\'e1tico por API.\
+\
+---\
+\
+## 9. EXPORTACIONES\
+\
+**Excel del plan semanal:** columnas fecha, d\'eda, obra, encargado, mezcla, cant. pedida, cant. real, estado, remito, vale, notas.\
+\
+**Excel de pedidos completos:** todos los pedidos del per\'edodo (activos + archivados).\
+\
+**Excel de despachos:** despachos filtrados con totales.\
+\
+**Excel mensual (informe):** multi-hoja como el descrito en el m\'f3dulo Resumen Mensual.\
+\
+**Excel de b\'e1scula (movimientos):**\
+- Hoja 1 \'97 Vales de asfalto: n\'famero, fecha, hora, obra, mezcla, patente, tipo cami\'f3n, chofer, bruto, tara, neto, **acumulado real** (calculado por mismo pedido/obra mismo d\'eda, numero \uc0\u8804  este vale), temperatura.\
+- Hoja 2 \'97 Ingresos de \'e1ridos: fecha, hora, material, remito, proveedor, bruto, tara, neto, cantidad s/remito, diferencia, responsable.\
+- Hoja 3 \'97 Egresos de \'e1ridos: fecha, hora, material, destino, bruto, tara, neto, responsable.\
+\
+---\
+\
+## 10. ESTADO INICIAL / DATOS DE REFERENCIA\
+\
+El sistema arranca con:\
+- F\'f3rmulas de mezcla cargadas desde `vt_f9` (16 f\'f3rmulas en producci\'f3n)\
+- Stock en `vt_s9` (objeto `\{material: kg\}`)\
+- Maestros en `vt_maestros9`\
+- Usuarios en `vt_usuarios9`\
+- Permisos override en `vt_roleperms9`\
+- Secuencial de vales empieza en 9579 (valor hist\'f3rico real de la planta)\
+\
+Al iniciar la app:\
+1. Carga todos los datos en paralelo desde la DB\
+2. Hace backup autom\'e1tico si no existe uno del d\'eda actual (`vt_bak_YYYY-MM-DD`)\
+3. Aplica merge de permisos\
+4. Muestra la pantalla de login o el dashboard seg\'fan si hay sesi\'f3n activa\
+\
+---\
+*Documento generado desde el c\'f3digo fuente de produccion.vialtec.app \'97 2026-08-21*\
+}
