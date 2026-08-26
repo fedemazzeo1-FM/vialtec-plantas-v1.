@@ -33,6 +33,27 @@ Resuelto: `package.json`, `vite.config.js` (alias `@` -> `./src`), `index.html`,
 ya están creados. **Falta correr `npm install`** (dependencias no instaladas
 todavía) antes de poder levantar `npm run dev`.
 
+## Tablas legadas sin prefijo detectadas en el proyecto compartido (revisar con Federico)
+
+Al inspeccionar el schema real de Supabase (`ejitztewkpnmrckwmvny`) para la
+migración de pedidos, aparecieron tablas **vacías (0 filas), sin prefijo**, que
+pisan casi exactamente el dominio de este proyecto: `obras`, `proveedores`,
+`encargados`, `usuarios`, `formulas`, `formula_insumos`, `pedidos`,
+`pedido_historial`, `stock`, `ingresos`. Además `obras` (uuid) es una tabla
+**distinta** de `flota_obras` (bigint, 22 filas, la que usan activamente los
+módulos de flota) — hay un FK real `pedidos.obra_id -> obras.id` ya creado.
+
+Hipótesis más probable: son un scaffold de un intento anterior (posiblemente
+"vialtec-plantas-v1", ver la discrepancia de nombre ya señalada al iniciar este
+proyecto) que quedó sin usar en el mismo proyecto Supabase compartido.
+
+**No las toqué ni las usé.** Este proyecto sigue construyendo sobre `plantas_*`
+(con JSONB para insumos en vez de una tabla `formula_insumos` aparte) tal como
+definieron los prompts de este proyecto. Pendiente confirmar con Federico:
+- ¿Se pueden borrar esas tablas sin prefijo (están vacías) para evitar confusión?
+- ¿`flota_obras` es efectivamente la tabla de obras correcta a usar (así se
+  usó en `plantas_pedidos.obra_id`), y la `obras` suelta es descartable?
+
 ## Migración SQL de Fórmulas y Maestros — escrita, NO aplicada
 
 `supabase/migrations/01_maestros_y_formulas.sql` tiene los `CREATE TABLE` +
@@ -44,6 +65,15 @@ producción:
 - Políticas de RLS por rol (la migración no las incluye).
 - Si `plantas_encargados` es redundante con encargados ya existentes en
   `flota_usuarios` o es un catálogo aparte.
+
+## Migración SQL de Pedidos — escrita, NO aplicada
+
+`supabase/migrations/02_pedidos.sql` crea `plantas_pedidos` (FK a `flota_obras`
+y a `plantas_formulas`). Depende de que `01_maestros_y_formulas.sql` se aplique
+primero. Simplifica el ciclo de estados del sistema legado a 4 estados
+(`solicitado`, `confirmado`, `despachado`, `cancelado`) — **no incluye
+`postergado`** (sí documentado en `business-rules.md`). Revisar si hace falta
+reintroducirlo antes de aplicar la migración.
 
 ## Otros pendientes
 

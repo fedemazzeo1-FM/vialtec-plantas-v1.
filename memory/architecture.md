@@ -57,6 +57,11 @@ anterior.
 - `src/stores/` — Pinia stores (estado global, ej. `auth.store.js`).
 - `src/modules/` — un directorio por módulo de negocio (pedidos, stock, báscula,
   fórmulas, maestros, etc.), cada uno con su/sus `*.service.js`.
+- `src/services/` — helpers/services **transversales**, no atados a un solo
+  módulo: `fetch-paginado.js` (regla de paginación) y `flota.service.js`
+  (lecturas de solo lectura sobre tablas `flota_*` compartidas, ej. obras).
+  Si dos o más módulos necesitan la misma lectura sobre `flota_*`, va acá, no
+  duplicada en cada `modules/<x>/services/`.
 - `src/components/shared/` — componentes UI reutilizables entre módulos.
 - `src/layouts/` — `DesktopLayout` y `MobileLayout`.
 - `src/views/` — vistas ruteadas.

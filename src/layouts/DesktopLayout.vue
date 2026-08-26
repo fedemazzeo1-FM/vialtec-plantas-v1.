@@ -5,6 +5,13 @@
 
 const secciones = [
   {
+    titulo: 'Operación',
+    links: [
+      { to: '/plan-semanal', label: 'Plan semanal' },
+      { to: '/pedidos', label: 'Pedidos' },
+    ],
+  },
+  {
     titulo: 'Administración',
     links: [
       { to: '/formulas', label: 'Fórmulas' },

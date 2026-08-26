@@ -6,7 +6,17 @@ const routes = [
   {
     // TODO: apuntar a /dashboard cuando exista ese módulo (ver memory/modules-status.md).
     path: '/',
-    redirect: '/formulas',
+    redirect: '/plan-semanal',
+  },
+  {
+    path: '/pedidos',
+    name: 'pedidos',
+    component: () => import('@/views/PedidosView.vue'),
+  },
+  {
+    path: '/plan-semanal',
+    name: 'plan-semanal',
+    component: () => import('@/views/PlanSemanalView.vue'),
   },
   {
     path: '/formulas',
@@ -18,9 +28,8 @@ const routes = [
     name: 'maestros',
     component: () => import('@/views/MaestrosView.vue'),
   },
-  // TODO: /dashboard, /pedidos, /plan-semanal, /stock, /despachos, /bascula,
-  // /usuarios, /roles, /backup — a medida que se implemente cada módulo
-  // (ver memory/modules-status.md).
+  // TODO: /dashboard, /stock, /despachos, /bascula, /usuarios, /roles, /backup
+  // — a medida que se implemente cada módulo (ver memory/modules-status.md).
 ]
 
 export const router = createRouter({
