@@ -103,13 +103,13 @@ Dashboard necesitaba y no existían, más una vista:
   **sin ninguna UI todavía** (le corresponde al módulo Stock, PENDIENTE).
   Hasta que ese módulo exista, la analítica de proveedores del Dashboard solo
   va a reflejar lo que se pesó en báscula, no compras que entren sin pesar.
-- `plantas_cargas_hormigon`: despacho por camión de hormigón con remito real
-  (hormigón no pasa por báscula). **Tampoco tiene UI que escriba ahí
-  todavía** — `PedidosView.despacharPedido()` sigue cargando una sola
-  cantidad agregada por pedido, sin cargas individuales. Por eso el detalle
-  de despachos del Dashboard va a mostrar filas de hormigón vacías hasta que
-  se construya esa captura (probablemente como parte del módulo Despachos,
-  #5 en modules-status.md, o extendiendo el modal de despacho de Pedidos).
+- `plantas_cargas_hormigon`: **resuelto** — `PedidosView.vue` tiene la acción
+  "Registrar carga" (pedidos de hormigón confirmados) que llama a
+  `pedidos.service.js#registrarCargaHormigon()`, con remito obligatorio y
+  autocompletado de patente/chofer. Columnas ajustadas respecto de como
+  habían quedado en la migración 05 original: `volumen_m3` (no `cantidad_m3`),
+  `patente_mixer` (no `patente`), y se agregó `chofer` — la migración se
+  editó in-place porque todavía no se había aplicado a Supabase.
 - Vista `plantas_v_despachos_camion`: UNION de las dos tablas de arriba con
   `numero_remito` garantizado para ambos materiales.
 

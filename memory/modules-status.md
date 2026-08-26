@@ -6,7 +6,7 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 | # | Módulo | Descripción breve | Estado |
 |---|--------|--------------------|--------|
 | 1 | Dashboard | KPIs del mes, analítica de proveedores, despacho por camión | EN CURSO — service + `DashboardView` listos (KPIs dobles tn/m³, comparativa de proveedores por período, detalle por camión con remito garantizado); falta aplicar migración SQL 05; alertas de stock 🔴/🟡 originales del sistema legado no están implementadas todavía (dependen del módulo Stock) |
-| 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado | EN CURSO — service + `PedidosView` (filtros, alta, confirmar/despachar/cancelar) listos; falta aplicar migración SQL de `plantas_pedidos` (pendiente de confirmación) |
+| 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado | EN CURSO — service + `PedidosView` (filtros, alta, confirmar/despachar/cancelar, y "Registrar carga" para hormigón con remito) listos; falta aplicar migraciones SQL 02 y 05 (pendiente de confirmación) |
 | 3 | Plan semanal | Vista de pedidos confirmados/despachados agrupados por día | EN CURSO — service + `PlanSemanalView` (matriz lunes-domingo, KPIs tn/m³ por obra y total) listos; falta aplicar migración SQL |
 | 4 | Stock | Stock por material en kg, ingresos/salidas manuales, guardas | PENDIENTE |
 | 5 | Despachos | Historial de pedidos despachados, filtros, exportación Excel | PENDIENTE |

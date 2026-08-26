@@ -182,3 +182,63 @@ export async function cancelarPedido(id, motivo) {
   }
   return actualizarPedido(id, { estado: 'cancelado', observaciones: motivo })
 }
+
+// ---------------------------------------------------------------------------
+// Cargas de hormigón (una por camión/mixer — completa el Cambio 8: remito
+// también para hormigón, ver memory/pending.md y supabase/migrations/05_...)
+// ---------------------------------------------------------------------------
+
+/**
+ * Registra una carga (mixer) de un pedido de hormigón confirmado: guarda el
+ * remito en plantas_cargas_hormigon y acumula cantidad_despachada en el
+ * pedido — mismo criterio que registrarPesada() de báscula para asfalto: si
+ * la suma cubre lo solicitado, el pedido pasa a despachado.
+ *
+ * @param {{ pedido_id: string, numero_remito: string, volumen_m3: number,
+ *   patente_mixer?: string, chofer?: string, fecha_carga?: string|Date,
+ *   observaciones?: string }} cargaData
+ */
+export async function registrarCargaHormigon(cargaData) {
+  const volumen = Number(cargaData.volumen_m3)
+  if (!(volumen > 0)) throw new Error('registrarCargaHormigon: volumen_m3 debe ser mayor a 0')
+  if (!cargaData.numero_remito || !cargaData.numero_remito.trim()) {
+    throw new Error('registrarCargaHormigon: numero_remito es obligatorio')
+  }
+  if (!cargaData.pedido_id) throw new Error('registrarCargaHormigon: pedido_id es obligatorio')
+
+  const pedido = await getPedido(cargaData.pedido_id)
+  if (pedido.tipo !== 'hormigon') {
+    throw new Error('registrarCargaHormigon: el pedido no es de hormigón')
+  }
+  if (pedido.estado !== 'confirmado') {
+    throw new Error('registrarCargaHormigon: el pedido tiene que estar confirmado')
+  }
+
+  const fechaCarga = cargaData.fecha_carga ? new Date(cargaData.fecha_carga) : new Date()
+
+  const { data: carga, error } = await supabase
+    .from('plantas_cargas_hormigon')
+    .insert({
+      pedido_id: pedido.id,
+      obra_id: pedido.obra_id,
+      numero_remito: cargaData.numero_remito.trim(),
+      volumen_m3: volumen,
+      patente_mixer: cargaData.patente_mixer || null,
+      chofer: cargaData.chofer || null,
+      fecha_carga: fechaCarga.toISOString(),
+      observaciones: cargaData.observaciones || null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+
+  const nuevaCantidadDespachada = Number(pedido.cantidad_despachada ?? 0) + volumen
+  const cambios = { cantidad_despachada: nuevaCantidadDespachada }
+  if (nuevaCantidadDespachada >= Number(pedido.cantidad_solicitada)) {
+    cambios.estado = 'despachado'
+  }
+  await actualizarPedido(pedido.id, cambios)
+
+  return carga
+}

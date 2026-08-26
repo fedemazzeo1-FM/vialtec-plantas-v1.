@@ -62,21 +62,20 @@ comment on table plantas_ingresos is
 -- (CAMBIO 8). obra_id se copia del pedido al momento de la carga, mismo
 -- patrón que plantas_vales.obra_id.
 --
--- Todavía NO hay ninguna UI que escriba acá (el despacho de hormigón en
--- PedidosView.despacharPedido solo carga una cantidad agregada, sin cargas
--- individuales con remito) — ver memory/pending.md. La tabla y la vista de
--- abajo ya están listas para cuando se construya esa captura.
+-- Se escribe desde PedidosView.vue ("Registrar carga de hormigón") vía
+-- pedidos.service.js#registrarCargaHormigon() — ver memory/modules-status.md.
 -- ----------------------------------------------------------------------------
 create table if not exists plantas_cargas_hormigon (
-  id            uuid primary key default gen_random_uuid(),
-  pedido_id     uuid not null references plantas_pedidos (id),
-  obra_id       bigint references flota_obras (id),
-  numero_remito text not null,
-  cantidad_m3   numeric not null check (cantidad_m3 > 0),
-  patente       text,
-  fecha_carga   timestamptz not null default now(),
-  observaciones text,
-  created_at    timestamptz not null default now()
+  id             uuid primary key default gen_random_uuid(),
+  pedido_id      uuid not null references plantas_pedidos (id),
+  obra_id        bigint references flota_obras (id),
+  numero_remito  text not null,
+  volumen_m3     numeric not null check (volumen_m3 > 0),
+  patente_mixer  text,
+  chofer         text,
+  fecha_carga    timestamptz not null default now(),
+  observaciones  text,
+  created_at     timestamptz not null default now()
 );
 
 create index if not exists idx_plantas_cargas_hormigon_pedido_id on plantas_cargas_hormigon (pedido_id);
@@ -100,6 +99,7 @@ create or replace view plantas_v_despachos_camion as
     v.obra_id,
     v.pedido_id,
     v.patente,
+    v.chofer,
     v.numero_vale::text as numero_remito,
     v.peso_neto     as volumen,
     v.unidad        as unidad_volumen
@@ -113,9 +113,10 @@ create or replace view plantas_v_despachos_camion as
     c.fecha_carga    as fecha,
     c.obra_id,
     c.pedido_id,
-    c.patente,
+    c.patente_mixer  as patente,
+    c.chofer,
     c.numero_remito,
-    c.cantidad_m3    as volumen,
+    c.volumen_m3     as volumen,
     'm3'::text       as unidad_volumen
   from plantas_cargas_hormigon c;
 

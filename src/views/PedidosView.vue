@@ -15,9 +15,11 @@ import {
   confirmarPedido,
   despacharPedido,
   cancelarPedido,
+  registrarCargaHormigon,
 } from '@/modules/pedidos/services/pedidos.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+import { patentesService, choferesService } from '@/modules/maestros/services/maestros.service'
 
 const ESTADOS = ['solicitado', 'confirmado', 'despachado', 'cancelado']
 const VARIANTE_ESTADO = {
@@ -41,6 +43,8 @@ const columnas = [
 const pedidos = ref([])
 const obras = ref([])
 const formulas = ref([])
+const patentes = ref([])
+const choferes = ref([])
 const cargando = ref(false)
 const error = ref(null)
 
@@ -58,9 +62,16 @@ const filas = computed(() =>
 )
 
 async function cargarBase() {
-  const [listaObras, listaFormulas] = await Promise.all([fetchObras(), fetchFormulas({ soloActivas: true })])
+  const [listaObras, listaFormulas, listaPatentes, listaChoferes] = await Promise.all([
+    fetchObras(),
+    fetchFormulas({ soloActivas: true }),
+    patentesService.fetch({ soloActivos: true }),
+    choferesService.fetch({ soloActivos: true }),
+  ])
   obras.value = listaObras
   formulas.value = listaFormulas
+  patentes.value = listaPatentes
+  choferes.value = listaChoferes
 }
 
 async function cargarPedidos() {
@@ -214,6 +225,72 @@ async function confirmarCancelacion() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Registro de carga de hormigón (una por camión/mixer, con remito)
+// ---------------------------------------------------------------------------
+
+const modalCargaHormigonAbierto = ref(false)
+const pedidoCargaHormigon = ref(null)
+const guardandoCarga = ref(false)
+
+function formularioCargaVacio() {
+  return { numero_remito: '', volumen_m3: null, patente_mixer: '', chofer: '', fecha_carga: '', observaciones: '' }
+}
+const formCarga = reactive(formularioCargaVacio())
+
+function formatDatetimeLocal(date) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const saldoCargaHormigon = computed(() => {
+  if (!pedidoCargaHormigon.value) return 0
+  return Number(pedidoCargaHormigon.value.cantidad_solicitada) - Number(pedidoCargaHormigon.value.cantidad_despachada || 0)
+})
+
+function abrirCargaHormigon(pedido) {
+  pedidoCargaHormigon.value = pedido
+  Object.assign(formCarga, formularioCargaVacio())
+  formCarga.fecha_carga = formatDatetimeLocal(new Date())
+  modalCargaHormigonAbierto.value = true
+}
+
+function alCambiarPatenteMixer() {
+  const encontrada = patentes.value.find((p) => p.patente === formCarga.patente_mixer)
+  if (encontrada?.chofer_habitual) formCarga.chofer = encontrada.chofer_habitual
+}
+
+async function guardarCargaHormigon() {
+  if (!formCarga.numero_remito.trim()) {
+    error.value = 'El número de remito es obligatorio.'
+    return
+  }
+  if (!(Number(formCarga.volumen_m3) > 0)) {
+    error.value = 'El volumen del viaje tiene que ser mayor a 0.'
+    return
+  }
+
+  guardandoCarga.value = true
+  error.value = null
+  try {
+    await registrarCargaHormigon({
+      pedido_id: pedidoCargaHormigon.value.id,
+      numero_remito: formCarga.numero_remito,
+      volumen_m3: formCarga.volumen_m3,
+      patente_mixer: formCarga.patente_mixer || null,
+      chofer: formCarga.chofer || null,
+      fecha_carga: formCarga.fecha_carga || new Date(),
+      observaciones: formCarga.observaciones || null,
+    })
+    modalCargaHormigonAbierto.value = false
+    await cargarPedidos()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    guardandoCarga.value = false
+  }
+}
+
 cargarBase().then(cargarPedidos)
 </script>
 
@@ -296,8 +373,21 @@ cargarBase().then(cargarPedidos)
               <button v-if="row.estado === 'solicitado'" type="button" class="text-blue-600 hover:underline" @click="confirmar(row)">
                 Confirmar
               </button>
-              <button v-if="row.estado === 'confirmado'" type="button" class="text-green-600 hover:underline" @click="abrirDespacho(row)">
+              <button
+                v-if="row.estado === 'confirmado' && row.tipo === 'asfalto'"
+                type="button"
+                class="text-green-600 hover:underline"
+                @click="abrirDespacho(row)"
+              >
                 Despachar
+              </button>
+              <button
+                v-if="row.estado === 'confirmado' && row.tipo === 'hormigon'"
+                type="button"
+                class="text-green-600 hover:underline"
+                @click="abrirCargaHormigon(row)"
+              >
+                Registrar carga
               </button>
               <button
                 v-if="row.estado === 'solicitado' || row.estado === 'confirmado'"
@@ -374,6 +464,74 @@ cargarBase().then(cargarPedidos)
           </button>
           <button type="submit" :disabled="despachando" class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700 disabled:opacity-50">
             {{ despachando ? 'Guardando…' : 'Confirmar despacho' }}
+          </button>
+        </div>
+      </form>
+    </VModal>
+
+    <!-- Registro de carga de hormigón -->
+    <VModal
+      :open="modalCargaHormigonAbierto"
+      title="Registrar carga de hormigón"
+      @update:open="modalCargaHormigonAbierto = $event"
+    >
+      <form class="space-y-3" @submit.prevent="guardarCargaHormigon">
+        <p class="text-sm text-gray-600">
+          Obra: <strong>{{ obrasPorId[pedidoCargaHormigon?.obra_id]?.nombre }}</strong> —
+          Saldo pendiente: {{ saldoCargaHormigon.toFixed(1) }} m³
+        </p>
+
+        <label class="block text-sm">
+          N° de remito (obligatorio)
+          <input v-model="formCarga.numero_remito" type="text" class="mt-1 w-full rounded border-gray-300 text-sm" />
+        </label>
+        <label class="block text-sm">
+          Volumen del viaje (m³)
+          <input v-model.number="formCarga.volumen_m3" type="number" step="0.01" class="mt-1 w-full rounded border-gray-300 text-sm" />
+        </label>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm">
+            Patente del mixer
+            <input
+              v-model="formCarga.patente_mixer"
+              list="patentes-mixer"
+              class="mt-1 w-full rounded border-gray-300 text-sm"
+              @change="alCambiarPatenteMixer"
+            />
+          </label>
+          <label class="text-sm">
+            Chofer
+            <input v-model="formCarga.chofer" list="choferes-conocidos" class="mt-1 w-full rounded border-gray-300 text-sm" />
+          </label>
+        </div>
+
+        <label class="block text-sm">
+          Fecha / hora de salida
+          <input v-model="formCarga.fecha_carga" type="datetime-local" class="mt-1 w-full rounded border-gray-300 text-sm" />
+        </label>
+        <label class="block text-sm">
+          Observaciones
+          <textarea v-model="formCarga.observaciones" rows="2" class="mt-1 w-full rounded border-gray-300 text-sm"></textarea>
+        </label>
+
+        <datalist id="patentes-mixer">
+          <option v-for="p in patentes" :key="p.id" :value="p.patente" />
+        </datalist>
+        <datalist id="choferes-conocidos">
+          <option v-for="c in choferes" :key="c.id" :value="c.nombre" />
+        </datalist>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" @click="modalCargaHormigonAbierto = false">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            :disabled="guardandoCarga"
+            class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+          >
+            {{ guardandoCarga ? 'Guardando…' : 'Registrar carga' }}
           </button>
         </div>
       </form>
