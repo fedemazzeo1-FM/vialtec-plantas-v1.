@@ -26,6 +26,25 @@ viejo va a qué tabla/columna `plantas_*`, y qué se reconcilia contra `flota_*`
 esperar confirmación — ver `procedimientos.md`. La migración toca datos de
 producción reales, no es un cambio reversible trivial.
 
+## Scaffold del proyecto
+
+Resuelto: `package.json`, `vite.config.js` (alias `@` -> `./src`), `index.html`,
+`src/main.js`, `src/App.vue`, Tailwind (`tailwind.config.js`/`postcss.config.js`)
+ya están creados. **Falta correr `npm install`** (dependencias no instaladas
+todavía) antes de poder levantar `npm run dev`.
+
+## Migración SQL de Fórmulas y Maestros — escrita, NO aplicada
+
+`supabase/migrations/01_maestros_y_formulas.sql` tiene los `CREATE TABLE` +
+índices para `plantas_formulas`, `plantas_encargados`, `plantas_proveedores`,
+`plantas_patentes`, `plantas_choferes`. **No se ejecutó contra Supabase** —
+requiere revisión y confirmación de Federico antes de aplicarla (protocolo de
+`procedimientos.md`). Además queda pendiente definir, antes de aplicar en
+producción:
+- Políticas de RLS por rol (la migración no las incluye).
+- Si `plantas_encargados` es redundante con encargados ya existentes en
+  `flota_usuarios` o es un catálogo aparte.
+
 ## Otros pendientes
 
 - Definir el mapeo de los 7 roles del sistema anterior (`admin`, `plantista`,

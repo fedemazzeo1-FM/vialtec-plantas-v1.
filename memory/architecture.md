@@ -4,6 +4,7 @@
 
 - **Vue 3** (Composition API, `<script setup>`)
 - **Vite** como bundler/dev server
+- **Vue Router** para ruteo (`src/router/index.js`)
 - **Pinia** para estado global (stores en `src/stores/`)
 - **Tailwind CSS** para estilos
 - **Supabase** como backend único (Auth + Postgres + Storage)
