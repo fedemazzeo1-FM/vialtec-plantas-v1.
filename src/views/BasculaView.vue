@@ -72,7 +72,17 @@ function formularioVacio(tipo) {
   return reactive(
     tipo === 'asfalto'
       ? { pedido_id: '', patente: '', chofer: '', peso_bruto: null, tara: null, observaciones: '' }
-      : { patente: '', chofer: '', peso_bruto: null, tara: null, observaciones: '' }
+      : {
+          material: '',
+          proveedor: '',
+          numero_remito: '',
+          cantidad_remito: null,
+          patente: '',
+          chofer: '',
+          peso_bruto: null,
+          tara: null,
+          observaciones: '',
+        }
   )
 }
 
@@ -117,6 +127,11 @@ async function guardarPesada(slot) {
     return
   }
 
+  if (slot.tipo === 'ingreso_arido' && (!form.material || !form.proveedor)) {
+    error.value = 'Completá material y proveedor del ingreso.'
+    return
+  }
+
   const pedido = slot.tipo === 'asfalto' ? pedidosConSaldo.value.find((p) => p.id === form.pedido_id) : null
 
   slot.guardando = true
@@ -131,6 +146,14 @@ async function guardarPesada(slot) {
       peso_bruto: form.peso_bruto,
       tara: form.tara,
       observaciones: form.observaciones || null,
+      ...(slot.tipo === 'ingreso_arido'
+        ? {
+            material: form.material,
+            proveedor: form.proveedor,
+            numero_remito: form.numero_remito || null,
+            cantidad_remito: form.cantidad_remito,
+          }
+        : {}),
     })
     // Al confirmar, el slot se cierra (misma semántica que el sistema legado).
     cerrarSlot(slot.id)
@@ -282,13 +305,34 @@ crearSlot('asfalto')
 
       <!-- Formulario del slot activo -->
       <VCard v-if="slotActivo" class="mb-6">
-        <p v-if="slotActivo.tipo === 'ingreso_arido'" class="mb-3 rounded bg-yellow-50 px-2 py-1 text-xs text-yellow-700">
-          Ingreso de áridos: material, proveedor y N° de remito todavía no tienen
-          columna en <code>plantas_vales</code> (ver memory/pending.md). Anotalos
-          en Observaciones por ahora.
-        </p>
-
         <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <template v-if="slotActivo.tipo === 'ingreso_arido'">
+            <label class="text-sm">
+              Material
+              <input v-model="slotActivo.form.material" type="text" class="mt-1 w-full rounded border-gray-300 text-sm" />
+            </label>
+            <label class="text-sm">
+              Proveedor
+              <input v-model="slotActivo.form.proveedor" type="text" class="mt-1 w-full rounded border-gray-300 text-sm" />
+            </label>
+            <label class="text-sm">
+              N° de remito
+              <input v-model="slotActivo.form.numero_remito" type="text" class="mt-1 w-full rounded border-gray-300 text-sm" />
+            </label>
+            <label class="text-sm md:col-span-3">
+              Cantidad según remito (tn)
+              <input
+                v-model.number="slotActivo.form.cantidad_remito"
+                type="number"
+                step="0.01"
+                class="mt-1 w-full rounded border-gray-300 text-sm md:w-1/3"
+              />
+              <span class="ml-2 text-xs text-gray-400">
+                El stock se actualiza con esta cantidad, no con el peso neto pesado (memory/business-rules.md).
+              </span>
+            </label>
+          </template>
+
           <label v-if="slotActivo.tipo === 'asfalto'" class="text-sm md:col-span-3">
             Pedido (asfalto, confirmado, con saldo)
             <select v-model="slotActivo.form.pedido_id" class="mt-1 w-full rounded border-gray-300 text-sm">

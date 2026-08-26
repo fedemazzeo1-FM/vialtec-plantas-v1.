@@ -4,9 +4,13 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
-    // TODO: apuntar a /dashboard cuando exista ese módulo (ver memory/modules-status.md).
     path: '/',
-    redirect: '/plan-semanal',
+    redirect: '/dashboard',
+  },
+  {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: () => import('@/views/DashboardView.vue'),
   },
   {
     path: '/pedidos',
@@ -33,8 +37,8 @@ const routes = [
     name: 'maestros',
     component: () => import('@/views/MaestrosView.vue'),
   },
-  // TODO: /dashboard, /stock, /despachos, /usuarios, /roles, /backup — a
-  // medida que se implemente cada módulo (ver memory/modules-status.md).
+  // TODO: /stock, /despachos, /usuarios, /roles, /backup — a medida que se
+  // implemente cada módulo (ver memory/modules-status.md).
 ]
 
 export const router = createRouter({

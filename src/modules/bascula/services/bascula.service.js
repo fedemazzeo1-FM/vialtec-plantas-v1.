@@ -146,6 +146,30 @@ export async function registrarPesada(valeData) {
     if (errorPedido) throw errorPedido
   }
 
+  // Si es ingreso de áridos, además del vale (evidencia del pesaje) se
+  // registra el ingreso en plantas_ingresos — es la fuente ÚNICA que lee la
+  // analítica de proveedores del Dashboard (evita duplicar entre vale e
+  // ingreso, ver memory/pending.md "CAMBIO 7"). Se guarda la cantidad
+  // DECLARADA en el remito, no el peso neto pesado (memory/business-rules.md:
+  // "se suma la cantidad del remito, no el peso neto de la báscula").
+  if (valeData.tipo_vale === 'ingreso_arido') {
+    if (!valeData.material || !valeData.proveedor) {
+      throw new Error('registrarPesada: un ingreso de áridos necesita material y proveedor')
+    }
+    const { error: errorIngreso } = await supabase.from('plantas_ingresos').insert({
+      material: valeData.material,
+      proveedor: valeData.proveedor,
+      numero_remito: valeData.numero_remito || null,
+      cantidad: valeData.cantidad_remito ?? aTn(pesoNeto, unidad),
+      unidad: 'tn',
+      origen: 'bascula',
+      vale_id: vale.id,
+      fecha_ingreso: fechaPesada.toISOString(),
+      observaciones: valeData.observaciones ?? null,
+    })
+    if (errorIngreso) throw errorIngreso
+  }
+
   // TODO(stock): acá debería descontarse del stock el consumo de insumos de
   // la fórmula del pedido × peso neto despachado (memory/business-rules.md).
   // No se persiste todavía porque el módulo Stock (memory/modules-status.md

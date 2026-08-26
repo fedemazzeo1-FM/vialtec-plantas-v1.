@@ -5,6 +5,10 @@
 
 const secciones = [
   {
+    titulo: 'General',
+    links: [{ to: '/dashboard', label: 'Dashboard' }],
+  },
+  {
     titulo: 'Operación',
     links: [
       { to: '/plan-semanal', label: 'Plan semanal' },

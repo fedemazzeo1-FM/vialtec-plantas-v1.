@@ -85,16 +85,38 @@ que todavía no existe. Puntos a decidir con Federico antes de aplicarla:
   módulo, pero `business-rules.md` documenta que la báscula legada **no** pesa
   hormigón. El código no ofrece ningún flujo para crearlo — el valor queda
   soportado en el schema por si se decide lo contrario.
-- Ingreso de áridos (`tipo_vale = 'ingreso_arido'`) en el sistema legado lleva
-  material, proveedor, N° de remito y cantidad según remito — ninguno de esos
-  campos está en `plantas_vales` (no se pidieron en el schema de este módulo).
-  Por ahora se anotan en `observaciones` como texto libre; `BasculaView.vue`
-  avisa esto mismo en la UI. Si hace falta ese detalle estructurado, hace
-  falta otra migración.
+- Ingreso de áridos (`tipo_vale = 'ingreso_arido'`) ya captura material,
+  proveedor, N° de remito y cantidad según remito en la UI — se resolvió en la
+  migración 05 (`plantas_ingresos`), no quedó en `plantas_vales`. Ver más abajo.
 - **Descuento de stock al pesar**: `registrarPesada()` tiene un TODO explícito
   — no descuenta stock porque el módulo Stock (tabla `plantas_stock`) todavía
   no existe. Es el punto de integración obligado cuando se construya ese
   módulo.
+
+## Migración SQL de Analítica — escrita, NO aplicada
+
+`supabase/migrations/05_analitica_y_vistas.sql` agrega dos tablas que el
+Dashboard necesitaba y no existían, más una vista:
+- `plantas_ingresos`: fuente única de ingresos de insumos (manual o vía
+  báscula). Hoy solo la escribe `bascula.service.js` (`origen='bascula'`) —
+  el ingreso manual (`origen='manual'`) queda soportado en el schema pero
+  **sin ninguna UI todavía** (le corresponde al módulo Stock, PENDIENTE).
+  Hasta que ese módulo exista, la analítica de proveedores del Dashboard solo
+  va a reflejar lo que se pesó en báscula, no compras que entren sin pesar.
+- `plantas_cargas_hormigon`: despacho por camión de hormigón con remito real
+  (hormigón no pasa por báscula). **Tampoco tiene UI que escriba ahí
+  todavía** — `PedidosView.despacharPedido()` sigue cargando una sola
+  cantidad agregada por pedido, sin cargas individuales. Por eso el detalle
+  de despachos del Dashboard va a mostrar filas de hormigón vacías hasta que
+  se construya esa captura (probablemente como parte del módulo Despachos,
+  #5 en modules-status.md, o extendiendo el modal de despacho de Pedidos).
+- Vista `plantas_v_despachos_camion`: UNION de las dos tablas de arriba con
+  `numero_remito` garantizado para ambos materiales.
+
+No se puso `UNIQUE` en `numero_remito` de ninguna de las dos tablas nuevas —
+el sistema legado valida que no se duplique, pero probablemente esa unicidad
+es por proveedor/transportista, no global. Confirmar con Federico antes de
+agregar esa restricción.
 
 ## Otros pendientes
 
