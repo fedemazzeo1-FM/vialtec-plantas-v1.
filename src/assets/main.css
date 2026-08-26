@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Impresión de documentos (vales, remitos, etc.): cualquier contenido dentro
+   de un elemento con clase "imprimible" es lo único que se ve al imprimir —
+   el resto de la página (sidebar, modal, botones) se oculta. Reutilizable por
+   cualquier módulo que necesite imprimir un comprobante. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .imprimible,
+  .imprimible * {
+    visibility: visible;
+  }
+  .imprimible {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}

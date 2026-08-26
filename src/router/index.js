@@ -19,6 +19,11 @@ const routes = [
     component: () => import('@/views/PlanSemanalView.vue'),
   },
   {
+    path: '/bascula',
+    name: 'bascula',
+    component: () => import('@/views/BasculaView.vue'),
+  },
+  {
     path: '/formulas',
     name: 'formulas',
     component: () => import('@/views/FormulasView.vue'),
@@ -28,8 +33,8 @@ const routes = [
     name: 'maestros',
     component: () => import('@/views/MaestrosView.vue'),
   },
-  // TODO: /dashboard, /stock, /despachos, /bascula, /usuarios, /roles, /backup
-  // — a medida que se implemente cada módulo (ver memory/modules-status.md).
+  // TODO: /dashboard, /stock, /despachos, /usuarios, /roles, /backup — a
+  // medida que se implemente cada módulo (ver memory/modules-status.md).
 ]
 
 export const router = createRouter({

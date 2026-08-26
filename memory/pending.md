@@ -75,6 +75,27 @@ primero. Simplifica el ciclo de estados del sistema legado a 4 estados
 `postergado`** (sí documentado en `business-rules.md`). Revisar si hace falta
 reintroducirlo antes de aplicar la migración.
 
+## Migración SQL de Báscula/Vales — escrita, NO aplicada
+
+`supabase/migrations/04_bascula_y_vales.sql` crea `plantas_vales` (numeración
+nativa desde 9579 vía identity column, FK a `plantas_pedidos` y `flota_obras`).
+El número "04" es intencional — el "03" queda reservado para el módulo Stock,
+que todavía no existe. Puntos a decidir con Federico antes de aplicarla:
+- `tipo_vale` incluye `'hormigon'` porque así lo pidió el prompt de este
+  módulo, pero `business-rules.md` documenta que la báscula legada **no** pesa
+  hormigón. El código no ofrece ningún flujo para crearlo — el valor queda
+  soportado en el schema por si se decide lo contrario.
+- Ingreso de áridos (`tipo_vale = 'ingreso_arido'`) en el sistema legado lleva
+  material, proveedor, N° de remito y cantidad según remito — ninguno de esos
+  campos está en `plantas_vales` (no se pidieron en el schema de este módulo).
+  Por ahora se anotan en `observaciones` como texto libre; `BasculaView.vue`
+  avisa esto mismo en la UI. Si hace falta ese detalle estructurado, hace
+  falta otra migración.
+- **Descuento de stock al pesar**: `registrarPesada()` tiene un TODO explícito
+  — no descuenta stock porque el módulo Stock (tabla `plantas_stock`) todavía
+  no existe. Es el punto de integración obligado cuando se construya ese
+  módulo.
+
 ## Otros pendientes
 
 - Definir el mapeo de los 7 roles del sistema anterior (`admin`, `plantista`,

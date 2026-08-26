@@ -9,6 +9,7 @@ const secciones = [
     links: [
       { to: '/plan-semanal', label: 'Plan semanal' },
       { to: '/pedidos', label: 'Pedidos' },
+      { to: '/bascula', label: 'Báscula' },
     ],
   },
   {
