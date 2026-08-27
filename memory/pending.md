@@ -153,9 +153,18 @@ Escrito, **NO aplicado**:
   `commit;`.
 
 Pendiente antes de poder correr el borrador en serio:
-- De dónde se extraen los blobs legados (`vt_usuarios9`, `vt_bak_YYYY-MM-DD`,
-  `vt_vale_seq9`, etc.) y en qué formato quedan disponibles (export NDJSON,
-  tabla intermedia, etc.) — no hay ninguna muestra real en el repo todavía.
+- **Resuelto en parte (2026-08-27, ver `architecture.md`):** el sistema
+  legado vive en una base/motor externo a Supabase, no en este proyecto —
+  confirmado por Federico. El borrador asume staging tables (`raw jsonb`) ya
+  cargadas en Postgres; con un origen externo real, la carga va a ser vía
+  ETL/CSV, no un `insert` directo — el paso 0 del borrador hay que
+  reemplazarlo por lo que sea que exporte ese sistema (CSV → `\copy` a una
+  tabla intermedia con columnas tipadas, o CSV → jsonb si el export lo
+  permite). El resto del script (reconciliación de obras, inserts a
+  `plantas_*`) no cambia.
+- Sigue sin definir el formato/estructura exacta del export CSV (columnas,
+  encoding, cómo vienen los arrays anidados como `historial` o `camiones` en
+  un CSV plano) — no hay ninguna muestra real todavía.
 - Contra qué campo del legado se hace el lookup de `plantas_formulas` (el
   pedido legado trae `formulaId`, pero es FK al scaffold huérfano ya
   descartado — el borrador asume un lookup por nombre, sin confirmar).

@@ -22,11 +22,20 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 Actualizar el estado de cada fila a medida que se avanza (PENDIENTE → EN CURSO →
 LISTO), no borrar filas.
 
-## Fase 1 de mejoras (auth + RPC atómicas + paginación UI) — código listo, falta aplicar
+## Fase 1 de mejoras (auth + RPC atómicas + paginación UI) — APLICADO en Supabase
 
-Implementado en el código (build verificado con `npm run build`), pero **la
-migración 07 sigue sin aplicarse a Supabase** — nada de esto funciona en vivo
-todavía:
+Estado real verificado en la base (2026-08-27): **01, 02, 04, 05 ya estaban
+aplicadas** en Supabase desde antes de esta fase (por fuera de este chat, sin
+quedar registradas en `list_migrations` — se aplicaron con SQL directo, no
+con la herramienta de migraciones). **06, 07 y 08 se aplicaron en esta
+sesión** vía `apply_migration` (sí quedan trackeadas). Verificado después de
+aplicar: `plantas_usuarios_roles` existe, el admin
+(`federico.mazzeo@vialtec.com.ar`) está cargado y activo,
+`registrar_pesada_bascula`/`registrar_carga_hormigon` existen, `postergado`
+está en el CHECK de `plantas_pedidos.estado`, y las 10 tablas `plantas_*`
+(+`plantas_pedidos_historial`) tienen policies de RLS.
+
+Código (build verificado con `npm run build`):
 
 - **Auth real**: `auth.store.js` (login/logout/restaurar sesión vía Supabase
   Auth), guards de router por rol (`router/index.js`), gate de sesión en
@@ -49,11 +58,24 @@ todavía:
   `fetchAnaliticaProveedores` siguen con `fetchPaginado()` (traen todo — son
   agregaciones, no listados de UI).
 
-Falta antes de que esto ande en producción:
-1. Aplicar la migración 07 (con el protocolo de aviso previo,
-   `procedimientos.md`) — depende de que 01/02/04/05/06 se apliquen antes.
-2. Cargar `plantas_usuarios_roles` para cada usuario real (la migración solo
-   inserta a Federico como admin).
-3. RLS de `plantas_pedidos`/`plantas_vales`/`plantas_cargas_hormigon`
-   (P0.2, tarea separada) — sin eso, las RPC no son la única vía de
-   escritura.
+**08 (RLS mínima)**: `for all to authenticated using (true)` en las 9 tablas
+de negocio (cualquier usuario autenticado del proyecto Supabase compartido
+—incluye usuarios de flota sin rol en `plantas_usuarios_roles`— puede
+leer/escribir), y `plantas_pedidos_historial` con select+insert únicamente
+(append-only por regla de negocio). Esto es deliberadamente amplio —
+confirmado por Federico como suficiente para desbloquear la app ahora; la
+restricción fina por rol/obra queda para la tarea dedicada **P0.2** (todavía
+PENDIENTE).
+
+Falta antes de considerar esto terminado:
+1. Cargar `plantas_usuarios_roles` para cada usuario real más allá del admin
+   (Federico es el único con fila hoy).
+2. Tarea P0.2: RLS fina por rol/obra (reemplazar los `using (true)` de la
+   migración 08).
+3. **Pregunta abierta sin resolver**: Federico mencionó que el sistema viejo
+   vive en tablas `vt_f9`/`vt_s9`/`vt_maestros9` en esta misma base — se
+   verificó contra el schema real (`information_schema.tables`, todos los
+   schemas) y **esas tablas no existen** en `ejitztewkpnmrckwmvny`. No se
+   escribió esto en `architecture.md` porque no se pudo confirmar. Falta que
+   Federico aclare dónde vive realmente el histórico del sistema legado antes
+   de retomar la tarea de migración de historial (ver `pending.md`).

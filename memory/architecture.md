@@ -32,6 +32,21 @@
   tipo `vt_usuarios9`, `vt_bak_YYYY-MM-DD`, etc. La migración a `plantas_*` implica
   pasar de ese modelo documental a tablas relacionales reales. Ver `pending.md`.
 
+**Ubicación del sistema legado (confirmado por Federico, 2026-08-27):** los
+datos legacy (tablas/claves `vt_*`) residen en una base y motor
+**completamente externos** a este proyecto de Supabase — no en
+`ejitztewkpnmrckwmvny` ni en ningún otro schema de esta instancia (se
+verificó contra `information_schema.tables` de todos los schemas antes de
+esta aclaración: no hay ninguna tabla `vt_*` acá). El proyecto de Supabase
+actual es **exclusivo para el nuevo esquema** (`plantas_*` + lectura de
+`flota_*`). La migración del histórico se va a hacer más adelante
+exportando desde esa base externa e importando vía CSV/ETL hacia las tablas
+`plantas_*` — no hay una conexión directa ni un `dblink`/FDW entre ambas
+bases planeado por ahora. Ver `pending.md` para el detalle de qué falta
+migrar y el borrador de script en `supabase/scripts/migracion_historial_borrador.sql`
+(ese borrador va a necesitar ajustarse: asumía staging tables cargadas desde
+un export ya en Postgres, no un ETL cross-motor).
+
 ## REGLA DE PAGINACIÓN CRÍTICA
 
 **Toda query a Supabase que pueda superar las 1,000 filas DEBE usar `fetchPaginado()`
