@@ -118,6 +118,52 @@ el sistema legado valida que no se duplique, pero probablemente esa unicidad
 es por proveedor/transportista, no global. Confirmar con Federico antes de
 agregar esa restricción.
 
+## Migración del historial legado — mapeo y schema de soporte (avance)
+
+Federico confirmó las siguientes decisiones sobre el mapeo campo a campo
+propuesto para migrar pedidos/historial/vales del legado hacia `plantas_*`:
+
+- `plantas_pedidos.obra_id` pasa a nullable (ventas externas sin obra real).
+  `plantas_vales.obra_id` ya era nullable, no necesitó cambio.
+- `plantas_pedidos` suma columnas operativas (no solo para la migración,
+  también para que la UI gestione el ciclo completo del pedido): `encargado`,
+  `tipo_pedido` (`obra`/`venta`), `cliente_externo`, `motivo`, `motivo_en`,
+  `archivado`, `nro_remito_global`, `nro_vale_global`.
+- En vez de columnas de auditoría sueltas por campo, `plantas_pedidos` y
+  `plantas_vales` suman `datos_legados jsonb` (objeto crudo del legado
+  completo, indexado por `datos_legados->>'id'` en pedidos).
+- Se reintroduce el estado `postergado` en el CHECK de `plantas_pedidos.estado`.
+- Se crea `plantas_pedidos_historial` (una fila por evento del array
+  `historial` del legado).
+- Zona horaria fija `America/Argentina/Buenos_Aires` para combinar fecha+hora
+  del legado — aplicada como `SET LOCAL` en el script de carga, no como
+  config global de la instancia (compartida con flota).
+
+Escrito, **NO aplicado**:
+- `supabase/migrations/06_ajustes_pedidos_vales_historial.sql` — patch de
+  schema (ALTERs + tabla nueva `plantas_pedidos_historial`). Depende de que
+  01/02/04/05 se apliquen antes.
+- `supabase/scripts/migracion_historial_borrador.sql` — borrador del script
+  de carga de datos (fuera de `migrations/` a propósito, no es schema).
+  Corre sobre tablas de staging (`staging_legado_pedidos`,
+  `staging_legado_vales`) que **todavía no existen** — el script asume que
+  se cargan con el JSON crudo del legado, pero falta resolver de dónde sale
+  ese volcado real (ver punto pendiente abajo). Termina en `rollback;` por
+  diseño: no persiste nada hasta que se revise a mano y se cambie por
+  `commit;`.
+
+Pendiente antes de poder correr el borrador en serio:
+- De dónde se extraen los blobs legados (`vt_usuarios9`, `vt_bak_YYYY-MM-DD`,
+  `vt_vale_seq9`, etc.) y en qué formato quedan disponibles (export NDJSON,
+  tabla intermedia, etc.) — no hay ninguna muestra real en el repo todavía.
+- Contra qué campo del legado se hace el lookup de `plantas_formulas` (el
+  pedido legado trae `formulaId`, pero es FK al scaffold huérfano ya
+  descartado — el borrador asume un lookup por nombre, sin confirmar).
+- Validar contra un pedido/vale real si el supuesto de
+  `fecha_programada_anterior`/`nueva` en `plantas_pedidos_historial` para
+  eventos `postergado` es correcto (el borrador deja ese cálculo fuera,
+  como TODO explícito).
+
 ## Otros pendientes
 
 - Definir el mapeo de los 7 roles del sistema anterior (`admin`, `plantista`,

@@ -1,13 +1,20 @@
 // Service de Pedidos — único punto de acceso a Supabase para plantas_pedidos.
 // Ningún componente .vue debe importar `supabase` directamente: pasa por acá.
 //
-// plantas_pedidos es una tabla de historial que crece sin límite (memory/
-// architecture.md), por eso el listado general usa fetchPaginado(). Las
-// consultas acotadas a una semana no lo necesitan (7 días de pedidos no va a
-// superar 1000 filas).
+// fetchPedidos() usa fetchPagina() (paginación server-side): trae solo la
+// página que se muestra en UI, no todo el historial a memoria (memory/
+// architecture.md, regla de paginación — acá además evita renderizar miles de
+// filas de golpe cuando se migre el historial legado). Las consultas
+// acotadas a una semana (fetchPedidosSemana/fetchTotalesSemana) no lo
+// necesitan (7 días de pedidos no va a superar 1000 filas).
+//
+// registrarCargaHormigon() llama a la RPC registrar_carga_hormigon (ver
+// supabase/migrations/07_roles_y_rpc_atomicas.sql): la lectura/validación del
+// pedido, el insert de la carga y el update de cantidad_despachada corren
+// atómicos del lado del servidor (con lock de fila) — memory/pending.md.
 
 import { supabase } from '@/config/supabase'
-import { fetchPaginado } from '@/services/fetch-paginado'
+import { fetchPagina } from '@/services/fetch-paginado'
 
 const TABLA = 'plantas_pedidos'
 const ESTADOS_COMPROMETIDOS = ['confirmado', 'despachado']
@@ -17,21 +24,29 @@ const ESTADOS_COMPROMETIDOS = ['confirmado', 'despachado']
 // ---------------------------------------------------------------------------
 
 /**
- * @param {{ estado?: string, obraId?: number, tipo?: string, desde?: string, hasta?: string }} filtros
- *   desde/hasta en formato 'YYYY-MM-DD', sobre fecha_programada.
+ * @param {{ estado?: string, obraId?: number, tipo?: string, desde?: string, hasta?: string, incluirArchivados?: boolean }} filtros
+ *   desde/hasta en formato 'YYYY-MM-DD', sobre fecha_programada. Por defecto
+ *   excluye archivados (mismo criterio que el sistema legado: la vista
+ *   normal no los muestra salvo que se active el toggle).
+ * @param {{ pagina?: number, tamanoPagina?: number }} opciones
+ * @returns {Promise<{ filas: any[], total: number, pagina: number, tamanoPagina: number }>}
  */
-export async function fetchPedidos(filtros = {}) {
-  return fetchPaginado(() => {
-    let query = supabase.from(TABLA).select('*').order('fecha_programada', { ascending: false })
+export async function fetchPedidos(filtros = {}, { pagina = 1, tamanoPagina = 50 } = {}) {
+  return fetchPagina(
+    () => {
+      let query = supabase.from(TABLA).select('*', { count: 'exact' }).order('fecha_programada', { ascending: false })
 
-    if (filtros.estado) query = query.eq('estado', filtros.estado)
-    if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
-    if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
-    if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
-    if (filtros.hasta) query = query.lte('fecha_programada', filtros.hasta)
+      if (filtros.estado) query = query.eq('estado', filtros.estado)
+      if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
+      if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
+      if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
+      if (filtros.hasta) query = query.lte('fecha_programada', filtros.hasta)
+      if (!filtros.incluirArchivados) query = query.eq('archivado', false)
 
-    return query
-  })
+      return query
+    },
+    { pagina, tamanoPagina }
+  )
 }
 
 export async function getPedido(id) {
@@ -138,7 +153,13 @@ export async function fetchTotalesSemana(fechaReferencia = new Date()) {
 // Alta y cambios de estado
 // ---------------------------------------------------------------------------
 
-/** @param {{ obra_id, formula_id, tipo, cantidad_solicitada, fecha_programada, observaciones? }} pedido */
+/**
+ * @param {{ obra_id?, formula_id, tipo, cantidad_solicitada, fecha_programada,
+ *   observaciones?, tipo_pedido?: 'obra'|'venta', cliente_externo?: string,
+ *   encargado?: string }} pedido
+ *   obra_id es opcional cuando tipo_pedido='venta' (venta externa sin obra
+ *   real — migración 06, memory/business-rules.md).
+ */
 export async function crearPedido(pedido) {
   const { data, error } = await supabase
     .from(TABLA)
@@ -183,62 +204,44 @@ export async function cancelarPedido(id, motivo) {
   return actualizarPedido(id, { estado: 'cancelado', observaciones: motivo })
 }
 
+/**
+ * Archiva un pedido despachado/cancelado (memory/business-rules.md: los
+ * pedidos nunca se eliminan, solo se archivan). La vista normal los excluye
+ * por defecto — ver fetchPedidos({ incluirArchivados }).
+ */
+export async function archivarPedido(id) {
+  return actualizarPedido(id, { archivado: true })
+}
+
 // ---------------------------------------------------------------------------
-// Cargas de hormigón (una por camión/mixer — completa el Cambio 8: remito
-// también para hormigón, ver memory/pending.md y supabase/migrations/05_...)
+// Cargas de hormigón (una por camión/mixer, atómico vía RPC — ver
+// supabase/migrations/07_roles_y_rpc_atomicas.sql)
 // ---------------------------------------------------------------------------
 
 /**
- * Registra una carga (mixer) de un pedido de hormigón confirmado: guarda el
- * remito en plantas_cargas_hormigon y acumula cantidad_despachada en el
- * pedido — mismo criterio que registrarPesada() de báscula para asfalto: si
- * la suma cubre lo solicitado, el pedido pasa a despachado.
+ * Registra una carga (mixer) de un pedido de hormigón confirmado: la RPC
+ * registrar_carga_hormigon valida tipo/estado del pedido, inserta el remito
+ * en plantas_cargas_hormigon y acumula cantidad_despachada en el pedido de
+ * forma atómica (con lock de fila) — si la suma cubre lo solicitado, el
+ * pedido pasa a despachado.
  *
  * @param {{ pedido_id: string, numero_remito: string, volumen_m3: number,
  *   patente_mixer?: string, chofer?: string, fecha_carga?: string|Date,
  *   observaciones?: string }} cargaData
  */
 export async function registrarCargaHormigon(cargaData) {
-  const volumen = Number(cargaData.volumen_m3)
-  if (!(volumen > 0)) throw new Error('registrarCargaHormigon: volumen_m3 debe ser mayor a 0')
-  if (!cargaData.numero_remito || !cargaData.numero_remito.trim()) {
-    throw new Error('registrarCargaHormigon: numero_remito es obligatorio')
-  }
-  if (!cargaData.pedido_id) throw new Error('registrarCargaHormigon: pedido_id es obligatorio')
-
-  const pedido = await getPedido(cargaData.pedido_id)
-  if (pedido.tipo !== 'hormigon') {
-    throw new Error('registrarCargaHormigon: el pedido no es de hormigón')
-  }
-  if (pedido.estado !== 'confirmado') {
-    throw new Error('registrarCargaHormigon: el pedido tiene que estar confirmado')
-  }
-
   const fechaCarga = cargaData.fecha_carga ? new Date(cargaData.fecha_carga) : new Date()
 
-  const { data: carga, error } = await supabase
-    .from('plantas_cargas_hormigon')
-    .insert({
-      pedido_id: pedido.id,
-      obra_id: pedido.obra_id,
-      numero_remito: cargaData.numero_remito.trim(),
-      volumen_m3: volumen,
-      patente_mixer: cargaData.patente_mixer || null,
-      chofer: cargaData.chofer || null,
-      fecha_carga: fechaCarga.toISOString(),
-      observaciones: cargaData.observaciones || null,
-    })
-    .select()
-    .single()
+  const { data, error } = await supabase.rpc('registrar_carga_hormigon', {
+    p_pedido_id: cargaData.pedido_id,
+    p_numero_remito: cargaData.numero_remito,
+    p_volumen_m3: Number(cargaData.volumen_m3),
+    p_patente_mixer: cargaData.patente_mixer || null,
+    p_chofer: cargaData.chofer || null,
+    p_fecha_carga: fechaCarga.toISOString(),
+    p_observaciones: cargaData.observaciones || null,
+  })
 
   if (error) throw error
-
-  const nuevaCantidadDespachada = Number(pedido.cantidad_despachada ?? 0) + volumen
-  const cambios = { cantidad_despachada: nuevaCantidadDespachada }
-  if (nuevaCantidadDespachada >= Number(pedido.cantidad_solicitada)) {
-    cambios.estado = 'despachado'
-  }
-  await actualizarPedido(pedido.id, cambios)
-
-  return carga
+  return data
 }

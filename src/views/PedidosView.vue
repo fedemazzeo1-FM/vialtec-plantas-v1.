@@ -2,6 +2,12 @@
 // Vista de Pedidos: historial completo con filtros, alta y cambios de estado.
 // Toda la persistencia pasa por pedidos.service.js — este componente no llama
 // a Supabase directamente (memory/conventions.md).
+//
+// Campos tipo_pedido/cliente_externo/encargado/archivado: agregados en
+// supabase/migrations/06_ajustes_pedidos_vales_historial.sql — ver
+// memory/pending.md. Listado paginado server-side (fetchPedidos ahora
+// devuelve { filas, total }, no un array plano — ver
+// src/services/fetch-paginado.js#fetchPagina).
 
 import { computed, reactive, ref } from 'vue'
 import VCard from '@/components/shared/VCard.vue'
@@ -16,21 +22,26 @@ import {
   despacharPedido,
   cancelarPedido,
   registrarCargaHormigon,
+  archivarPedido,
 } from '@/modules/pedidos/services/pedidos.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { patentesService, choferesService } from '@/modules/maestros/services/maestros.service'
 
-const ESTADOS = ['solicitado', 'confirmado', 'despachado', 'cancelado']
+const ESTADOS = ['solicitado', 'confirmado', 'despachado', 'postergado', 'cancelado']
 const VARIANTE_ESTADO = {
   solicitado: 'default',
   confirmado: 'info',
   despachado: 'success',
+  postergado: 'warning',
   cancelado: 'danger',
 }
+const ESTADOS_ARCHIVABLES = ['despachado', 'cancelado']
+const TAMANO_PAGINA = 50
 
 const columnas = [
-  { key: 'obraNombre', label: 'Obra' },
+  { key: 'destino', label: 'Obra / Cliente' },
+  { key: 'encargado', label: 'Encargado' },
   { key: 'formulaNombre', label: 'Fórmula' },
   { key: 'tipo', label: 'Tipo' },
   { key: 'cantidad_solicitada', label: 'Solicitado' },
@@ -41,6 +52,8 @@ const columnas = [
 ]
 
 const pedidos = ref([])
+const totalPedidos = ref(0)
+const paginaActual = ref(1)
 const obras = ref([])
 const formulas = ref([])
 const patentes = ref([])
@@ -48,7 +61,7 @@ const choferes = ref([])
 const cargando = ref(false)
 const error = ref(null)
 
-const filtros = reactive({ estado: '', obraId: '', tipo: '', desde: '', hasta: '' })
+const filtros = reactive({ estado: '', obraId: '', tipo: '', desde: '', hasta: '', incluirArchivados: false })
 
 const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
 const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
@@ -56,7 +69,10 @@ const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) =
 const filas = computed(() =>
   pedidos.value.map((p) => ({
     ...p,
-    obraNombre: obrasPorId.value[p.obra_id]?.nombre ?? `Obra #${p.obra_id}`,
+    destino:
+      p.tipo_pedido === 'venta'
+        ? p.cliente_externo || '—'
+        : (p.obra_id ? obrasPorId.value[p.obra_id]?.nombre ?? `Obra #${p.obra_id}` : '—'),
     formulaNombre: formulasPorId.value[p.formula_id]?.nombre ?? '—',
   }))
 )
@@ -78,18 +94,30 @@ async function cargarPedidos() {
   cargando.value = true
   error.value = null
   try {
-    pedidos.value = await fetchPedidos({
-      estado: filtros.estado || undefined,
-      obraId: filtros.obraId || undefined,
-      tipo: filtros.tipo || undefined,
-      desde: filtros.desde || undefined,
-      hasta: filtros.hasta || undefined,
-    })
+    const resultado = await fetchPedidos(
+      {
+        estado: filtros.estado || undefined,
+        obraId: filtros.obraId || undefined,
+        tipo: filtros.tipo || undefined,
+        desde: filtros.desde || undefined,
+        hasta: filtros.hasta || undefined,
+        incluirArchivados: filtros.incluirArchivados,
+      },
+      { pagina: paginaActual.value, tamanoPagina: TAMANO_PAGINA }
+    )
+    pedidos.value = resultado.filas
+    totalPedidos.value = resultado.total
   } catch (e) {
     error.value = e.message
   } finally {
     cargando.value = false
   }
+}
+
+/** Cualquier cambio de filtro vuelve a la página 1 (si no, se puede quedar en una página que ya no existe). */
+function aplicarFiltros() {
+  paginaActual.value = 1
+  cargarPedidos()
 }
 
 function limpiarFiltros() {
@@ -98,6 +126,12 @@ function limpiarFiltros() {
   filtros.tipo = ''
   filtros.desde = ''
   filtros.hasta = ''
+  filtros.incluirArchivados = false
+  aplicarFiltros()
+}
+
+function cambiarPagina(pagina) {
+  paginaActual.value = pagina
   cargarPedidos()
 }
 
@@ -109,7 +143,17 @@ const modalAbierto = ref(false)
 const guardando = ref(false)
 
 function formularioVacio() {
-  return { obra_id: '', formula_id: '', tipo: '', cantidad_solicitada: null, fecha_programada: '', observaciones: '' }
+  return {
+    tipo_pedido: 'obra',
+    obra_id: '',
+    cliente_externo: '',
+    encargado: '',
+    formula_id: '',
+    tipo: '',
+    cantidad_solicitada: null,
+    fecha_programada: '',
+    observaciones: '',
+  }
 }
 const formData = reactive(formularioVacio())
 
@@ -124,8 +168,16 @@ function alSeleccionarFormula() {
 }
 
 async function guardarNuevo() {
-  if (!formData.obra_id || !formData.formula_id || !formData.cantidad_solicitada || !formData.fecha_programada) {
-    error.value = 'Completá obra, fórmula, cantidad y fecha.'
+  if (formData.tipo_pedido === 'venta' && !formData.cliente_externo.trim()) {
+    error.value = 'Completá el cliente externo.'
+    return
+  }
+  if (formData.tipo_pedido === 'obra' && !formData.obra_id) {
+    error.value = 'Completá la obra.'
+    return
+  }
+  if (!formData.formula_id || !formData.cantidad_solicitada || !formData.fecha_programada) {
+    error.value = 'Completá fórmula, cantidad y fecha.'
     return
   }
 
@@ -133,7 +185,10 @@ async function guardarNuevo() {
   error.value = null
   try {
     await crearPedido({
-      obra_id: formData.obra_id,
+      tipo_pedido: formData.tipo_pedido,
+      obra_id: formData.tipo_pedido === 'obra' ? formData.obra_id : null,
+      cliente_externo: formData.tipo_pedido === 'venta' ? formData.cliente_externo.trim() : null,
+      encargado: formData.encargado.trim() || null,
       formula_id: formData.formula_id,
       tipo: formData.tipo,
       cantidad_solicitada: formData.cantidad_solicitada,
@@ -141,7 +196,7 @@ async function guardarNuevo() {
       observaciones: formData.observaciones || null,
     })
     modalAbierto.value = false
-    await cargarPedidos()
+    aplicarFiltros()
   } catch (e) {
     error.value = e.message
   } finally {
@@ -222,6 +277,20 @@ async function confirmarCancelacion() {
     error.value = e.message
   } finally {
     cancelando.value = false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Archivado
+// ---------------------------------------------------------------------------
+
+async function archivar(pedido) {
+  error.value = null
+  try {
+    await archivarPedido(pedido.id)
+    await cargarPedidos()
+  } catch (e) {
+    error.value = e.message
   }
 }
 
@@ -334,8 +403,12 @@ cargarBase().then(cargarPedidos)
             <input v-model="filtros.hasta" type="date" class="mt-1 w-full rounded border-gray-300 text-sm" />
           </label>
         </div>
+        <label class="mt-3 flex items-center gap-2 text-sm">
+          <input v-model="filtros.incluirArchivados" type="checkbox" />
+          Mostrar archivados
+        </label>
         <div class="mt-3 flex gap-2">
-          <button type="button" class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700" @click="cargarPedidos">
+          <button type="button" class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700" @click="aplicarFiltros">
             Filtrar
           </button>
           <button type="button" class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" @click="limpiarFiltros">
@@ -352,7 +425,15 @@ cargarBase().then(cargarPedidos)
 
       <VCard>
         <p v-if="cargando" class="text-sm text-gray-500">Cargando…</p>
-        <VTable v-else :columns="columnas" :rows="filas">
+        <VTable
+          v-else
+          :columns="columnas"
+          :rows="filas"
+          :page="paginaActual"
+          :page-size="TAMANO_PAGINA"
+          :total="totalPedidos"
+          @update:page="cambiarPagina"
+        >
           <template #cell-tipo="{ row }">
             {{ row.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto' }}
           </template>
@@ -367,6 +448,7 @@ cargarBase().then(cargarPedidos)
           </template>
           <template #cell-estado="{ row }">
             <VBadge :variant="VARIANTE_ESTADO[row.estado]">{{ row.estado }}</VBadge>
+            <span v-if="row.archivado" class="ml-1 text-xs text-gray-400">(archivado)</span>
           </template>
           <template #cell-acciones="{ row }">
             <div class="flex gap-3 text-sm">
@@ -397,6 +479,14 @@ cargarBase().then(cargarPedidos)
               >
                 Cancelar
               </button>
+              <button
+                v-if="ESTADOS_ARCHIVABLES.includes(row.estado) && !row.archivado"
+                type="button"
+                class="text-gray-500 hover:underline"
+                @click="archivar(row)"
+              >
+                Archivar
+              </button>
             </div>
           </template>
         </VTable>
@@ -410,12 +500,30 @@ cargarBase().then(cargarPedidos)
     <VModal :open="modalAbierto" title="Nuevo pedido" @update:open="modalAbierto = $event">
       <form class="space-y-3" @submit.prevent="guardarNuevo">
         <label class="block text-sm">
+          Tipo de pedido
+          <select v-model="formData.tipo_pedido" class="mt-1 w-full rounded border-gray-300 text-sm">
+            <option value="obra">Obra propia</option>
+            <option value="venta">Venta externa</option>
+          </select>
+        </label>
+
+        <label v-if="formData.tipo_pedido === 'obra'" class="block text-sm">
           Obra
           <select v-model="formData.obra_id" class="mt-1 w-full rounded border-gray-300 text-sm">
             <option value="" disabled>Elegir obra…</option>
             <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
           </select>
         </label>
+        <label v-else class="block text-sm">
+          Cliente externo
+          <input v-model="formData.cliente_externo" type="text" class="mt-1 w-full rounded border-gray-300 text-sm" />
+        </label>
+
+        <label class="block text-sm">
+          Encargado
+          <input v-model="formData.encargado" type="text" class="mt-1 w-full rounded border-gray-300 text-sm" />
+        </label>
+
         <label class="block text-sm">
           Fórmula
           <select v-model="formData.formula_id" class="mt-1 w-full rounded border-gray-300 text-sm" @change="alSeleccionarFormula">
@@ -451,7 +559,7 @@ cargarBase().then(cargarPedidos)
     <VModal :open="modalDespachoAbierto" title="Confirmar despacho" @update:open="modalDespachoAbierto = $event">
       <form class="space-y-3" @submit.prevent="confirmarDespacho">
         <p class="text-sm text-gray-600">
-          Obra: <strong>{{ obrasPorId[pedidoDespacho?.obra_id]?.nombre }}</strong> —
+          {{ pedidoDespacho?.tipo_pedido === 'venta' ? pedidoDespacho?.cliente_externo : obrasPorId[pedidoDespacho?.obra_id]?.nombre }} —
           Solicitado: {{ pedidoDespacho?.cantidad_solicitada }} {{ pedidoDespacho?.tipo === 'hormigon' ? 'm³' : 'tn' }}
         </p>
         <label class="block text-sm">
@@ -477,7 +585,7 @@ cargarBase().then(cargarPedidos)
     >
       <form class="space-y-3" @submit.prevent="guardarCargaHormigon">
         <p class="text-sm text-gray-600">
-          Obra: <strong>{{ obrasPorId[pedidoCargaHormigon?.obra_id]?.nombre }}</strong> —
+          {{ pedidoCargaHormigon?.tipo_pedido === 'venta' ? pedidoCargaHormigon?.cliente_externo : obrasPorId[pedidoCargaHormigon?.obra_id]?.nombre }} —
           Saldo pendiente: {{ saldoCargaHormigon.toFixed(1) }} m³
         </p>
 

@@ -3,6 +3,11 @@
 // vales y doble impresión (vale / remito con acumulado dinámico) en filas de
 // asfalto. Toda la persistencia pasa por bascula.service.js — este componente
 // no llama a Supabase directamente (memory/conventions.md).
+//
+// registrarPesada() ahora llama a la RPC registrar_pesada_bascula (atómica,
+// ver supabase/migrations/07_roles_y_rpc_atomicas.sql) — sin cambios acá,
+// la interfaz del service es la misma. El historial de vales sí cambió: usa
+// paginación server-side (fetchHistorialVales devuelve { filas, total }).
 
 import { computed, reactive, ref } from 'vue'
 import VCard from '@/components/shared/VCard.vue'
@@ -179,7 +184,11 @@ const columnasHistorial = [
   { key: 'acciones', label: '' },
 ]
 
+const TAMANO_PAGINA_HISTORIAL = 50
+
 const historial = ref([])
+const totalHistorial = ref(0)
+const paginaHistorial = ref(1)
 const cargandoHistorial = ref(false)
 const filtros = reactive({ tipoVale: '', obraId: '', patente: '', desde: '', hasta: '' })
 
@@ -196,18 +205,29 @@ async function cargarHistorial() {
   cargandoHistorial.value = true
   error.value = null
   try {
-    historial.value = await fetchHistorialVales({
-      tipoVale: filtros.tipoVale || undefined,
-      obraId: filtros.obraId || undefined,
-      patente: filtros.patente || undefined,
-      desde: filtros.desde || undefined,
-      hasta: filtros.hasta || undefined,
-    })
+    const resultado = await fetchHistorialVales(
+      {
+        tipoVale: filtros.tipoVale || undefined,
+        obraId: filtros.obraId || undefined,
+        patente: filtros.patente || undefined,
+        desde: filtros.desde || undefined,
+        hasta: filtros.hasta || undefined,
+      },
+      { pagina: paginaHistorial.value, tamanoPagina: TAMANO_PAGINA_HISTORIAL }
+    )
+    historial.value = resultado.filas
+    totalHistorial.value = resultado.total
   } catch (e) {
     error.value = e.message
   } finally {
     cargandoHistorial.value = false
   }
+}
+
+/** Cualquier cambio de filtro vuelve a la página 1 (si no, se puede quedar en una página que ya no existe). */
+function aplicarFiltrosHistorial() {
+  paginaHistorial.value = 1
+  cargarHistorial()
 }
 
 function limpiarFiltros() {
@@ -216,6 +236,11 @@ function limpiarFiltros() {
   filtros.patente = ''
   filtros.desde = ''
   filtros.hasta = ''
+  aplicarFiltrosHistorial()
+}
+
+function cambiarPaginaHistorial(pagina) {
+  paginaHistorial.value = pagina
   cargarHistorial()
 }
 
@@ -431,7 +456,7 @@ crearSlot('asfalto')
           </label>
         </div>
         <div class="mt-3 flex gap-2">
-          <button type="button" class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700" @click="cargarHistorial">
+          <button type="button" class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700" @click="aplicarFiltrosHistorial">
             Filtrar
           </button>
           <button type="button" class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" @click="limpiarFiltros">
@@ -443,7 +468,15 @@ crearSlot('asfalto')
       <!-- Historial -->
       <VCard>
         <p v-if="cargandoHistorial" class="text-sm text-gray-500">Cargando…</p>
-        <VTable v-else :columns="columnasHistorial" :rows="filasHistorial">
+        <VTable
+          v-else
+          :columns="columnasHistorial"
+          :rows="filasHistorial"
+          :page="paginaHistorial"
+          :page-size="TAMANO_PAGINA_HISTORIAL"
+          :total="totalHistorial"
+          @update:page="cambiarPaginaHistorial"
+        >
           <template #cell-tipo_vale="{ row }">
             <VBadge :variant="VARIANTE_TIPO[row.tipo_vale]">{{ ETIQUETA_TIPO[row.tipo_vale] }}</VBadge>
           </template>

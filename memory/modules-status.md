@@ -21,3 +21,39 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 
 Actualizar el estado de cada fila a medida que se avanza (PENDIENTE → EN CURSO →
 LISTO), no borrar filas.
+
+## Fase 1 de mejoras (auth + RPC atómicas + paginación UI) — código listo, falta aplicar
+
+Implementado en el código (build verificado con `npm run build`), pero **la
+migración 07 sigue sin aplicarse a Supabase** — nada de esto funciona en vivo
+todavía:
+
+- **Auth real**: `auth.store.js` (login/logout/restaurar sesión vía Supabase
+  Auth), guards de router por rol (`router/index.js`), gate de sesión en
+  `App.vue`, `LoginView.vue` nueva, sidebar filtrado por permisos en
+  `DesktopLayout.vue`. Rol se resuelve contra `plantas_usuarios_roles` (tabla
+  nueva, migración 07) — NO contra `flota_roles` (drift real detectado, ver
+  `pending.md`).
+- **RPC atómicas**: `registrar_pesada_bascula` y `registrar_carga_hormigon`
+  (migración 07) reemplazan el flujo multi-paso de
+  `bascula.service.js#registrarPesada` y
+  `pedidos.service.js#registrarCargaHormigon` — arreglan la race condition de
+  slots paralelos pesando el mismo pedido (lock de fila server-side).
+- **PedidosView**: soporta `tipo_pedido` (obra/venta), `cliente_externo`,
+  `encargado`, filtro + acción de archivado.
+- **Paginación server-side de UI**: `fetchPagina()` nuevo en
+  `fetch-paginado.js`, usado por `fetchPedidos()` y `fetchHistorialVales()`
+  (devuelven `{ filas, total }`, ya no un array plano). `VTable.vue` soporta
+  footer de paginación opcional (`page`/`page-size`/`total`). Fuera de
+  alcance a propósito: `fetchDetalleDespachosCamion` (Dashboard) y
+  `fetchAnaliticaProveedores` siguen con `fetchPaginado()` (traen todo — son
+  agregaciones, no listados de UI).
+
+Falta antes de que esto ande en producción:
+1. Aplicar la migración 07 (con el protocolo de aviso previo,
+   `procedimientos.md`) — depende de que 01/02/04/05/06 se apliquen antes.
+2. Cargar `plantas_usuarios_roles` para cada usuario real (la migración solo
+   inserta a Federico como admin).
+3. RLS de `plantas_pedidos`/`plantas_vales`/`plantas_cargas_hormigon`
+   (P0.2, tarea separada) — sin eso, las RPC no son la única vía de
+   escritura.
