@@ -2,11 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tipografía base (Manrope, ver memory/guia-estilo-flota.md) — Tailwind no
+   aplica font-sans a <body> automáticamente, hay que declararlo acá.
+   NOTA: el color va con theme(), no con @apply text-text — "text-text" no
+   aparece como string literal en ningún .vue/.js escaneado por `content`
+   (los .css no están en ese glob), así que el JIT de Tailwind nunca la
+   genera y @apply tira "class does not exist" (500 en el dev server,
+   pantalla en blanco porque el JS nunca llega a correr). theme() lee el
+   valor directo del config sin depender de ese escaneo. */
+@layer base {
+  body {
+    @apply font-sans;
+    color: theme('colors.text.DEFAULT');
+  }
+}
+
 /* Impresión de documentos (vales, remitos, etc.): cualquier contenido dentro
    de un elemento con clase "imprimible" es lo único que se ve al imprimir —
    el resto de la página (sidebar, modal, botones) se oculta. Reutilizable por
-   cualquier módulo que necesite imprimir un comprobante. */
+   cualquier módulo que necesite imprimir un comprobante.
+
+   @page en A4 landscape: el vale de báscula se imprime en dos copias
+   (planta + chofer) lado a lado (Logica sis. plantas v1.rtf §2.4) — solo
+   entra en una hoja apaisada. El remito (una sola copia) también hereda esta
+   orientación; no hay otro documento imprimible en la app hoy que la
+   necesite distinta. */
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
   body * {
     visibility: hidden;
   }

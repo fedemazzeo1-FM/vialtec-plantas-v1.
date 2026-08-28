@@ -173,6 +173,45 @@ Pendiente antes de poder correr el borrador en serio:
   eventos `postergado` es correcto (el borrador deja ese cálculo fuera,
   como TODO explícito).
 
+## Relevamiento funcional del sistema viejo (produccion.vialtec.app) — CERRADO (Etapa 1) + ampliado (Etapa 3)
+
+Ver `memory/relevamiento-sistema-viejo.md` (los 13 módulos relevados vía
+navegación real en Claude in Chrome, 2026-08-27). Contiene una lista
+concreta de gaps funcionales confirmados contra producción real (no solo
+contra los .rtf), 16 gaps priorizables y 6 preguntas abiertas para Federico.
+El hallazgo más importante: **"obra" en el sistema viejo es un catálogo
+propio con código, no `flota_obras`** — y también hay catálogos propios de
+Materiales/Insumos y Clientes frecuentes que hoy no existen en `plantas_*`.
+Esto pone en duda la estrategia de reconciliación de obras ya escrita en la
+sección de migración de historial de este mismo archivo — **revisar y
+probablemente reescribir ese mapeo antes de tocarlo de nuevo**, incorporando
+los 3 catálogos nuevos (`plantas_obras`, `plantas_materiales`,
+`plantas_clientes_frecuentes`) al diseño de schema.
+
+**Etapa 3 (2026-08-28)** — pasada minuciosa botón por botón/modal por modal
+(alcance acotado a lo operativo, no a lo visual). Confirma con precisión
+mayor varios puntos de la Etapa 1 y agrega hallazgos nuevos accionables sin
+cambio de schema (Ingreso Áridos: `Proveedor` debería ser select no texto
+libre, `N° Remito` debería ser obligatorio; sacar "Chofer" de los forms de
+Ingreso/Egreso) y con cambio de schema (Egreso de áridos: `obra_id` en vez
+de `destino` texto libre; unificar el despacho de hormigón al patrón
+multi-carga de asfalto). Ver la sección "Etapa 3" al final de
+`relevamiento-sistema-viejo.md` para el detalle completo y el resumen de
+acciones concretas al pie del documento — **todavía no implementado**, queda
+para la próxima sesión de trabajo sobre código.
+
+## Guía de estilo de Flota (equipos2.vialtec.app) — borrador listo
+
+Ver `memory/guia-estilo-flota.md` — paleta exacta (HEX, tomados de
+`getComputedStyle`/clases Tailwind reales, no a ojo), tipografía (Manrope),
+layout de sidebar, y spec de botones/badges/tabs/KPI/tablas/modales/inputs,
+más una propuesta de `tailwind.config.js` (no aplicada — nuestro
+`theme.extend` está vacío hoy, no hay conflicto). Falta decidir con Federico
+el naming de los tokens (`success/danger/warning/info` propuesto vs.
+calcar `green/red/amber/blue` como en Flota) antes de aplicar el config.
+Un valor (`amber-light`) quedó sin confirmar, marcado explícitamente en el
+documento.
+
 ## Otros pendientes
 
 - Definir el mapeo de los 7 roles del sistema anterior (`admin`, `plantista`,
