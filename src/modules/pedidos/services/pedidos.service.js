@@ -1,5 +1,6 @@
-// Service de Pedidos — único punto de acceso a Supabase para plantas_pedidos.
-// Ningún componente .vue debe importar `supabase` directamente: pasa por acá.
+// Service de Pedidos — único punto de acceso a Supabase para plantas_pedidos
+// y plantas_pedidos_historial. Ningún componente .vue debe importar
+// `supabase` directamente: pasa por acá.
 //
 // fetchPedidos() usa fetchPagina() (paginación server-side): trae solo la
 // página que se muestra en UI, no todo el historial a memoria (memory/
@@ -8,16 +9,66 @@
 // acotadas a una semana (fetchPedidosSemana/fetchTotalesSemana) no lo
 // necesitan (7 días de pedidos no va a superar 1000 filas).
 //
-// registrarCargaHormigon() llama a la RPC registrar_carga_hormigon (ver
-// supabase/migrations/07_roles_y_rpc_atomicas.sql): la lectura/validación del
-// pedido, el insert de la carga y el update de cantidad_despachada corren
-// atómicos del lado del servidor (con lock de fila) — memory/pending.md.
+// registrarCargaHormigon()/registrarCargaAsfalto() llaman a sus RPC (ver
+// supabase/migrations/07_roles_y_rpc_atomicas.sql, extendidas en la 09 y 11):
+// la lectura/validación del pedido, el insert de la carga y el update de
+// cantidad_despachada corren atómicos del lado del servidor (con lock de
+// fila) — memory/pending.md. Desde la migración 11, esas dos RPC NO cierran
+// el pedido — eso lo hace finalizarDespacho(), que es quien decide si el
+// despacho fue completo o parcial (con o sin pedido residual).
+//
+// Historial (plantas_pedidos_historial, migración 06): crearPedido(),
+// confirmarPedido() y cancelarPedido() registran su propio evento acá mismo
+// después de la operación principal — dos llamadas secuenciales, no
+// atómicas entre sí (a diferencia de postergarPedido()/finalizarDespacho(),
+// que sí lo hacen en la misma RPC porque necesitan leer el estado "antes" de
+// forma consistente). Se aceptó esa asimetría a propósito: crear/confirmar/
+// cancelar son updates de una sola fila sin condición de carrera real: no es
+// tan importante en la práctica.
 
 import { supabase } from '@/config/supabase'
 import { fetchPagina } from '@/services/fetch-paginado'
 
 const TABLA = 'plantas_pedidos'
+const TABLA_HISTORIAL = 'plantas_pedidos_historial'
 const ESTADOS_COMPROMETIDOS = ['confirmado', 'despachado']
+
+// ---------------------------------------------------------------------------
+// Historial (append-only — memory/business-rules.md)
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {{ pedidoId: string, estado: string, motivo?: string, usuarioLegado?: string }} datos
+ */
+async function registrarHistorial({ pedidoId, estado, motivo, usuarioLegado }) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const { error } = await supabase.from(TABLA_HISTORIAL).insert({
+    pedido_id: pedidoId,
+    estado,
+    fecha_evento: new Date().toISOString(),
+    usuario_id: user?.id ?? null,
+    usuario_legado: usuarioLegado || user?.email || null,
+    motivo: motivo || null,
+  })
+  if (error) throw error
+}
+
+/**
+ * Timeline completo de un pedido, más viejo primero (memory/relevamiento-
+ * sistema-viejo.md §1 — modal "Historial del pedido").
+ */
+export async function fetchHistorialPedido(pedidoId) {
+  const { data, error } = await supabase
+    .from(TABLA_HISTORIAL)
+    .select('*')
+    .eq('pedido_id', pedidoId)
+    .order('fecha_evento', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
 
 // ---------------------------------------------------------------------------
 // Listado / lectura
@@ -47,6 +98,27 @@ export async function fetchPedidos(filtros = {}, { pagina = 1, tamanoPagina = 50
     },
     { pagina, tamanoPagina }
   )
+}
+
+const ESTADOS_CONTEO = ['solicitado', 'confirmado', 'despachado', 'postergado', 'cancelado']
+
+/**
+ * Conteo de pedidos NO archivados por estado — para los 5 KPI de arriba de
+ * la vista (memory/relevamiento-sistema-viejo.md §1: "KPIs arriba: SOLICITADO,
+ * CONFIRMADO, DESPACHADO, POSTERGADO, CANCELADO"). 5 `count: 'exact', head:
+ * true` en paralelo — cada uno es un COUNT(*) real de Postgres, no lee filas,
+ * así que no aplica el límite de 1000 de PostgREST (memory/architecture.md).
+ */
+export async function fetchConteoEstados() {
+  const resultados = await Promise.all(
+    ESTADOS_CONTEO.map((estado) => supabase.from(TABLA).select('id', { count: 'exact', head: true }).eq('estado', estado).eq('archivado', false))
+  )
+  const conteo = {}
+  ESTADOS_CONTEO.forEach((estado, i) => {
+    if (resultados[i].error) throw resultados[i].error
+    conteo[estado] = resultados[i].count ?? 0
+  })
+  return conteo
 }
 
 export async function getPedido(id) {
@@ -156,17 +228,25 @@ export async function fetchTotalesSemana(fechaReferencia = new Date()) {
 /**
  * @param {{ obra_id?, formula_id, tipo, cantidad_solicitada, fecha_programada,
  *   observaciones?, tipo_pedido?: 'obra'|'venta', cliente_externo?: string,
- *   encargado?: string }} pedido
+ *   encargado?: string, ubicacion?: string }} pedido
  *   obra_id es opcional cuando tipo_pedido='venta' (venta externa sin obra
- *   real — migración 06, memory/business-rules.md).
+ *   real — migración 06, memory/business-rules.md). ubicacion es texto libre
+ *   opcional (migración 09, memory/relevamiento-sistema-viejo.md §1).
  */
-export async function crearPedido(pedido) {
+/**
+ * @param {{...}} pedido
+ * @param {{ usuarioLegado?: string }} opciones nombre para mostrar en el
+ *   historial (la vista lo saca de authStore.nombre — el service no depende
+ *   de Pinia, memory/conventions.md).
+ */
+export async function crearPedido(pedido, { usuarioLegado } = {}) {
   const { data, error } = await supabase
     .from(TABLA)
     .insert({ ...pedido, estado: 'solicitado' })
     .select()
     .single()
   if (error) throw error
+  await registrarHistorial({ pedidoId: data.id, estado: 'solicitado', usuarioLegado })
   return data
 }
 
@@ -177,31 +257,69 @@ export async function actualizarPedido(id, cambios) {
 }
 
 /** solicitado -> confirmado. Solo plantista/admin (a validar contra rol logueado en la UI). */
-export async function confirmarPedido(id, { observaciones } = {}) {
+export async function confirmarPedido(id, { observaciones, usuarioLegado } = {}) {
   const cambios = { estado: 'confirmado' }
   if (observaciones !== undefined) cambios.observaciones = observaciones
-  return actualizarPedido(id, cambios)
+  const data = await actualizarPedido(id, cambios)
+  await registrarHistorial({ pedidoId: id, estado: 'confirmado', usuarioLegado })
+  return data
 }
 
 /**
- * confirmado -> despachado.
- * TODO: al integrar el módulo Stock, acá va el descuento automático de
- * insumos (fórmula × cantidadDespachada, ver memory/business-rules.md). Por
- * ahora esta función solo cambia el estado del pedido.
+ * solicitado|confirmado -> postergado, vía RPC atómica (necesita leer
+ * fecha_programada "antes" de forma consistente para guardarla en el
+ * historial — no se puede hacer en dos pasos desde el cliente sin una
+ * carrera). fechaNueva y motivo son opcionales, igual que el modal real
+ * (memory/relevamiento-sistema-viejo.md Etapa 3).
  */
-export async function despacharPedido(id, cantidadDespachada) {
-  if (!(cantidadDespachada > 0)) {
-    throw new Error('despacharPedido: cantidadDespachada debe ser mayor a 0')
-  }
-  return actualizarPedido(id, { estado: 'despachado', cantidad_despachada: cantidadDespachada })
+export async function postergarPedido(id, { fechaNueva, motivo } = {}) {
+  const { data, error } = await supabase.rpc('postergar_pedido', {
+    p_pedido_id: id,
+    p_fecha_nueva: fechaNueva || null,
+    p_motivo: motivo || null,
+  })
+  if (error) throw error
+  return data
+}
+
+// NOTA: no hay un despacharPedido(id, cantidad) genérico acá — el despacho
+// de asfalto se hace SIEMPRE vía registrarCargaAsfalto() (multi-carga, una
+// llamada atómica por camión, ver más abajo) y el de hormigón vía
+// registrarCargaHormigon(). Ninguna de las dos cierra el pedido por sí
+// sola desde la migración 11 — finalizarDespacho() es quien decide cerrarlo
+// (completo o parcial, con o sin pedido residual).
+// TODO(stock): cuando exista plantas_stock, el descuento automático de
+// insumos (fórmula × cantidad_despachada) va del lado de finalizarDespacho().
+
+/**
+ * Cierra un pedido confirmado como despachado con lo cargado hasta el
+ * momento — Logica sis. plantas v1.rtf §2.2: "cantidadReal = suma de las
+ * cargas", el pedido pasa a despachado aunque sea menos de lo pedido. Si
+ * `dividir` es true y queda saldo, crea automáticamente un pedido nuevo
+ * confirmado por el residual en `fechaResidual` ("dividir pedido").
+ *
+ * @param {string} pedidoId
+ * @param {{ dividir?: boolean, fechaResidual?: string|Date }} opciones
+ */
+export async function finalizarDespacho(pedidoId, { dividir = false, fechaResidual } = {}) {
+  const fecha = fechaResidual ? new Date(fechaResidual).toISOString().slice(0, 10) : null
+  const { data, error } = await supabase.rpc('finalizar_despacho', {
+    p_pedido_id: pedidoId,
+    p_dividir: dividir,
+    p_fecha_residual: fecha,
+  })
+  if (error) throw error
+  return data
 }
 
 /** Cancelado requiere motivo obligatorio (memory/business-rules.md) y no se reactiva. */
-export async function cancelarPedido(id, motivo) {
+export async function cancelarPedido(id, motivo, { usuarioLegado } = {}) {
   if (!motivo || !motivo.trim()) {
     throw new Error('cancelarPedido: el motivo es obligatorio')
   }
-  return actualizarPedido(id, { estado: 'cancelado', observaciones: motivo })
+  const data = await actualizarPedido(id, { estado: 'cancelado', observaciones: motivo })
+  await registrarHistorial({ pedidoId: id, estado: 'cancelado', motivo, usuarioLegado })
+  return data
 }
 
 /**
@@ -240,6 +358,45 @@ export async function registrarCargaHormigon(cargaData) {
     p_chofer: cargaData.chofer || null,
     p_fecha_carga: fechaCarga.toISOString(),
     p_observaciones: cargaData.observaciones || null,
+  })
+
+  if (error) throw error
+  return data
+}
+
+// ---------------------------------------------------------------------------
+// Cargas de asfalto (despacho multi-camión, vale por carga — atómico vía
+// RPC, ver supabase/migrations/09_ubicacion_temperatura_egreso_multicarga.sql)
+// ---------------------------------------------------------------------------
+
+/**
+ * Registra una carga (camión) de un pedido de asfalto confirmado: la RPC
+ * registrar_carga_asfalto valida tipo/estado del pedido, inserta el vale en
+ * plantas_cargas_asfalto y acumula cantidad_despachada en el pedido de forma
+ * atómica (con lock de fila) — si la suma cubre lo solicitado, el pedido
+ * pasa a despachado. Análoga a registrarCargaHormigon(), ver
+ * memory/relevamiento-sistema-viejo.md §1 (multi-camión con vale por carga,
+ * disponible desde el modal "Registrar despacho" de Pedidos, no solo desde
+ * Báscula).
+ *
+ * @param {{ pedido_id: string, numero_vale: string, cantidad_tn: number,
+ *   patente?: string, fecha_carga?: string|Date, observaciones?: string,
+ *   numero_remito_global?: string }} cargaData
+ *   numero_remito_global es el remito único opcional de todo el despacho
+ *   (plantas_pedidos.nro_remito_global) — se completa una sola vez, no se
+ *   pisa si ya lo trae una carga anterior del mismo despacho.
+ */
+export async function registrarCargaAsfalto(cargaData) {
+  const fechaCarga = cargaData.fecha_carga ? new Date(cargaData.fecha_carga) : new Date()
+
+  const { data, error } = await supabase.rpc('registrar_carga_asfalto', {
+    p_pedido_id: cargaData.pedido_id,
+    p_numero_vale: cargaData.numero_vale,
+    p_cantidad_tn: Number(cargaData.cantidad_tn),
+    p_patente: cargaData.patente || null,
+    p_fecha_carga: fechaCarga.toISOString(),
+    p_observaciones: cargaData.observaciones || null,
+    p_numero_remito_global: cargaData.numero_remito_global || null,
   })
 
   if (error) throw error

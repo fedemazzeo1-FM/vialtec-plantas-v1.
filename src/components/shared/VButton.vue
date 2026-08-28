@@ -4,7 +4,9 @@
 // 3 variantes con clases fijas, sin CSS custom.
 //
 // size: 'sm' (acciones inline de tabla/filtros) | 'md' (footer de modal, formularios)
-// variant: 'primary' (acción principal) | 'secondary' (outline) | 'danger' (destructivo) | 'ghost' (link liso, ej. "Limpiar")
+// variant: 'primary' (acción principal) | 'secondary' (outline) | 'danger' (destructivo)
+//   | 'success' (despachar/entregar — verde, distinto del violeta de "confirmar")
+//   | 'ghost' (link liso, ej. "Limpiar")
 defineProps({
   variant: { type: String, default: 'primary' },
   size: { type: String, default: 'md' },
@@ -25,6 +27,7 @@ const VARIANT_CLASS = {
   primary: 'bg-vialtec text-white hover:opacity-90',
   secondary: 'border border-border text-text-mid hover:bg-gray-50',
   danger: 'bg-danger text-white hover:opacity-90',
+  success: 'bg-success text-white hover:opacity-90',
   // No es de Flota (no vimos un botón "ghost" con estas medidas), pero
   // "Limpiar filtros" en Flota se ve como texto liso sin caja — replicamos
   // esa idea con las mismas variables de color que el resto del sistema.

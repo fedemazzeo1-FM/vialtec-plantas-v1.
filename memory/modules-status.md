@@ -6,7 +6,7 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 | # | Módulo | Descripción breve | Estado |
 |---|--------|--------------------|--------|
 | 1 | Dashboard | KPIs del mes, analítica de proveedores, despacho por camión | EN CURSO — service + `DashboardView` listos (KPIs dobles tn/m³, comparativa de proveedores por período, detalle por camión con remito garantizado); falta aplicar migración SQL 05; alertas de stock 🔴/🟡 originales del sistema legado no están implementadas todavía (dependen del módulo Stock) |
-| 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado | EN CURSO — service + `PedidosView` (filtros, alta con ubicación, confirmar/cancelar, "Registrar carga" hormigón, y despacho de asfalto multi-camión con vale por carga vía `useDespachoAsfalto`) listos; lógica movida a composables (`usePedidos`/`useDespachoAsfalto`/`useCargaHormigon`, 2026-08-28) |
+| 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado→postergado | EN CURSO — **Fase 1 de fidelidad funcional cerrada (2026-08-28)**: ver detalle abajo. |
 | 3 | Plan semanal | Vista de pedidos confirmados/despachados agrupados por día | EN CURSO — service + `PlanSemanalView` (matriz lunes-domingo, KPIs tn/m³ por obra y total) listos; falta aplicar migración SQL |
 | 4 | Stock | Stock por material en kg, ingresos/salidas manuales, guardas | PENDIENTE |
 | 5 | Despachos | Historial de pedidos despachados, filtros, exportación Excel | PENDIENTE |
@@ -204,3 +204,106 @@ Pendiente explícito, fuera de esta tanda (no pedido por Federico esta vez):
   catálogo `plantas_materiales`, que no existe — gap #2 de la Etapa 1).
 - Módulo Despachos (historial dedicado) sigue sin construir — es el próximo
   módulo completo de la metodología, no un ajuste de Báscula.
+
+## Pedidos — Fase 1 de fidelidad funcional — CERRADA (2026-08-28)
+
+Misma metodología: auditoría línea por línea contra Logica sis. plantas
+v1.rtf/v2.rtf + `business-rules.md` + relevamiento en vivo → lista de gaps
+→ aprobación de Federico → implementación → build → prueba real en el
+navegador con datos de QA temporales (creados e **íntegramente borrados**
+al terminar, la base de dev quedó igual que antes: 0 pedidos, 0 fórmulas).
+
+Migración `supabase/migrations/11_postergar_historial_cierre_despacho.sql`
+aplicada y verificada (incluye el fix de la misma sesión: `postergar_pedido`
+también acepta re-postergar un pedido ya `postergado`, no solo
+solicitado/confirmado).
+
+**Implementado:**
+- **Postergar pedido**: modal (nueva fecha + motivo, ambos opcionales) +
+  RPC `postergar_pedido` (atómica, guarda fecha_programada_anterior/nueva
+  en el historial). Probado en vivo end-to-end.
+- **Historial del pedido**: `plantas_pedidos_historial` ahora se escribe en
+  cada transición (`crearPedido`/`confirmarPedido`/`cancelarPedido` insertan
+  su evento desde el service; `postergar_pedido`/`finalizar_despacho` lo
+  hacen atómicamente dentro de la RPC) y se lee con el modal "Ver
+  historial" (timeline con badge + fecha/hora + usuario + motivo). Probado
+  en vivo, incluye el nombre real del usuario logueado.
+- **Cierre parcial + pedido residual**: nueva RPC `finalizar_despacho` —
+  única responsable de pasar confirmado→despachado, con lo cargado hasta
+  ese momento (parcial o completo, Logica v1 §2.2). Si queda saldo, checkbox
+  "Dividir pedido" genera automáticamente un pedido nuevo confirmado por el
+  residual en la fecha elegida. `registrar_carga_asfalto`/
+  `registrar_carga_hormigon` ya NO cierran el pedido solas (se les sacó esa
+  lógica). **Probado en vivo end-to-end**: despacho parcial de 60/100 tn +
+  dividir → pedido original quedó `despachado` (60 tn), se creó el residual
+  `confirmado` (40 tn, fecha elegida), historial correcto en ambos.
+- **Multi-carga hormigón**: `useCargaHormigon.js` reescrito al mismo patrón
+  que `useDespachoAsfalto.js` (array de cargas, "+ Agregar carga"), mismo
+  título de modal "Registrar despacho" para los dos materiales (confirmado
+  en vivo que el legado usa uno solo). Se sacaron los campos Chofer y
+  Fecha/hora (el legado real no los pide ahí) — quedan Cantidad, N° Remito,
+  Patente.
+- **WhatsApp (WppToast)**: `src/modules/pedidos/whatsapp.js` (funciones
+  puras, arma mensaje + link `wa.me/?text=...`, sin número de destino
+  porque `plantas_usuarios_roles` no tiene teléfono todavía). Toast
+  dismissible con botón "Enviar por WhatsApp" al crear (→ plantista) y al
+  confirmar (→ encargado; + toast adicional si es hormigón, sin hardcodear
+  ningún contacto puntual como hacía el legado con "angel"/u12). Probado en
+  vivo, el toast aparece con el mensaje correcto.
+- **Editar pedido**: modal reutilizando el mismo set de campos que "Nuevo
+  pedido", conectado a `actualizarPedido()` (sin evento propio de
+  historial — edición no es un cambio de estado).
+- **Ajustes visuales**: `VBadge` variante `postergado` (violeta, antes
+  compartía `warning`/ámbar con `solicitado`) — confirmado en vivo, el
+  color se ve correctamente distinto. `VButton` variante `success` (verde)
+  para "Despachar"/"Registrar carga" — confirmado en vivo.
+- **KPIs de estado** (pedido adicional de Federico durante la
+  implementación, no estaba en la lista original): 5 tarjetas
+  SOLICITADO/CONFIRMADO/DESPACHADO/POSTERGADO/CANCELADO con conteo y color
+  por estado, arriba de la tabla — `fetchConteoEstados()` (5 `count:
+  'exact', head: true` en paralelo, no lee filas, no pisa la regla de
+  paginación). Probado en vivo, conteos correctos.
+
+**Gap encontrado y corregido durante la prueba en vivo (no estaba en el plan
+original)**: un pedido `postergado` se quedaba sin ninguna acción para
+volver a `confirmado` — `business-rules.md` documenta esa transición
+explícitamente (`postergado → confirmado → despachado`). Se agregó:
+Confirmar/Postergar/Cancelar también disponibles desde `postergado`, y el
+RPC `postergar_pedido` ahora permite re-postergar.
+
+**Pendiente, fuera de esta Fase 1** (ya estaba fuera de alcance en el gap
+report original, Federico no lo pidió esta vez):
+- Roles/visibilidad por obra asignada — pospuesto a la etapa global de
+  seguridad (decisión explícita de Federico).
+- Exportar Excel de pedidos.
+- Layout de cards agrupadas por tipo (Hormigón/Asfalto) — se mantuvo la
+  tabla plana, solo se sumaron los KPIs de conteo arriba.
+- Módulo Despachos (historial dedicado) — sigue sin construir.
+
+## Módulos pendientes de desarrollo (2026-08-28)
+
+Próximos en la metodología (relevamiento en vivo → gap report → aprobación
+→ implementación → build → prueba real → commit aislado), uno a la vez:
+
+- **Despachos** — historial dedicado (no la vista actual de Pedidos):
+  KPIs, resumen por obra, corrección/anulación de un despacho ya
+  registrado, y que la anulación devuelva el stock descontado.
+- **Stock** — descuento automático en kg al despachar, excepciones
+  Agua/Purgue (nunca se descuentan), y las protecciones del legado
+  (guarda contra caídas anómalas, alerta sin bloqueo duro).
+- **Simulador** — proyección de consumo de insumos contra el stock
+  proyectado, sin tocar datos reales.
+- **Usuarios y Permisos por rol** — restricciones reales (RLS fina, hoy
+  `using (true)` en las 9 tablas) y visibilidad de pedidos por obra
+  asignada — es la etapa de seguridad pospuesta durante Pedidos Fase 1.
+- **Auditoría** — panel para ver quién ejecutó cada acción y su
+  trazabilidad (además del historial de pedidos, que ya existe).
+
+**Nota explícita para cuando se arranque cualquiera de estos**: antes de
+tocar código hay que repetir la misma auditoría que ya se hizo con Báscula
+y Pedidos — navegar en vivo el sistema viejo (produccion.vialtec.app) para
+relevar el comportamiento exacto de ese módulo puntual (botones, modales,
+validaciones, columnas), no asumirlo solo desde `Logica sis. plantas
+v1.rtf`/`v2.rtf` o `business-rules.md`. Esos documentos son la base, pero
+el relevamiento en vivo ya corrigió varias veces cosas que decían distinto
+de lo que el sistema real hace hoy (ver `relevamiento-sistema-viejo.md`).
