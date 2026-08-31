@@ -23,6 +23,41 @@ SOLICITADO → CONFIRMADO → DESPACHADO
 - Los pedidos **nunca se eliminan**, solo se archivan (pedidos despachados/cancelados
   de semanas anteriores). El archivado no debe romper reportes históricos.
 
+## Fuente de verdad según el tipo de transacción (Federico, 2026-08-31)
+
+Distinción operativa fundamental para Despachos y para el futuro módulo Stock
+— dos flujos con fuente de verdad distinta, no intercambiables:
+
+1. **Despachos de asfalto/hormigón (ventas a obra)**: la fuente de verdad del
+   total despachado es la `cantidadReal` cargada en **Pedidos**
+   (`plantas_pedidos.cantidad_despachada`), tomada del **remito final
+   consolidado**. Báscula (`plantas_vales`, tipo asfalto) aporta el detalle
+   de vales/camiones **solo para auditoría** — no es de donde sale el total
+   oficial ni se suma/dedupe contra `plantas_cargas_asfalto`. Ver
+   `plantas_v_despachos_camion` (migración 12): vista de detalle por camión,
+   deliberadamente sin deduplicar entre Báscula y Pedidos, y explícitamente
+   **no** usada para calcular ningún total oficial (eso sale siempre de
+   `plantas_pedidos.cantidad_despachada`).
+2. **Ingreso de proveedores y egreso de áridos**: son transacciones
+   **directas de Báscula**, sin pasar por Pedidos. Acá la suma/resta de stock
+   sí tiene que ser 100% automática a partir del **peso neto real** de cada
+   pesada (`plantas_vales.peso_neto`, tipos `ingreso_arido`/`egreso_arido`),
+   no de un valor declarado en otro módulo. (Nota: el ingreso de áridos ya es
+   la excepción reglada en `business-rules.md` más abajo — ver "Ingresos de
+   áridos por báscula": ahí el **stock** se actualiza por la cantidad
+   **declarada en el remito**, no por el peso neto; el peso neto solo se
+   registra para seguimiento de la diferencia. El egreso de áridos, en
+   cambio, no tiene remito de origen — ahí sí el peso neto pesado **es** el
+   valor que mueve stock, sin intermediario.)
+
+Cuando se construya el módulo Stock (`plantas_stock`, hoy PENDIENTE), el
+descuento por despacho tiene que engancharse a `finalizar_despacho()`/
+`corregir_despacho()` (Pedidos), y el movimiento de ingreso/egreso de áridos
+tiene que engancharse a `registrar_pesada_bascula()` (Báscula) — dos
+integraciones separadas, cada una a su propio "TODO(stock)" ya marcado en el
+código (`pedidos.service.js`, `supabase/migrations/09_*.sql` dentro de
+`registrar_pesada_bascula`).
+
 ## Descuento de stock
 
 - El stock se maneja **internamente en kg**, siempre. La UI puede mostrar tn
@@ -30,7 +65,8 @@ SOLICITADO → CONFIRMADO → DESPACHADO
 - El descuento ocurre **al despachar** (no al confirmar), y es automático:
   para cada insumo de la fórmula, `consumo_kg = insumo × cantidadReal` (con la
   conversión de unidad correspondiente: `%`, `tn`, `kg`, `L` — ver fórmula del
-  módulo Fórmulas).
+  módulo Fórmulas). **cantidadReal acá es siempre `plantas_pedidos.cantidad_despachada`
+  (Pedidos), no una suma sobre vales de Báscula** — ver sección de arriba.
 - Materiales que **nunca se descuentan**: Agua y Purgue (excluidos explícitamente).
 - Antes de modificar stock, siempre se debe leer el valor **fresco desde la DB**
   (nunca el estado en memoria del cliente), para evitar que dos operaciones

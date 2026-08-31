@@ -44,6 +44,12 @@ const routes = [
     meta: { tab: 'bascula' },
   },
   {
+    path: '/despachos',
+    name: 'despachos',
+    component: () => import('@/views/DespachosView.vue'),
+    meta: { tab: 'despachos' },
+  },
+  {
     path: '/formulas',
     name: 'formulas',
     component: () => import('@/views/FormulasView.vue'),
@@ -55,8 +61,8 @@ const routes = [
     component: () => import('@/views/MaestrosView.vue'),
     meta: { tab: 'maestros' },
   },
-  // TODO: /stock, /despachos, /usuarios, /roles, /backup — a medida que se
-  // implemente cada módulo (ver memory/modules-status.md).
+  // TODO: /stock, /usuarios, /roles, /backup — a medida que se implemente
+  // cada módulo (ver memory/modules-status.md).
 ]
 
 export const router = createRouter({

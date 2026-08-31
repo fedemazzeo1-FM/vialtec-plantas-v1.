@@ -9,7 +9,7 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 | 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado→postergado | EN CURSO — **Fase 1 de fidelidad funcional cerrada (2026-08-28)**: ver detalle abajo. |
 | 3 | Plan semanal | Vista de pedidos confirmados/despachados agrupados por día | EN CURSO — service + `PlanSemanalView` (matriz lunes-domingo, KPIs tn/m³ por obra y total) listos; falta aplicar migración SQL |
 | 4 | Stock | Stock por material en kg, ingresos/salidas manuales, guardas | PENDIENTE |
-| 5 | Despachos | Historial de pedidos despachados, filtros, exportación Excel | PENDIENTE |
+| 5 | Despachos | Historial de pedidos despachados, filtros, exportación Excel | EN CURSO — **fidelidad funcional cerrada (2026-08-31)**: ver detalle abajo. Falta exports Excel (fuera de alcance de esta tanda). |
 | 6 | Báscula / Balanza | Puertas de pesaje, vales de asfalto, ingreso/egreso de áridos | EN CURSO — **fidelidad funcional con el legado cerrada (2026-08-28, Fase 1+2 sobre el relevamiento Etapa 3)**: ver detalle abajo. Descuento de stock al pesar sigue siendo un TODO hasta que exista el módulo Stock |
 | 7 | Fórmulas | Composición de mezclas (asfalto/hormigón), conversión a kg | EN CURSO — service + `FormulasView` con edición inline de insumos listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_formulas` (pendiente de confirmación) |
 | 8 | Maestros | Obras, encargados, proveedores, patentes, choferes, materiales | EN CURSO — service + `MaestrosView` (tabs) listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_encargados/proveedores/patentes/choferes` (pendiente de confirmación) |
@@ -278,19 +278,87 @@ report original, Federico no lo pidió esta vez):
 - Exportar Excel de pedidos.
 - Layout de cards agrupadas por tipo (Hormigón/Asfalto) — se mantuvo la
   tabla plana, solo se sumaron los KPIs de conteo arriba.
-- Módulo Despachos (historial dedicado) — sigue sin construir.
+- Módulo Despachos (historial dedicado) — sigue sin construir. **✅ construido
+  2026-08-31, ver sección "Despachos — fidelidad funcional cerrada" abajo.**
 
-## Módulos pendientes de desarrollo (2026-08-28)
+## Despachos — fidelidad funcional cerrada (2026-08-31)
+
+Misma metodología que Báscula/Pedidos: auditoría contra `Logica sis. plantas
+v1.rtf`/`v2.rtf` + `memory/relevamiento-sistema-viejo.md` §3/Etapa 3 → gap
+report → aprobación de Federico → implementación → build → commit aislado.
+
+Migración `supabase/migrations/12_despachos_vista_camion_y_correccion.sql`
+aplicada y verificada. Incluye un ajuste de diseño hecho **en vivo durante la
+aprobación**: la primera versión de este archivo deduplicaba
+`plantas_cargas_asfalto` contra `plantas_vales` por N° de vale (para evitar
+un supuesto doble conteo); Federico corrigió el flujo operativo real antes de
+aplicarla — Báscula es detalle auditable camión por camión, Pedidos es donde
+se cierra el despacho con la cantidadReal del remito final consolidado, no
+son el mismo dato contado dos veces. La versión aplicada NO deduplica nada
+— ver `memory/business-rules.md` §"Fuente de verdad según el tipo de
+transacción" para el detalle completo de esta regla (también aplica al
+futuro módulo Stock).
+
+**Implementado:**
+- **Fix de `plantas_v_despachos_camion`** (gap #12 del diagnóstico): la
+  vista (migración 05) nunca se había actualizado cuando se agregó
+  `plantas_cargas_asfalto` (migración 09) — un despacho de asfalto declarado
+  desde Pedidos y todavía no pesado en Báscula no aparecía en el detalle por
+  camión del Dashboard. Se agregó como tercer `UNION ALL`, sin deduplicar.
+- **`src/services/despachos.service.js`**: listado paginado sobre
+  `plantas_pedidos` (`estado='despachado'`), KPIs de acumulado histórico
+  completo (`fetchAcumuladoHistorico`, sin límite de fecha — el Dashboard
+  solo tenía el KPI del mes) + KPI del mes, resumen por obra
+  (`fetchResumenPorObra`, agrupa por `obra_id` o por `cliente_externo` si es
+  venta externa), detalle de cargas por camión (`fetchCargasDelPedido`, lee
+  `plantas_cargas_asfalto`/`plantas_cargas_hormigon` directo — **no** la
+  vista ni `plantas_vales`, porque la fuente de verdad del despacho es
+  Pedidos), y `corregirDespacho()` (RPC `corregir_despacho`, migración 12).
+- **`DespachosView.vue`** + `useDespachos.js` (composable, vista como
+  template puro): 4 KPIs (Asfalto/Hormigón del mes + acumulado histórico,
+  como el legado), filtros pill Todos/Hormigón/Asfalto + Mezcla + Obra +
+  Desde/Hasta, resumen por obra con selector `<input type="month">` y grid
+  de cards, tabla FECHA/OBRA/MEZCLA/PEDIDO/REAL/DIFERENCIA, acciones 🚛 Ver
+  detalle de cargas / Corregir / 👁 Ver remito.
+- **`DespachoImprimible.vue`**: remito A4 landscape imprimible (mismo
+  mecanismo `.imprimible` + `window.print()` que `ValeImprimible.vue` de
+  Báscula), una sola copia con dos firmas (responsable de planta / encargado)
+  — Logica sis. plantas v1.rtf §4.5.
+- **Corrección post-despacho**: RPC `corregir_despacho` (solo
+  plantista/admin/plantista_hormigon, solo sobre pedidos `despachado`) edita
+  `cantidad_despachada`/`nro_remito_global`/`nro_vale_global`, auditado en
+  `plantas_pedidos_historial` como evento `corregido` (nuevo valor agregado
+  al CHECK de esa tabla — no afecta los 5 estados reales de
+  `plantas_pedidos`) con el valor anterior y el nuevo en `datos_legados`.
+- Ruta `/despachos`, link + ícono nuevo (`camion`) en el sidebar, tab
+  habilitado para plantista/encargado/supervisor/gerencia/admin (no
+  balancero — confirmado en el relevamiento en vivo).
+
+Build verificado (`npm run build` limpio). **Pendiente antes de darlo por
+100% probado**: smoke test visual en el navegador con datos reales — la base
+de dev no tiene despachos cargados hoy (mismo caveat que Pedidos/Báscula
+Fase 1). Fuera de alcance a propósito, no pedido por Federico esta vez: los
+5 botones de export (Eficiencia, Resumen mensual, Excel período, Por obra,
+Excel completo) y el Resumen mensual completo (reporting pesado, toca
+Stock + Ventas externas). Visibilidad "solo mis despachos" para
+encargado/supervisor sigue pendiente de RLS fina (P0.2).
+
+## Módulos pendientes de desarrollo (2026-08-28, actualizado 2026-08-31)
 
 Próximos en la metodología (relevamiento en vivo → gap report → aprobación
-→ implementación → build → prueba real → commit aislado), uno a la vez:
+→ implementación → build → prueba real → commit aislado). **Prioridad
+inmediata fijada por Federico (2026-08-31): Stock e Inventarios.**
 
-- **Despachos** — historial dedicado (no la vista actual de Pedidos):
-  KPIs, resumen por obra, corrección/anulación de un despacho ya
-  registrado, y que la anulación devuelva el stock descontado.
-- **Stock** — descuento automático en kg al despachar, excepciones
+- **Stock** (PRIORITARIO) — descuento automático en kg al despachar, excepciones
   Agua/Purgue (nunca se descuentan), y las protecciones del legado
-  (guarda contra caídas anómalas, alerta sin bloqueo duro).
+  (guarda contra caídas anómalas, alerta sin bloqueo duro). **Dos
+  integraciones separadas, no una sola** (`business-rules.md` §"Fuente de
+  verdad según el tipo de transacción", regla fijada por Federico
+  2026-08-31): el descuento por despacho engancha a `finalizar_despacho()`/
+  `corregir_despacho()` de Pedidos (cantidadReal del remito final, NO una
+  suma sobre vales de Báscula); el movimiento de ingreso/egreso de áridos
+  engancha a `registrar_pesada_bascula()` de Báscula (peso neto real de la
+  pesada, sin pasar por Pedidos).
 - **Simulador** — proyección de consumo de insumos contra el stock
   proyectado, sin tocar datos reales.
 - **Usuarios y Permisos por rol** — restricciones reales (RLS fina, hoy

@@ -17,16 +17,20 @@ import { supabase } from '@/config/supabase'
 export const PERMISOS_POR_ROL = {
   admin: { tabs: 'todas', crearPedido: true, confirmar: true, despachar: true, stock: 'editar', verVentas: true },
   plantista: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'bascula', 'formulas', 'maestros'],
+    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'bascula', 'formulas', 'maestros'],
     crearPedido: true,
     confirmar: true,
     despachar: true,
     stock: 'editar',
     verVentas: true,
   },
-  encargado: { tabs: ['dashboard', 'pedidos'], crearPedido: true, confirmar: false, despachar: false, stock: false, verVentas: true },
+  // encargado/supervisor: "ver Despachos" acá solo controla si el TAB
+  // aparece — el filtrado real a "solo sus despachos" (memory/business-
+  // rules.md, v1.rtf §257) es de la etapa de RLS fina/visibilidad por obra,
+  // todavía PENDIENTE (memory/pending.md, P0.2). Hoy ambos roles ven todos.
+  encargado: { tabs: ['dashboard', 'pedidos', 'despachos'], crearPedido: true, confirmar: false, despachar: false, stock: false, verVentas: true },
   supervisor: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal'],
+    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos'],
     crearPedido: true,
     confirmar: false,
     despachar: false,
@@ -35,7 +39,7 @@ export const PERMISOS_POR_ROL = {
   },
   balancero: { tabs: ['bascula', 'maestros'], crearPedido: false, confirmar: false, despachar: false, stock: 'ver', verVentas: false },
   gerencia: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'formulas'],
+    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'formulas'],
     crearPedido: false,
     confirmar: false,
     despachar: false,
