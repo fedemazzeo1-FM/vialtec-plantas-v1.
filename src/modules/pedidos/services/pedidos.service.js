@@ -17,14 +17,16 @@
 // el pedido — eso lo hace finalizarDespacho(), que es quien decide si el
 // despacho fue completo o parcial (con o sin pedido residual).
 //
-// Historial (plantas_pedidos_historial, migración 06): crearPedido(),
-// confirmarPedido() y cancelarPedido() registran su propio evento acá mismo
-// después de la operación principal — dos llamadas secuenciales, no
-// atómicas entre sí (a diferencia de postergarPedido()/finalizarDespacho(),
-// que sí lo hacen en la misma RPC porque necesitan leer el estado "antes" de
-// forma consistente). Se aceptó esa asimetría a propósito: crear/confirmar/
-// cancelar son updates de una sola fila sin condición de carrera real: no es
-// tan importante en la práctica.
+// Escritura sobre plantas_pedidos (migración 16, "lock down" de seguridad):
+// crearPedido/actualizarPedido/confirmarPedido/cancelarPedido/archivarPedido
+// van TODOS por RPC (crear_pedido/actualizar_pedido/confirmar_pedido/
+// cancelar_pedido/archivar_pedido) — plantas_pedidos ya no acepta
+// INSERT/UPDATE directo desde el cliente (RLS: solo SELECT para
+// `authenticated`, la escritura queda exclusiva de funciones SECURITY
+// DEFINER). Cada RPC valida rol + transición de estado server-side y
+// escribe su evento de historial de forma atómica en la misma transacción
+// — ya no hace falta el helper registrarHistorial() de acá (se eliminó,
+// quedaba sin uso).
 
 import { supabase } from '@/config/supabase'
 import { fetchPagina } from '@/services/fetch-paginado'
@@ -34,27 +36,8 @@ const TABLA_HISTORIAL = 'plantas_pedidos_historial'
 const ESTADOS_COMPROMETIDOS = ['confirmado', 'despachado']
 
 // ---------------------------------------------------------------------------
-// Historial (append-only — memory/business-rules.md)
+// Historial (append-only, solo lectura desde el cliente — memory/business-rules.md)
 // ---------------------------------------------------------------------------
-
-/**
- * @param {{ pedidoId: string, estado: string, motivo?: string, usuarioLegado?: string }} datos
- */
-async function registrarHistorial({ pedidoId, estado, motivo, usuarioLegado }) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  const { error } = await supabase.from(TABLA_HISTORIAL).insert({
-    pedido_id: pedidoId,
-    estado,
-    fecha_evento: new Date().toISOString(),
-    usuario_id: user?.id ?? null,
-    usuario_legado: usuarioLegado || user?.email || null,
-    motivo: motivo || null,
-  })
-  if (error) throw error
-}
 
 /**
  * Timeline completo de un pedido, más viejo primero (memory/relevamiento-
@@ -226,42 +209,69 @@ export async function fetchTotalesSemana(fechaReferencia = new Date()) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {{ obra_id?, formula_id, tipo, cantidad_solicitada, fecha_programada,
+ * Crea un pedido en estado solicitado + su primer evento de historial, de
+ * forma atómica vía RPC (migración 16 — plantas_pedidos ya no acepta INSERT
+ * directo desde el cliente).
+ *
+ * @param {{ obra_id?, formula_id, cantidad_solicitada, fecha_programada,
  *   observaciones?, tipo_pedido?: 'obra'|'venta', cliente_externo?: string,
  *   encargado?: string, ubicacion?: string }} pedido
  *   obra_id es opcional cuando tipo_pedido='venta' (venta externa sin obra
  *   real — migración 06, memory/business-rules.md). ubicacion es texto libre
- *   opcional (migración 09, memory/relevamiento-sistema-viejo.md §1).
- */
-/**
- * @param {{...}} pedido
+ *   opcional (migración 09, memory/relevamiento-sistema-viejo.md §1). `tipo`
+ *   ya no se manda: la RPC lo deriva de la fórmula elegida.
  * @param {{ usuarioLegado?: string }} opciones nombre para mostrar en el
  *   historial (la vista lo saca de authStore.nombre — el service no depende
  *   de Pinia, memory/conventions.md).
  */
 export async function crearPedido(pedido, { usuarioLegado } = {}) {
-  const { data, error } = await supabase
-    .from(TABLA)
-    .insert({ ...pedido, estado: 'solicitado' })
-    .select()
-    .single()
+  const { data, error } = await supabase.rpc('crear_pedido', {
+    p_formula_id: pedido.formula_id,
+    p_cantidad_solicitada: pedido.cantidad_solicitada,
+    p_fecha_programada: pedido.fecha_programada,
+    p_obra_id: pedido.obra_id ?? null,
+    p_tipo_pedido: pedido.tipo_pedido || 'obra',
+    p_cliente_externo: pedido.cliente_externo ?? null,
+    p_encargado: pedido.encargado ?? null,
+    p_ubicacion: pedido.ubicacion ?? null,
+    p_observaciones: pedido.observaciones ?? null,
+    p_usuario_legado: usuarioLegado || null,
+  })
   if (error) throw error
-  await registrarHistorial({ pedidoId: data.id, estado: 'solicitado', usuarioLegado })
   return data
 }
 
+/**
+ * Edita los campos generales de un pedido solicitado/confirmado (no cambia
+ * estado, no genera historial) vía RPC — mismo set de campos que el form
+ * "Editar pedido" (memory/conventions.md: la vista manda el objeto completo,
+ * no un patch parcial, ver usePedidos.js#guardarEdicion).
+ */
 export async function actualizarPedido(id, cambios) {
-  const { data, error } = await supabase.from(TABLA).update(cambios).eq('id', id).select().single()
+  const { data, error } = await supabase.rpc('actualizar_pedido', {
+    p_pedido_id: id,
+    p_formula_id: cambios.formula_id,
+    p_cantidad_solicitada: cambios.cantidad_solicitada,
+    p_fecha_programada: cambios.fecha_programada,
+    p_obra_id: cambios.obra_id ?? null,
+    p_tipo_pedido: cambios.tipo_pedido || 'obra',
+    p_cliente_externo: cambios.cliente_externo ?? null,
+    p_encargado: cambios.encargado ?? null,
+    p_ubicacion: cambios.ubicacion ?? null,
+    p_observaciones: cambios.observaciones ?? null,
+  })
   if (error) throw error
   return data
 }
 
-/** solicitado -> confirmado. Solo plantista/admin (a validar contra rol logueado en la UI). */
+/** solicitado|postergado -> confirmado. Solo plantista/admin, validado server-side en la RPC. */
 export async function confirmarPedido(id, { observaciones, usuarioLegado } = {}) {
-  const cambios = { estado: 'confirmado' }
-  if (observaciones !== undefined) cambios.observaciones = observaciones
-  const data = await actualizarPedido(id, cambios)
-  await registrarHistorial({ pedidoId: id, estado: 'confirmado', usuarioLegado })
+  const { data, error } = await supabase.rpc('confirmar_pedido', {
+    p_pedido_id: id,
+    p_observaciones: observaciones ?? null,
+    p_usuario_legado: usuarioLegado || null,
+  })
+  if (error) throw error
   return data
 }
 
@@ -312,13 +322,21 @@ export async function finalizarDespacho(pedidoId, { dividir = false, fechaResidu
   return data
 }
 
-/** Cancelado requiere motivo obligatorio (memory/business-rules.md) y no se reactiva. */
+/**
+ * Cancelado requiere motivo obligatorio (memory/business-rules.md) y no se
+ * reactiva — validado en el cliente Y de nuevo server-side en la RPC
+ * (defensa en profundidad, migración 16).
+ */
 export async function cancelarPedido(id, motivo, { usuarioLegado } = {}) {
   if (!motivo || !motivo.trim()) {
     throw new Error('cancelarPedido: el motivo es obligatorio')
   }
-  const data = await actualizarPedido(id, { estado: 'cancelado', observaciones: motivo })
-  await registrarHistorial({ pedidoId: id, estado: 'cancelado', motivo, usuarioLegado })
+  const { data, error } = await supabase.rpc('cancelar_pedido', {
+    p_pedido_id: id,
+    p_motivo: motivo,
+    p_usuario_legado: usuarioLegado || null,
+  })
+  if (error) throw error
   return data
 }
 
@@ -328,7 +346,9 @@ export async function cancelarPedido(id, motivo, { usuarioLegado } = {}) {
  * por defecto — ver fetchPedidos({ incluirArchivados }).
  */
 export async function archivarPedido(id) {
-  return actualizarPedido(id, { archivado: true })
+  const { data, error } = await supabase.rpc('archivar_pedido', { p_pedido_id: id })
+  if (error) throw error
+  return data
 }
 
 // ---------------------------------------------------------------------------
