@@ -67,6 +67,12 @@ const routes = [
     component: () => import('@/views/StockView.vue'),
     meta: { tab: 'stock' },
   },
+  {
+    path: '/simulador',
+    name: 'simulador',
+    component: () => import('@/views/SimuladorView.vue'),
+    meta: { tab: 'simulador' },
+  },
   // TODO: /usuarios, /roles, /backup — a medida que se implemente cada
   // módulo (ver memory/modules-status.md).
 ]

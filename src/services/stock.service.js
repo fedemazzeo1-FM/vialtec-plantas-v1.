@@ -13,19 +13,26 @@
 
 import { supabase } from '@/config/supabase'
 import { fetchPagina } from '@/services/fetch-paginado'
+import { fetchNombresPorEmail } from '@/services/flota.service'
 
 /**
- * Semáforo 3 colores contra stock_minimo_kg/stock_maximo_kg del material
- * (memory/relevamiento-sistema-viejo.md §6). El punto de corte exacto entre
- * "verde" y "amarillo" no está documentado con precisión en el legado (solo
- * se confirmó que existen 3 estados y una barra min/max) — acá se usa un
- * margen del 20% por encima del mínimo como "ajustado". Ajustar si Federico
- * define un valor real de producción.
+ * Semáforo 3 colores contra stock_minimo_kg/stock_maximo_kg del material.
+ * Umbral "amarillo" confirmado contra producción real (relevamiento en vivo,
+ * 2026-08-31): ARENA 0/3 — actual 66,38t, mín 50t, máx 150t → "Ajustado".
+ * Eso encaja con `mínimo + 20% del rango (máx-mín)` = 50+20=70t (66,38<70),
+ * NO con el 20% sobre el mínimo que se había asumido antes (mín×1,2=60,
+ * 66,38>60 hubiera dado "OK", incorrecto). El estado NO depende de máximoKg
+ * salvo para calcular ese rango — un stock muy por encima del máximo
+ * confirmado sigue dando "OK" en producción (el máximo es solo referencia
+ * visual de la barra, no dispara alerta). Si no hay máximoKg configurado, no
+ * se puede calcular el rango — cae a un margen del 20% sobre el mínimo como
+ * aproximación razonable.
  */
 export function calcularEstadoSemaforo(cantidadKg, minimoKg, maximoKg) {
   if (minimoKg == null) return 'verde'
   if (cantidadKg <= 0 || cantidadKg < minimoKg) return 'rojo'
-  if (cantidadKg < minimoKg * 1.2) return 'amarillo'
+  const umbralAjustado = maximoKg != null ? minimoKg + 0.2 * (maximoKg - minimoKg) : minimoKg * 1.2
+  if (cantidadKg < umbralAjustado) return 'amarillo'
   return 'verde'
 }
 
@@ -84,11 +91,19 @@ export async function fetchMovimientos(filtros = {}, { pagina = 1, tamanoPagina 
     { pagina, tamanoPagina }
   )
 
+  // Responsable (migración 15): plantas_stock_movimientos solo guarda
+  // responsable_email (auth.email(), server-side) — acá se resuelve el
+  // nombre a mostrar contra flota_usuarios_email, mismo patrón que
+  // auth.store.js usa para el usuario logueado. Si no hay match (usuario sin
+  // fila en flota_usuarios_email), se muestra el email tal cual.
+  const nombresPorEmail = await fetchNombresPorEmail(resultado.filas.map((m) => m.responsable_email))
+
   return {
     ...resultado,
     filas: resultado.filas.map((m) => ({
       ...m,
       materialNombre: m.plantas_materiales?.nombre ?? '—',
+      responsableNombre: m.responsable_email ? nombresPorEmail[m.responsable_email] ?? m.responsable_email : '—',
       esIngreso: TIPOS_INGRESO.includes(m.tipo) || m.cantidad_kg > 0,
     })),
   }

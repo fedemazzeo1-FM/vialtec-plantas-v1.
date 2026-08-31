@@ -18,6 +18,7 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 | 11 | Backup | Backups automáticos/manuales y restauración | PENDIENTE |
 | 12 | Resumen mensual / Reportes | Excel mensual de producción por obra e insumos | PENDIENTE |
 | 13 | Migración de historial | Migrar datos del sistema anterior a `plantas_*` | PENDIENTE |
+| 14 | Simulador de producción | Simular mix de fórmulas contra el stock actual, sin tocar datos reales | **COMPLETADO (MVP) — 2026-08-31**: ver detalle abajo. (No tenía fila propia en esta tabla hasta ahora — el relevamiento original lo mencionaba solo de paso dentro de Stock.) |
 
 Actualizar el estado de cada fila a medida que se avanza (PENDIENTE → EN CURSO →
 LISTO), no borrar filas.
@@ -405,15 +406,70 @@ semáforo de stock **proyectado semanal** del Dashboard/Plan Semanal (usa
 `plantas_stock` como fuente pero el banner/cálculo en sí no está construido
 — ver fila #1 de la tabla de arriba).
 
+## Simulador de Producción — COMPLETADO (MVP) — 2026-08-31
+
+Misma metodología, con un paso extra: la documentación del legado (.rtf +
+relevamiento Etapa 1) era mucho más escasa que la de los demás módulos (una
+sola línea en cada .rtf, sin pasada Etapa 3) — antes de diseñar el MVP se
+hizo un **relevamiento en vivo dedicado** contra `produccion.vialtec.app`
+(sesión de Federico como Administrador) para ver la pantalla de resultado
+real, algo que ninguna sesión anterior había llegado a hacer.
+
+**Hallazgos del relevamiento en vivo** (cargada una simulación real con mix
+de 2 fórmulas — asfalto + hormigón):
+- Confirma mix de fórmulas simultáneo con subtotales separados por tipo
+  ("Total asfalto"/"Total hormigón", cada uno solo visible si hay entradas
+  de ese tipo).
+- Tabla de impacto: INSUMO | STOCK ACTUAL | CONSUMO TOTAL | STOCK PROYECTADO
+  | ESTADO — consumo combinado de TODAS las entradas por insumo.
+- **NO calcula "capacidad máxima"** (cuántas unidades más entran dado el
+  stock) — es resta simple `proyectado = actual - consumo`, puede dar
+  negativo en pantalla sin problema (es solo informativo).
+- **ESTADO es BINARIO** (OK / Insuficiente, badges pill) — a propósito
+  distinto del semáforo de 3 colores de las cards de Stock.
+- **Sin ningún botón de exportar** en toda la pantalla.
+
+Aprovechando la sesión logueada se relevó también Stock a fondo (ver
+hallazgos abajo) y se confirmó que el histórico "AJUSTE" no existe en el
+legado (coincide con que el relevamiento mensual legado nunca dejaba
+auditoría — por eso Federico decidió que el nuestro sí, ver sección Stock).
+
+**Implementado — `src/modules/simulador/composables/useSimulador.js` +
+`src/views/SimuladorView.vue`**: 100% client-side, **sin tabla ni migración
+SQL propia** — reusa `calcularConsumoTotalKg()` (`formulas.service.js`) y
+`fetchStockActual()` (`stock.service.js`). Formulario con unidad dinámica
+(tn/m³ según tipo de fórmula), lista acumulable con ✕, subtotales
+condicionales, tabla de impacto fiel a lo relevado (estado binario, sin
+capacidad máxima, sin export). Ruta `/simulador`, tab habilitado para
+admin/plantista (únicos roles que lo listan ambos .rtf y el menú real).
+
+## Fixes de Stock (colaterales al relevamiento de Simulador) — migración 15
+
+- **Piso en 0** (`GREATEST`, Logica sis. plantas v1.rtf §5.3: "el stock
+  nunca queda negativo, va a 0 como mínimo") en
+  `plantas_aplicar_movimiento_stock`. El delta que se audita en
+  `plantas_stock_movimientos` es el **realmente aplicado** (no el
+  solicitado) para que `sum(movimientos)` siempre reconcilie exacto contra
+  `plantas_stock.cantidad_kg` — si hubo recorte por piso, queda una nota
+  automática en `observaciones`.
+- **Umbral "Ajustado" corregido** en `calcularEstadoSemaforo()`
+  (`stock.service.js`): `mínimo + 20% del rango (máx-mín)`, confirmado
+  contra un caso real de producción (ARENA 0/3: 66,38t, mín 50t, máx 150t →
+  Ajustado) — el supuesto anterior (`mínimo × 1,2`) no encajaba con ese
+  dato real.
+- **Columna Responsable** en el historial de movimientos:
+  `plantas_stock_movimientos.responsable_email` (nuevo, `auth.email()`
+  server-side — `auth.users` no se expone vía API) + `fetchNombresPorEmail()`
+  nuevo en `flota.service.js` (cruza contra `flota_usuarios_email`, mismo
+  patrón que ya usa `auth.store.js`).
+
+Build verificado (`npm run build` limpio).
+
 ## Módulos pendientes de desarrollo (2026-08-28, actualizado 2026-08-31)
 
 Próximos en la metodología (relevamiento en vivo → gap report → aprobación
 → implementación → build → prueba real → commit aislado).
 
-- **Simulador** — proyección de consumo de insumos contra el stock
-  proyectado, sin tocar datos reales. **Desbloqueado**: ya existe
-  `plantas_stock` + `plantas_calcular_consumo_kg` para apoyarse (Stock
-  COMPLETADO 2026-08-31).
 - **Usuarios y Permisos por rol** — restricciones reales (RLS fina, hoy
   `using (true)` en las 9 tablas) y visibilidad de pedidos por obra
   asignada — es la etapa de seguridad pospuesta durante Pedidos Fase 1.

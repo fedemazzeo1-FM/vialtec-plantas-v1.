@@ -36,6 +36,7 @@ const columnasHistorial = [
   { key: 'cantidad_kg', label: 'Cantidad' },
   { key: 'origen', label: 'Proveedor / Motivo' },
   { key: 'numero_remito', label: 'Remito' },
+  { key: 'responsableNombre', label: 'Responsable' },
 ]
 
 const {

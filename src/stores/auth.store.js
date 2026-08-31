@@ -16,8 +16,11 @@ import { supabase } from '@/config/supabase'
 // el server va a rechazar igual.
 export const PERMISOS_POR_ROL = {
   admin: { tabs: 'todas', crearPedido: true, confirmar: true, despachar: true, stock: 'editar', verVentas: true },
+  // simulador: solo admin/plantista lo tienen explícito en ambos .rtf y en
+  // el relevamiento en vivo (menú real de produccion.vialtec.app) — el
+  // resto de los roles no lo lista ninguno de los dos documentos.
   plantista: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'stock', 'bascula', 'formulas', 'maestros'],
+    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'stock', 'simulador', 'bascula', 'formulas', 'maestros'],
     crearPedido: true,
     confirmar: true,
     despachar: true,

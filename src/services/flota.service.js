@@ -18,3 +18,23 @@ export async function fetchObras({ soloActivas = true } = {}) {
   if (error) throw error
   return data
 }
+
+/**
+ * Mapa email -> nombre para mostrar, contra flota_usuarios_email (mismo
+ * patrón que ya usa auth.store.js para el usuario logueado). Usado por
+ * stock.service.js para resolver el "Responsable" del historial de
+ * movimientos (plantas_stock_movimientos.responsable_email, migración 15) —
+ * auth.users no se expone vía API, por eso el server guarda el email
+ * (auth.email()) y acá se cruza contra flota_* en vez de contra auth.users.
+ *
+ * @param {string[]} emails
+ * @returns {Promise<Record<string,string>>}
+ */
+export async function fetchNombresPorEmail(emails) {
+  const unicos = [...new Set(emails.filter(Boolean))]
+  if (!unicos.length) return {}
+
+  const { data, error } = await supabase.from('flota_usuarios_email').select('email, nombre').in('email', unicos)
+  if (error) throw error
+  return Object.fromEntries((data ?? []).map((u) => [u.email, u.nombre]))
+}
