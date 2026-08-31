@@ -46,6 +46,10 @@ export const encargadosService = crudEntidad('plantas_encargados')
 export const proveedoresService = crudEntidad('plantas_proveedores')
 export const patentesService = crudEntidad('plantas_patentes', 'patente')
 export const choferesService = crudEntidad('plantas_choferes')
+// Catálogo de materiales (migración 13, módulo Stock — memory/modules-status.md).
+// Vive acá como cualquier otro maestro; stock.service.js lo importa para leer
+// el catálogo, no lo duplica.
+export const materialesService = crudEntidad('plantas_materiales')
 
 /** Acceso agrupado, útil para vistas con tabs (ej. MaestrosView). */
 export const maestrosService = {
@@ -53,4 +57,5 @@ export const maestrosService = {
   proveedores: proveedoresService,
   patentes: patentesService,
   choferes: choferesService,
+  materiales: materialesService,
 }

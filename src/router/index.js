@@ -61,8 +61,14 @@ const routes = [
     component: () => import('@/views/MaestrosView.vue'),
     meta: { tab: 'maestros' },
   },
-  // TODO: /stock, /usuarios, /roles, /backup — a medida que se implemente
-  // cada módulo (ver memory/modules-status.md).
+  {
+    path: '/stock',
+    name: 'stock',
+    component: () => import('@/views/StockView.vue'),
+    meta: { tab: 'stock' },
+  },
+  // TODO: /usuarios, /roles, /backup — a medida que se implemente cada
+  // módulo (ver memory/modules-status.md).
 ]
 
 export const router = createRouter({

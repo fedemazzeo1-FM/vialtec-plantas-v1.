@@ -5,14 +5,14 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 
 | # | Módulo | Descripción breve | Estado |
 |---|--------|--------------------|--------|
-| 1 | Dashboard | KPIs del mes, analítica de proveedores, despacho por camión | EN CURSO — service + `DashboardView` listos (KPIs dobles tn/m³, comparativa de proveedores por período, detalle por camión con remito garantizado); falta aplicar migración SQL 05; alertas de stock 🔴/🟡 originales del sistema legado no están implementadas todavía (dependen del módulo Stock) |
+| 1 | Dashboard | KPIs del mes, analítica de proveedores, despacho por camión | EN CURSO — service + `DashboardView` listos (KPIs dobles tn/m³, comparativa de proveedores por período, detalle por camión con remito garantizado); falta aplicar migración SQL 05; **el semáforo de stock 🔴/🟡 proyectado semanal (banner de alerta) sigue sin construir en la UI del Dashboard** — la dependencia de datos ya está resuelta (módulo Stock, `plantas_stock`), falta el banner/cálculo de proyección en sí (`business-rules.md`, `UMBRAL=0.2`) |
 | 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado→postergado | EN CURSO — **Fase 1 de fidelidad funcional cerrada (2026-08-28)**: ver detalle abajo. |
 | 3 | Plan semanal | Vista de pedidos confirmados/despachados agrupados por día | EN CURSO — service + `PlanSemanalView` (matriz lunes-domingo, KPIs tn/m³ por obra y total) listos; falta aplicar migración SQL |
-| 4 | Stock | Stock por material en kg, ingresos/salidas manuales, guardas | PENDIENTE |
+| 4 | Stock | Stock por material en kg, ingresos/salidas manuales, guardas | **COMPLETADO (MVP) — 2026-08-31**: ver detalle abajo. |
 | 5 | Despachos | Historial de pedidos despachados, filtros, exportación Excel | EN CURSO — **fidelidad funcional cerrada (2026-08-31)**: ver detalle abajo. Falta exports Excel (fuera de alcance de esta tanda). |
-| 6 | Báscula / Balanza | Puertas de pesaje, vales de asfalto, ingreso/egreso de áridos | EN CURSO — **fidelidad funcional con el legado cerrada (2026-08-28, Fase 1+2 sobre el relevamiento Etapa 3)**: ver detalle abajo. Descuento de stock al pesar sigue siendo un TODO hasta que exista el módulo Stock |
-| 7 | Fórmulas | Composición de mezclas (asfalto/hormigón), conversión a kg | EN CURSO — service + `FormulasView` con edición inline de insumos listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_formulas` (pendiente de confirmación) |
-| 8 | Maestros | Obras, encargados, proveedores, patentes, choferes, materiales | EN CURSO — service + `MaestrosView` (tabs) listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_encargados/proveedores/patentes/choferes` (pendiente de confirmación) |
+| 6 | Báscula / Balanza | Puertas de pesaje, vales de asfalto, ingreso/egreso de áridos | EN CURSO — **fidelidad funcional con el legado cerrada (2026-08-28, Fase 1+2 sobre el relevamiento Etapa 3)**: ver detalle abajo. **Descuento/ingreso de stock ya resuelto (migraciones 13/14)**: ingreso/egreso de áridos mueve `plantas_stock` directo desde `registrar_pesada_bascula`; el pesaje de asfalto YA NO toca `plantas_pedidos` (ver "Stock e Inventarios" abajo, migración 14) — el cierre del pedido y su descuento de stock son exclusivos de Pedidos |
+| 7 | Fórmulas | Composición de mezclas (asfalto/hormigón), conversión a kg | EN CURSO — service + `FormulasView` con edición inline de insumos listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_formulas` (pendiente de confirmación). `calcularConsumoKg()`/`calcularConsumoTotalKg()` tienen gemela SQL (`plantas_calcular_consumo_kg`, migración 13) usada por el descuento de stock — si se cambia una, cambiar la otra. |
+| 8 | Maestros | Obras, encargados, proveedores, patentes, choferes, materiales | EN CURSO — service + `MaestrosView` (tabs) listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_encargados/proveedores/patentes/choferes` (pendiente de confirmación). **Tab "Materiales" agregada 2026-08-31** (`plantas_materiales`, migración 13) — catálogo del módulo Stock, mismo patrón `crudEntidad` que el resto. |
 | 9 | Usuarios | ABM de usuarios, mapeo con Supabase Auth y roles | PENDIENTE |
 | 10 | Roles | Configuración de permisos por rol (override sobre defaults) | PENDIENTE |
 | 11 | Backup | Backups automáticos/manuales y restauración | PENDIENTE |
@@ -343,24 +343,77 @@ Excel completo) y el Resumen mensual completo (reporting pesado, toca
 Stock + Ventas externas). Visibilidad "solo mis despachos" para
 encargado/supervisor sigue pendiente de RLS fina (P0.2).
 
+## Stock e Inventarios — COMPLETADO (MVP) — 2026-08-31
+
+Misma metodología que Despachos/Pedidos/Báscula: auditoría contra
+`Logica sis. plantas v1.rtf` §2.3/§4.4, `Logica sist plantas v2.rtf` §3.4 y
+`memory/relevamiento-sistema-viejo.md` §6/Etapa 3 → gap report → 7
+decisiones de diseño aprobadas por Federico → implementación → build →
+hallazgo corregido en vivo → commit aislado.
+
+Migraciones `supabase/migrations/13_stock_e_inventarios.sql` y
+`14_bascula_sin_autocierre.sql` aplicadas y verificadas.
+
+**Schema (migración 13):** 3 tablas nuevas — `plantas_materiales` (catálogo,
+con `stock_minimo_kg`/`stock_maximo_kg`/`controla_stock`, CRUD en Maestros →
+tab "Materiales"), `plantas_stock` (saldo actual en kg, 1 fila por
+material), `plantas_stock_movimientos` (historial único append-only, nunca
+se elimina, `cantidad_kg` con signo, 7 tipos: `ingreso_proveedor`,
+`egreso_despacho`, `egreso_arido`, `ingreso_manual`, `egreso_manual`,
+`ajuste`, `recalculo_despacho`).
+
+**RPCs nuevas:** `registrar_movimiento_manual` (ingreso/salida manual, solo
+plantista/admin), `registrar_relevamiento_stock` (relevamiento mensual —
+**NO pisa el stock directo**, calcula diferencia por material e inserta un
+movimiento `ajuste`; implementa `saveStockGuard` con los umbrales exactos
+del legado: bloquea si <50% de los materiales con valor lo pierden, o el
+total cae >90%). Helpers internos (sin grant a `authenticated`):
+`plantas_buscar_material_id` (matching por nombre contra el texto libre de
+fórmulas/báscula/ingresos), `plantas_calcular_consumo_kg` (gemela SQL de
+`calcularConsumoKg()` de `formulas.service.js`), `plantas_aplicar_movimiento_stock`,
+`plantas_descontar_stock_despacho`.
+
+**Integración con Pedidos/Báscula:** `finalizar_despacho()` y
+`corregir_despacho()` ahora descuentan/reajustan stock automáticamente
+(delta × fórmula, excluyendo Agua/Purgue por nombre); `registrar_pesada_bascula()`
+mueve stock en `ingreso_arido` (cantidad del remito, no el peso neto) y
+`egreso_arido` (peso neto real).
+
+**Hallazgo corregido en la misma sesión (migración 14):**
+`registrar_pesada_bascula()` (asfalto, con `pedido_id`) seguía cerrando el
+pedido a `despachado` directamente al alcanzar `cantidad_solicitada` —
+comportamiento de la migración 09, nunca tocado por la migración 11 (que
+estableció que solo `finalizar_despacho()` cierra). Con el descuento de
+stock recién enganchado ahí, un despacho cerrado por esa vía **nunca
+descontaba stock**. Se sacó por completo el bloque que tocaba
+`plantas_pedidos` desde `registrar_pesada_bascula()` — Báscula queda 100%
+como detalle auditable, sin efecto sobre el pedido; el cierre y el
+descuento de stock son exclusivos de Pedidos (`registrar_carga_asfalto` +
+`finalizar_despacho`).
+
+**Código:** `src/services/stock.service.js`, `src/modules/stock/composables/useStock.js`,
+`src/views/StockView.vue` (cards con `VSemaforo` + barra min/máx ya
+construido y sin uso hasta ahora, toggle tn/kg, ingreso/salida manual,
+relevamiento mensual, historial paginado). Analítica de proveedores queda
+en el Dashboard (decisión de Federico) — Stock solo tiene un link de acceso
+rápido, no se duplica.
+
+Build verificado (`npm run build` limpio). Pendiente antes de darlo por
+100% probado: smoke test con datos reales (no hay materiales cargados en la
+base de dev todavía). Fuera de alcance a propósito: exportar Excel, y el
+semáforo de stock **proyectado semanal** del Dashboard/Plan Semanal (usa
+`plantas_stock` como fuente pero el banner/cálculo en sí no está construido
+— ver fila #1 de la tabla de arriba).
+
 ## Módulos pendientes de desarrollo (2026-08-28, actualizado 2026-08-31)
 
 Próximos en la metodología (relevamiento en vivo → gap report → aprobación
-→ implementación → build → prueba real → commit aislado). **Prioridad
-inmediata fijada por Federico (2026-08-31): Stock e Inventarios.**
+→ implementación → build → prueba real → commit aislado).
 
-- **Stock** (PRIORITARIO) — descuento automático en kg al despachar, excepciones
-  Agua/Purgue (nunca se descuentan), y las protecciones del legado
-  (guarda contra caídas anómalas, alerta sin bloqueo duro). **Dos
-  integraciones separadas, no una sola** (`business-rules.md` §"Fuente de
-  verdad según el tipo de transacción", regla fijada por Federico
-  2026-08-31): el descuento por despacho engancha a `finalizar_despacho()`/
-  `corregir_despacho()` de Pedidos (cantidadReal del remito final, NO una
-  suma sobre vales de Báscula); el movimiento de ingreso/egreso de áridos
-  engancha a `registrar_pesada_bascula()` de Báscula (peso neto real de la
-  pesada, sin pasar por Pedidos).
 - **Simulador** — proyección de consumo de insumos contra el stock
-  proyectado, sin tocar datos reales.
+  proyectado, sin tocar datos reales. **Desbloqueado**: ya existe
+  `plantas_stock` + `plantas_calcular_consumo_kg` para apoyarse (Stock
+  COMPLETADO 2026-08-31).
 - **Usuarios y Permisos por rol** — restricciones reales (RLS fina, hoy
   `using (true)` en las 9 tablas) y visibilidad de pedidos por obra
   asignada — es la etapa de seguridad pospuesta durante Pedidos Fase 1.

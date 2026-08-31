@@ -75,6 +75,38 @@ const ENTIDADES = {
     ],
     vacio: () => ({ nombre: '', dni: '', activo: true }),
   },
+  // Catálogo de materiales (migración 13, módulo Stock) — gap #2 del
+  // relevamiento: antes "material" era texto libre en todos lados. `nombre`
+  // es la clave de matching contra fórmulas/báscula/ingresos (case-
+  // insensitive, ver plantas_buscar_material_id() en la migración).
+  materiales: {
+    label: 'Materiales',
+    columnas: [
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'unidad', label: 'Unidad' },
+      { key: 'categoria', label: 'Categoría' },
+      { key: 'controla_stock', label: 'Controla stock', format: (v) => (v ? 'Sí' : 'No') },
+      { key: 'stock_minimo_kg', label: 'Mín. (kg)' },
+      { key: 'stock_maximo_kg', label: 'Máx. (kg)' },
+    ],
+    campos: [
+      { key: 'nombre', label: 'Nombre', type: 'text', required: true },
+      { key: 'unidad', label: 'Unidad (referencia, ej. "TN")', type: 'text' },
+      { key: 'categoria', label: 'Categoría (opcional)', type: 'text' },
+      { key: 'controla_stock', label: 'Controla stock (desmarcar para Agua/Purgue)', type: 'checkbox' },
+      { key: 'stock_minimo_kg', label: 'Stock mínimo de alerta (kg)', type: 'number' },
+      { key: 'stock_maximo_kg', label: 'Stock máximo (kg)', type: 'number' },
+    ],
+    vacio: () => ({
+      nombre: '',
+      unidad: '',
+      categoria: '',
+      controla_stock: true,
+      stock_minimo_kg: null,
+      stock_maximo_kg: null,
+      activo: true,
+    }),
+  },
 }
 
 const tabs = Object.keys(ENTIDADES)

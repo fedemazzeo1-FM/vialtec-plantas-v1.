@@ -17,7 +17,7 @@ import { supabase } from '@/config/supabase'
 export const PERMISOS_POR_ROL = {
   admin: { tabs: 'todas', crearPedido: true, confirmar: true, despachar: true, stock: 'editar', verVentas: true },
   plantista: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'bascula', 'formulas', 'maestros'],
+    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'stock', 'bascula', 'formulas', 'maestros'],
     crearPedido: true,
     confirmar: true,
     despachar: true,
@@ -37,9 +37,9 @@ export const PERMISOS_POR_ROL = {
     stock: false,
     verVentas: false,
   },
-  balancero: { tabs: ['bascula', 'maestros'], crearPedido: false, confirmar: false, despachar: false, stock: 'ver', verVentas: false },
+  balancero: { tabs: ['bascula', 'stock', 'maestros'], crearPedido: false, confirmar: false, despachar: false, stock: 'ver', verVentas: false },
   gerencia: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'formulas'],
+    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'stock', 'formulas'],
     crearPedido: false,
     confirmar: false,
     despachar: false,
