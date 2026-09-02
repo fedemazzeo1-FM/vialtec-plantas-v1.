@@ -1,5 +1,179 @@
 # pending.md — Pendientes
 
+## Roadmap: adaptación Mobile / Responsive — EN CURSO (registrado 2026-09-02, primera tanda implementada el mismo día)
+
+Pedido explícito de Federico: adaptar la app a mobile/smartphone, **no un
+app aparte** — misma SPA, mismos `*.service.js`/composables, solo cambia la
+capa de template/layout según viewport. Alcance inicial: Pedidos,
+Báscula/Despachos, Maestros, Stock (en ese orden de prioridad, empezando por
+Pedidos y Báscula). Fórmulas/Dashboard/Simulador/Plan Semanal quedan para
+una segunda tanda, no pedidos esta vez.
+
+**Principio no negociable (mismo que todo el resto del proyecto,
+`memory/conventions.md`):** cero lógica de negocio nueva ni duplicada para
+mobile — los composables (`usePedidos`, `useBascula`, `useDespachos`,
+`useStock`, etc.) y los `*.service.js` se comparten 100% entre Desktop y
+Mobile. Lo único que cambia es qué layout/template renderiza cada vista
+según breakpoint — mismo estado, mismos datos, mismas llamadas a Supabase.
+
+**Criterios de diseño/UX pedidos:**
+- Tablas pesadas (`VTable`) → cards desplegables o listado vertical en
+  mobile, no la tabla con scroll horizontal tal cual.
+- Controles de acción (botones, navegación de semana, tabs de
+  Asfalto/Hormigón o Materiales) con área táctil cómoda para el pulgar.
+- Vales/remitos (impresos y previsualizados) legibles en pantalla de
+  celular, no solo en la impresión A4.
+
+### Progreso — primera tanda implementada (2026-09-02, misma sesión del diagnóstico)
+
+Resuelve el diagnóstico de más abajo y ejecuta un pedido más grande de
+Federico que llegó en la misma sesión (base mobile + ajustes puntuales en
+Pedidos/Despachos/Báscula/Stock/Maestros, con "ante la mínima duda revisá
+el sistema viejo y replicá"). 7 commits atómicos, todos en local
+(`feat/pedidos-fase1`), build verificado en cada uno, sin deploy.
+
+**Base mobile (resuelve el diagnóstico):**
+- `useBreakpoint()` (`src/composables/useBreakpoint.js`, matchMedia, 768px
+  — mismo valor que `md:` de Tailwind) + `MobileLayout.vue` real (nav
+  inferior Pedidos/Báscula/Despachos/Stock + hoja "Más") conectado en
+  `App.vue`. `src/layouts/nav.js` nuevo: SECCIONES/ICONOS compartidos entre
+  Desktop/Mobile, ya no duplicados.
+- `VTable.vue` gana modo cards automático bajo el breakpoint — ningún
+  caller cambió, se hereda gratis en Pedidos/Báscula/Despachos/Stock/
+  Maestros. `VButton.vue` con área táctil ~44-48px en mobile (`md:` la
+  recorta en desktop).
+
+**Pedidos:** las 5 cards de estado son clickeables (filtran la lista,
+toggle); se sacaron los botones de navegación semana anterior/siguiente/hoy
+(queda semana en curso + "Ver histórico completo").
+
+**Despachos:** "👤 encargado" junto a la fecha (réplica del legado); fix de
+un gap real — los despachos migrados del histórico legado no tienen filas
+en `plantas_cargas_asfalto`, "Ver detalle de cargas" caía a `plantas_vales`
+como fallback (probado en vivo, reconstruye exacto el detalle camión por
+camión); selector Remito/Vale nuevo (ícono en vez de emoji 👁, a pedido de
+Federico).
+
+**Báscula:** 0 puertas abiertas por default (corrige un supuesto erróneo de
+una sesión anterior, verificado en vivo contra produccion.vialtec.app);
+filtro Desde/Hasta con default "Hoy" (+ fix de un bug real de rango de
+fecha contra columna timestamptz que este mismo cambio hubiera expuesto);
+réplica exacta de las 14 columnas del cuadro "Movimientos del día" del
+legado (migración 20: `plantas_vales.responsable_email`, aprobada
+explícitamente por Federico); botón Excel que respeta filtros y exporta
+todo, no solo la página visible.
+
+**Stock:** 3 tabs del legado (Stock actual / Historial de ingresos /
+Analítica de proveedores — esta última pedida explícitamente por Federico
+"copiar formato al sistema viejo", reconsiderando la decisión del
+2026-08-31 de dejarla solo en el Dashboard); botón Excel en las 3.
+
+**Maestros — bug real encontrado y corregido**: las tabs "Vehículos
+propios"/"Vehículos externos" estaban 100% rotas desde que se separaron
+(2026-09-01) — nunca se había smoke-testeado en el navegador después de
+ese cambio. `maestrosService[tabActiva.value]` no encontraba nada
+(`patentesPropias`/`patentesExternas` vs. `vehiculosPropios`/
+`vehiculosExternos` de la vista) — cualquier acción tiraba "Cannot read
+properties of undefined". Corregido y verificado en vivo: 30 vehículos
+propios / 21 externos listan correctamente. Choferes queda sin cambios
+(decisión confirmada esta sesión: no importar las 47 variantes sucias del
+legado).
+
+**Hallazgo sin acción (dato, no código)**: la patente `AD-648-EA` tiene
+"YANCE CLAUDIO" (nombre de persona) en `tipo_camion` y `chofer_habitual`
+en NULL — columnas cruzadas en el origen migrado, un solo caso detectado.
+Falta que Federico confirme el dato real antes de corregirlo a mano
+(UPDATE puntual, no masivo).
+
+**Excel export**: librería nueva `xlsx` (SheetJS) + helper transversal
+`src/services/excel-export.js`, import DINÁMICO (`await import('xlsx')`)
+para no inflar el bundle de ninguna vista que no lo use — queda en su
+propio chunk de red (~430kB) que solo se baja al exportar.
+
+**Deliberadamente fuera de esta tanda** (no tocado, no pedido esta vez):
+Maestros/Fórmulas/Dashboard/Simulador/Plan Semanal en mobile a fondo
+(quedan con el modo cards heredado de `VTable`, sin revisión fila por fila
+de sus grids de filtro/formulario); el modal de despacho multi-carga de
+Pedidos (`grid-cols-[1fr_1fr_1fr_auto]`) sigue sin apilarse en mobile —
+señalado en el diagnóstico de abajo, no se llegó a esta tanda.
+
+### Diagnóstico rápido — estado inicial antes de esta tanda (2026-09-02, ver progreso arriba)
+
+**Ya existe una base a medio armar, no conectada:**
+- `src/layouts/MobileLayout.vue` — stub vacío (`<router-view />` a secas,
+  comentario `// TODO: nav inferior/hamburguesa`), nunca importado en
+  ninguna vista.
+- `src/App.vue` tiene el comentario explícito "Por ahora solo existe
+  DesktopLayout — cuando haya detección de mobile/breakpoint se elige entre
+  DesktopLayout y MobileLayout acá" — hoy `DesktopLayout` se renderiza
+  siempre, sin ninguna detección de viewport ni switch. **Primer paso
+  técnico de esta tarea**: decidir el mecanismo de detección (CSS
+  breakpoint con `v-if` sobre un composable `useBreakpoint`, o
+  `matchMedia` reactivo) antes de tocar ninguna vista.
+- `DesktopLayout.vue` (sidebar de 216px/52px colapsado) no tiene
+  equivalente de nav inferior/drawer para mobile — es el otro componente
+  estructural que bloquea cualquier vista mientras no exista.
+
+**Componentes compartidos — impacto transversal:**
+- `VTable.vue` (`src/components/shared/VTable.vue`) es la única forma de
+  listar datos en toda la app — la usan Pedidos, Báscula (historial),
+  Despachos, Dashboard, Fórmulas, Maestros, Stock. Hoy es una `<table>`
+  con `overflow-x-auto` (scroll horizontal en mobile, no colapso a card) —
+  **es el componente de mayor apalancamiento**: una variante mobile acá
+  (o un modo "cards" activado por breakpoint dentro del mismo componente)
+  resuelve de una sola vez la mitad del trabajo en Pedidos/Báscula/
+  Despachos/Stock/Maestros, sin tocar ningún service.
+- `VButton.vue` tamaño `sm` (`px-[10px] py-[5px] text-xs`, ~24-28px de alto)
+  es el que más se usa para acciones de fila/filtros — bajo el mínimo
+  recomendado de ~44px de área táctil. Definir si mobile necesita un
+  tamaño `sm` más alto (o usar `md` en mobile) antes de tocar vistas.
+
+**Pedidos (`PedidosView.vue`, prioridad #1):**
+- Barra de navegación de semana (‹ Semana anterior / fecha / Semana
+  siguiente / Hoy, 4 elementos `VButton size="sm"` en una fila) no entra
+  cómoda en un ancho de celular — candidata a icon-buttons más grandes o
+  swipe.
+- Grid de filtros `grid-cols-2 md:grid-cols-4` (Estado/Obra/Desde/Hasta) y
+  los 2 KPI de período (`grid-cols-2`) ya son responsive a 2 columnas en
+  mobile — aceptable, pero los 5 KPI de estado (`grid-cols-2 sm:grid-cols-5`)
+  quedan apretados en 2 columnas con 5 elementos (una fila de 3 + 1 suelto).
+- Tabs Asfalto/Hormigón: hoy es una fila de 2 botones de texto con
+  `border-b-2` — funciona en mobile tal cual, bajo impacto.
+- Modales de "Registrar despacho" (multi-carga asfalto/hormigón): fila de
+  carga con `grid-cols-[1fr_1fr_1fr_auto]` (Cantidad/Remito/Patente/Quitar)
+  — 4 columnas fijas no van a entrar en un ancho de celular sin volverse
+  ilegibles; necesita apilarse a 1 columna en mobile.
+- La tabla principal de pedidos (`VTable`, ~10 columnas incl. acciones) es
+  el caso más pesado de toda la vista — depende directamente del trabajo en
+  `VTable.vue` de arriba.
+
+**Báscula (`BasculaView.vue`, prioridad #2):**
+- Puertas abiertas ya son cards apiladas (`grid-cols-1 lg:grid-cols-2`,
+  colapsables) — el patrón de card ya existe acá, es el más cercano a
+  "mobile-ready" de toda la app hoy; probablemente solo necesite ajustar
+  paddings/tamaños de touch, no rediseño estructural.
+- Historial de vales usa el mismo `VTable` genérico (misma dependencia que
+  Pedidos) con acciones "Imprimir vale"/"Imprimir remito" en `size="sm"`.
+- `ValeImprimible.vue`: el modo pantalla ya usa `grid-cols-1 print:grid-cols-2`
+  (se apila a 1 columna fuera de impresión, correcto), pero varios bloques
+  internos (datos del vale, firmas) son `grid-cols-2` fijo sin variante
+  mobile — dentro de un `VModal` (`max-w-lg`) en un celular angosto quedan
+  dos columnas de label+valor apretadas. Candidato a `grid-cols-1
+  sm:grid-cols-2` interno.
+
+**Maestros/Stock**: no relevados línea por línea en esta pasada (se
+priorizó Pedidos/Báscula a pedido explícito) — mismo patrón esperado
+(`VTable` + grids de formulario), retomar con el mismo método una vez
+resuelto el layout base (`MobileLayout`/breakpoint) y la variante mobile de
+`VTable`.
+
+**Siguiente paso concreto, no iniciado todavía**: no se tocó código en este
+diagnóstico. Falta decidir con Federico el mecanismo de breakpoint
+(CSS-only vs. JS reactivo) y si el reordenamiento de `VTable` va dentro del
+mismo componente (prop/slot condicional) o como un componente `VCardList`
+nuevo que las vistas elijan según viewport — recién después de esa
+decisión arranca la implementación, empezando por Pedidos y Báscula.
+
 ## Migración del historial del sistema anterior — COMPLETADA (2026-09-01)
 
 **Ejecutada en producción con autorización explícita de Federico**, el mismo
