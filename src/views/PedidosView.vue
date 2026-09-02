@@ -88,8 +88,6 @@ const {
   cargarPedidos,
   vistaSemana,
   rangoSemanaLabel,
-  semanaAnterior,
-  semanaSiguiente,
   irASemanaActual,
   verHistoricoCompleto,
   whatsappToasts,
@@ -132,6 +130,16 @@ const {
 const despacho = useDespachoAsfalto(cargarPedidos)
 const cargaHormigon = useCargaHormigon(cargarPedidos)
 
+/**
+ * KPI de estado como filtro rápido (2026-09-02, roadmap Mobile/UX): click
+ * en la card aplica ese estado al mismo filtro que ya existía en el
+ * <select> de abajo; click de nuevo sobre la card activa lo saca (toggle).
+ */
+function filtrarPorEstado(estado) {
+  filtros.estado = filtros.estado === estado ? '' : estado
+  aplicarFiltros()
+}
+
 iniciar()
 </script>
 
@@ -170,36 +178,45 @@ iniciar()
 
       <!-- KPIs por estado (memory/relevamiento-sistema-viejo.md §1) — acotados
            al período filtrado (semana en curso por default), no al histórico
-           completo del sistema. -->
+           completo del sistema.
+           Clickeables (2026-09-02, roadmap Mobile/UX): cada card actúa como
+           filtro rápido por estado — click activa filtros.estado (mismo
+           <select> de abajo, ya no hace falta abrirlo para el caso más
+           común) y recarga; click de nuevo sobre la misma card lo saca. La
+           card activa queda resaltada con el mismo color del punto. -->
       <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <VCard v-for="estado in ESTADOS" :key="estado">
+        <button
+          v-for="estado in ESTADOS"
+          :key="estado"
+          type="button"
+          class="rounded-xl border bg-white p-4 text-left shadow-sm transition-colors duration-150"
+          :class="
+            filtros.estado === estado
+              ? 'border-vialtec ring-1 ring-vialtec'
+              : 'border-border hover:border-vialtec/40'
+          "
+          style="min-height: 44px"
+          @click="filtrarPorEstado(estado)"
+        >
           <div class="flex items-center gap-2">
             <span class="h-2.5 w-2.5 rounded-full" :class="COLOR_KPI_ESTADO[estado]"></span>
             <span class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">{{ estado }}</span>
           </div>
           <p class="mt-2 text-2xl font-extrabold text-text">{{ conteoEstados[estado] ?? 0 }}</p>
-        </VCard>
+        </button>
       </div>
 
-      <!-- Vista por semana (2026-09-01): default acotado a la semana en curso
-           para no listar los 184 pedidos históricos de golpe — mismo cálculo
-           de semana que Plan Semanal. "Ver histórico completo" saca el
-           acotado de fecha sin tocar el resto de los filtros. -->
+      <!-- Semana en curso (2026-09-02: se sacaron los botones de navegación
+           anterior/siguiente/hoy a pedido de Federico — "simplificación de
+           navegación". Sigue mostrando la semana en curso por default (no
+           listar los 184 pedidos históricos de golpe); para ver otra fecha,
+           "Ver histórico completo" + los filtros Desde/Hasta de abajo. -->
       <VCard class="mb-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div v-if="vistaSemana" class="flex items-center gap-2">
-            <VButton variant="ghost" size="sm" @click="semanaAnterior">‹ Semana anterior</VButton>
-            <p class="text-sm font-semibold text-text">{{ rangoSemanaLabel }}</p>
-            <VButton variant="ghost" size="sm" @click="semanaSiguiente">Semana siguiente ›</VButton>
-            <VButton variant="ghost" size="sm" @click="irASemanaActual">Hoy</VButton>
-          </div>
-          <p v-else class="text-sm font-semibold text-text">Histórico completo</p>
-          <VButton
-            v-if="vistaSemana"
-            variant="secondary"
-            size="sm"
-            @click="verHistoricoCompleto"
-          >
+          <p class="text-sm font-semibold text-text">
+            {{ vistaSemana ? `Semana en curso — ${rangoSemanaLabel}` : 'Histórico completo' }}
+          </p>
+          <VButton v-if="vistaSemana" variant="secondary" size="sm" @click="verHistoricoCompleto">
             Ver histórico completo
           </VButton>
           <VButton v-else variant="secondary" size="sm" @click="irASemanaActual">Volver a la semana actual</VButton>

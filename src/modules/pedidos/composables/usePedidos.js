@@ -132,9 +132,11 @@ export function usePedidos() {
   // históricos migrados, la lista sin acotar por fecha quedaba saturada.
   // Default: semana en curso (mismo cálculo que Plan Semanal,
   // obtenerRangoSemana() ya existía ahí — reutilizado, no duplicado). El
-  // usuario puede navegar semana anterior/siguiente o pasar a "histórico
-  // completo" (saca el filtro de fecha, deja el resto de los filtros como
-  // están). Nota de relevamiento en vivo del sistema legado (2026-09-01): la
+  // usuario puede pasar a "histórico completo" (saca el filtro de fecha,
+  // deja el resto de los filtros como están) — la navegación semana por
+  // semana (anterior/siguiente) se sacó el 2026-09-02 por simplificación de
+  // UX (roadmap Mobile, pedido de Federico). Nota de relevamiento en vivo
+  // del sistema legado (2026-09-01): la
   // pantalla de Pedidos del legado NO filtra por semana — muestra todo lo
   // activo (no despachado/cancelado) agrupado por material, sin filtro de
   // fecha, porque una vez despachado/archivado prácticamente desaparece de
@@ -160,20 +162,10 @@ export function usePedidos() {
     aplicarFiltros()
   }
 
-  function semanaAnterior() {
-    const f = new Date(semanaRef.value)
-    f.setDate(f.getDate() - 7)
-    semanaRef.value = f
-    aplicarRangoSemana()
-  }
-
-  function semanaSiguiente() {
-    const f = new Date(semanaRef.value)
-    f.setDate(f.getDate() + 7)
-    semanaRef.value = f
-    aplicarRangoSemana()
-  }
-
+  // Nota 2026-09-02 (roadmap Mobile/UX, "simplificación de navegación"): se
+  // sacaron semanaAnterior()/semanaSiguiente() — la vista ya no ofrece
+  // navegar semana por semana, solo semana en curso vs. histórico completo
+  // (irASemanaActual() vuelve a la semana en curso desde el histórico).
   function irASemanaActual() {
     semanaRef.value = new Date()
     aplicarRangoSemana()
@@ -532,8 +524,6 @@ export function usePedidos() {
     cambiarPagina,
     vistaSemana,
     rangoSemanaLabel,
-    semanaAnterior,
-    semanaSiguiente,
     irASemanaActual,
     verHistoricoCompleto,
     whatsappToasts,
