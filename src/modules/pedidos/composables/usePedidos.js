@@ -9,7 +9,7 @@
 import { computed, reactive, ref } from 'vue'
 import {
   fetchPedidos,
-  fetchConteoEstados,
+  fetchResumenPeriodo,
   crearPedido as crearPedidoService,
   actualizarPedido as actualizarPedidoDirecto,
   confirmarPedido as confirmarPedidoService,
@@ -17,6 +17,7 @@ import {
   cancelarPedido as cancelarPedidoService,
   archivarPedido as archivarPedidoService,
   fetchHistorialPedido,
+  obtenerRangoSemana,
 } from '@/modules/pedidos/services/pedidos.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
@@ -62,16 +63,27 @@ export function usePedidos() {
   }
 
   async function cargarBase() {
-    const [listaObras, listaFormulas, listaPatentes, listaChoferes] = await Promise.all([
-      fetchObras(),
-      fetchFormulas({ soloActivas: true }),
-      patentesService.fetch({ soloActivos: true }),
-      choferesService.fetch({ soloActivos: true }),
-    ])
-    obras.value = listaObras
-    formulas.value = listaFormulas
-    patentes.value = listaPatentes
-    choferes.value = listaChoferes
+    // Fix 2026-09-01: sin try/catch acá, un fallo de red dejaba
+    // `iniciar()` (`cargarBase().then(cargarPedidos)`) como una promesa
+    // rechazada sin `.catch()` — error no manejado en consola,
+    // `cargarPedidos()` nunca se llamaba, y la vista quedaba mostrando "No
+    // hay pedidos que coincidan con el filtro" (falso estado vacío) en vez
+    // del error real. Mismo patrón que ya usan cargarBase() en
+    // useBascula.js/useSimulador.js.
+    try {
+      const [listaObras, listaFormulas, listaPatentes, listaChoferes] = await Promise.all([
+        fetchObras(),
+        fetchFormulas({ soloActivas: true }),
+        patentesService.fetch({ soloActivos: true }),
+        choferesService.fetch({ soloActivos: true }),
+      ])
+      obras.value = listaObras
+      formulas.value = listaFormulas
+      patentes.value = listaPatentes
+      choferes.value = listaChoferes
+    } catch (e) {
+      error.value = e.message
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -100,17 +112,102 @@ export function usePedidos() {
   const totalPedidos = ref(0)
   const paginaActual = ref(1)
   const cargando = ref(false)
-  const filtros = reactive({ estado: '', obraId: '', tipo: '', desde: '', hasta: '', incluirArchivados: false })
+  const filtros = reactive({ estado: '', obraId: '', desde: '', hasta: '', incluirArchivados: false })
 
-  // KPI de conteo por estado (memory/relevamiento-sistema-viejo.md §1) — no
-  // depende de los filtros ni de la paginación, son los totales activos de
-  // todo el sistema. Se refresca en cada cargarPedidos() (no bloqueante:
-  // no hace falta esperarlo para pintar la tabla).
+  // Listado separado Asfalto/Hormigón (2026-09-01, pedido de Federico): ya
+  // no es un <select> "Todos/Asfalto/Hormigón" dentro de filtros — son 2
+  // tabs, cada una lista SOLO su material (por eso queda afuera de
+  // `filtros`, que ahora es todo lo que sigue combinando ambos materiales
+  // en el resumen de arriba). Default 'asfalto' (mismo criterio que "la
+  // pestaña que más rota" — no hay preferencia documentada del legado acá).
+  const tabTipo = ref('asfalto')
+
+  function cambiarTabTipo(tipo) {
+    tabTipo.value = tipo
+    aplicarFiltros()
+  }
+
+  // -------------------------------------------------------------------------
+  // Vista por semana (2026-09-01, pedido de Federico): con 184 pedidos
+  // históricos migrados, la lista sin acotar por fecha quedaba saturada.
+  // Default: semana en curso (mismo cálculo que Plan Semanal,
+  // obtenerRangoSemana() ya existía ahí — reutilizado, no duplicado). El
+  // usuario puede navegar semana anterior/siguiente o pasar a "histórico
+  // completo" (saca el filtro de fecha, deja el resto de los filtros como
+  // están). Nota de relevamiento en vivo del sistema legado (2026-09-01): la
+  // pantalla de Pedidos del legado NO filtra por semana — muestra todo lo
+  // activo (no despachado/cancelado) agrupado por material, sin filtro de
+  // fecha, porque una vez despachado/archivado prácticamente desaparece de
+  // ahí (el historial completo vive en "Despachos", no en "Pedidos"). Acá se
+  // eligió semana-por-defecto en vez de replicar ese comportamiento porque
+  // nuestro Pedidos sí lista todos los estados juntos (incluido despachado
+  // reciente) — el problema real (184 filas de golpe) es el mismo, la
+  // solución adaptada a nuestro diseño.
+  const vistaSemana = ref(true)
+  const semanaRef = ref(new Date())
+
+  const rangoSemanaLabel = computed(() => {
+    const { lunes, domingo } = obtenerRangoSemana(semanaRef.value)
+    const aISO = (d) => d.toISOString().slice(0, 10)
+    return `${aISO(lunes)} — ${aISO(domingo)}`
+  })
+
+  function aplicarRangoSemana() {
+    const { lunes, domingo } = obtenerRangoSemana(semanaRef.value)
+    filtros.desde = lunes.toISOString().slice(0, 10)
+    filtros.hasta = domingo.toISOString().slice(0, 10)
+    vistaSemana.value = true
+    aplicarFiltros()
+  }
+
+  function semanaAnterior() {
+    const f = new Date(semanaRef.value)
+    f.setDate(f.getDate() - 7)
+    semanaRef.value = f
+    aplicarRangoSemana()
+  }
+
+  function semanaSiguiente() {
+    const f = new Date(semanaRef.value)
+    f.setDate(f.getDate() + 7)
+    semanaRef.value = f
+    aplicarRangoSemana()
+  }
+
+  function irASemanaActual() {
+    semanaRef.value = new Date()
+    aplicarRangoSemana()
+  }
+
+  /** "Ver histórico completo": saca el acotado por semana, deja el resto de filtros (estado/obra/tipo) intactos. */
+  function verHistoricoCompleto() {
+    vistaSemana.value = false
+    filtros.desde = ''
+    filtros.hasta = ''
+    aplicarFiltros()
+  }
+
+  // KPI de conteo por estado + totales de tn/m³ (memory/relevamiento-
+  // sistema-viejo.md §1) — fix 2026-09-01 (pedido de Federico): antes era
+  // SIEMPRE global (todo el histórico no archivado, fetchConteoEstados()),
+  // ahora acota al mismo período que la lista de abajo (semana en curso por
+  // default, o el rango elegido en "histórico completo"/filtros). No
+  // depende del tab Asfalto/Hormigón a propósito — muestra el desglose
+  // completo de ambos materiales siempre, el tab solo cambia qué lista se
+  // ve debajo. Se refresca en cada cargarPedidos() (no bloqueante).
   const conteoEstados = ref({ solicitado: 0, confirmado: 0, despachado: 0, postergado: 0, cancelado: 0 })
+  const totalesPeriodo = ref({ asfaltoTn: 0, hormigonM3: 0 })
 
-  async function cargarConteoEstados() {
+  async function cargarResumenPeriodo() {
     try {
-      conteoEstados.value = await fetchConteoEstados()
+      const resumen = await fetchResumenPeriodo({
+        desde: filtros.desde || undefined,
+        hasta: filtros.hasta || undefined,
+        obraId: filtros.obraId || undefined,
+        incluirArchivados: filtros.incluirArchivados,
+      })
+      conteoEstados.value = resumen.conteoEstados
+      totalesPeriodo.value = { asfaltoTn: resumen.asfaltoTn, hormigonM3: resumen.hormigonM3 }
     } catch (e) {
       error.value = e.message
     }
@@ -133,7 +230,7 @@ export function usePedidos() {
         {
           estado: filtros.estado || undefined,
           obraId: filtros.obraId || undefined,
-          tipo: filtros.tipo || undefined,
+          tipo: tabTipo.value,
           desde: filtros.desde || undefined,
           hasta: filtros.hasta || undefined,
           incluirArchivados: filtros.incluirArchivados,
@@ -147,7 +244,7 @@ export function usePedidos() {
     } finally {
       cargando.value = false
     }
-    cargarConteoEstados()
+    cargarResumenPeriodo()
   }
 
   /** Cualquier cambio de filtro vuelve a la página 1 (si no, se puede quedar en una página que ya no existe). */
@@ -159,10 +256,10 @@ export function usePedidos() {
   function limpiarFiltros() {
     filtros.estado = ''
     filtros.obraId = ''
-    filtros.tipo = ''
     filtros.desde = ''
     filtros.hasta = ''
     filtros.incluirArchivados = false
+    vistaSemana.value = false // "Limpiar" saca también el acotado por semana, no solo estado/obra
     aplicarFiltros()
   }
 
@@ -404,7 +501,9 @@ export function usePedidos() {
   // -------------------------------------------------------------------------
 
   function iniciar() {
-    cargarBase().then(cargarPedidos)
+    // Arranca en la semana en curso (aplicarRangoSemana ya llama a
+    // aplicarFiltros -> cargarPedidos), no en cargarPedidos() a secas.
+    cargarBase().then(aplicarRangoSemana)
   }
 
   return {
@@ -423,11 +522,20 @@ export function usePedidos() {
     cargando,
     filtros,
     conteoEstados,
+    totalesPeriodo,
+    tabTipo,
+    cambiarTabTipo,
     TAMANO_PAGINA,
     cargarPedidos,
     aplicarFiltros,
     limpiarFiltros,
     cambiarPagina,
+    vistaSemana,
+    rangoSemanaLabel,
+    semanaAnterior,
+    semanaSiguiente,
+    irASemanaActual,
+    verHistoricoCompleto,
     whatsappToasts,
     descartarToastWhatsapp,
     modalNuevoAbierto,

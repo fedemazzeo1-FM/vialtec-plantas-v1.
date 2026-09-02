@@ -29,7 +29,7 @@
 // quedaba sin uso).
 
 import { supabase } from '@/config/supabase'
-import { fetchPagina } from '@/services/fetch-paginado'
+import { fetchPagina, fetchPaginado } from '@/services/fetch-paginado'
 
 const TABLA = 'plantas_pedidos'
 const TABLA_HISTORIAL = 'plantas_pedidos_historial'
@@ -102,6 +102,47 @@ export async function fetchConteoEstados() {
     conteo[estado] = resultados[i].count ?? 0
   })
   return conteo
+}
+
+/**
+ * Resumen del PERÍODO filtrado (2026-09-01, pedido de Federico): a
+ * diferencia de fetchConteoEstados() (siempre global, todo el histórico no
+ * archivado), esto acota por desde/hasta/obraId/incluirArchivados — los
+ * mismos filtros que fetchPedidos(), salvo `estado`/`tipo` (el resumen
+ * siempre muestra el desglose completo por estado y por material,
+ * independiente de qué tab/estado esté mirando la lista de abajo, mismo
+ * criterio que el resumen de PlanSemanalView). No usa fetchConteoEstados()
+ * por dentro porque ese es fijo a "todo, sin fecha" — acá se arma de nuevo
+ * con el rango.
+ *
+ * @param {{ desde?: string, hasta?: string, obraId?: number, incluirArchivados?: boolean }} filtros
+ * @returns {Promise<{ conteoEstados: Record<string, number>, asfaltoTn: number, hormigonM3: number }>}
+ */
+export async function fetchResumenPeriodo(filtros = {}) {
+  const conteo = Object.fromEntries(ESTADOS_CONTEO.map((e) => [e, 0]))
+
+  const filas = await fetchPaginado(() => {
+    let query = supabase.from(TABLA).select('tipo, estado, cantidad_solicitada, cantidad_despachada')
+    if (!filtros.incluirArchivados) query = query.eq('archivado', false)
+    if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
+    if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
+    if (filtros.hasta) query = query.lte('fecha_programada', filtros.hasta)
+    return query
+  })
+
+  let asfaltoTn = 0
+  let hormigonM3 = 0
+  for (const p of filas) {
+    if (Object.prototype.hasOwnProperty.call(conteo, p.estado)) conteo[p.estado] += 1
+    // Mismo criterio que fetchTotalesSemana(): despachado usa cantidad_despachada
+    // (cantidadReal), el resto usa cantidad_solicitada — un pedido todavía no
+    // despachado no tiene "real" que sumar.
+    const cantidad = Number(p.estado === 'despachado' ? p.cantidad_despachada ?? p.cantidad_solicitada : p.cantidad_solicitada) || 0
+    if (p.tipo === 'hormigon') hormigonM3 += cantidad
+    else asfaltoTn += cantidad
+  }
+
+  return { conteoEstados: conteo, asfaltoTn, hormigonM3 }
 }
 
 export async function getPedido(id) {

@@ -16,6 +16,7 @@ import VModal from '@/components/shared/VModal.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
+import VKpiCard from '@/components/shared/VKpiCard.vue'
 import { usePedidos } from '@/modules/pedidos/composables/usePedidos'
 import { useDespachoAsfalto } from '@/modules/pedidos/composables/useDespachoAsfalto'
 import { useCargaHormigon } from '@/modules/pedidos/composables/useCargaHormigon'
@@ -48,16 +49,22 @@ const ESTADOS_CONFIRMABLES = ['solicitado', 'postergado']
 const ESTADOS_POSTERGABLES = ['solicitado', 'confirmado', 'postergado']
 const ESTADOS_CANCELABLES = ['solicitado', 'confirmado', 'postergado']
 
+// "Tipo" ya no es columna de la tabla (2026-09-01): cada tab Asfalto/
+// Hormigón lista solo su material, mostrarlo en cada fila sería redundante.
 const columnas = [
   { key: 'destino', label: 'Obra / Cliente' },
   { key: 'encargado', label: 'Encargado' },
   { key: 'formulaNombre', label: 'Fórmula' },
-  { key: 'tipo', label: 'Tipo' },
   { key: 'cantidad_solicitada', label: 'Solicitado' },
   { key: 'cantidad_despachada', label: 'Despachado' },
   { key: 'fecha_programada', label: 'Fecha' },
   { key: 'estado', label: 'Estado' },
   { key: 'acciones', label: '' },
+]
+
+const TABS_TIPO = [
+  { valor: 'asfalto', label: 'Asfalto' },
+  { valor: 'hormigon', label: 'Hormigón' },
 ]
 
 const {
@@ -69,6 +76,9 @@ const {
   cargando,
   filtros,
   conteoEstados,
+  totalesPeriodo,
+  tabTipo,
+  cambiarTabTipo,
   TAMANO_PAGINA,
   filas,
   totalPedidos,
@@ -76,6 +86,12 @@ const {
   limpiarFiltros,
   cambiarPagina,
   cargarPedidos,
+  vistaSemana,
+  rangoSemanaLabel,
+  semanaAnterior,
+  semanaSiguiente,
+  irASemanaActual,
+  verHistoricoCompleto,
   whatsappToasts,
   descartarToastWhatsapp,
   modalNuevoAbierto,
@@ -143,7 +159,18 @@ iniciar()
         {{ error }}
       </div>
 
-      <!-- KPIs por estado (memory/relevamiento-sistema-viejo.md §1) -->
+      <!-- Totales de tn/m³ del PERÍODO filtrado (2026-09-01: antes no existían
+           acá; los 5 KPI de estado de abajo también pasaron de ser un conteo
+           global fijo a estar acotados al mismo período — ver
+           usePedidos.js#cargarResumenPeriodo). -->
+      <div class="mb-3 grid grid-cols-2 gap-3">
+        <VKpiCard label="Asfalto (período)" :value="totalesPeriodo.asfaltoTn.toFixed(1)" unidad="tn" />
+        <VKpiCard label="Hormigón (período)" :value="totalesPeriodo.hormigonM3.toFixed(1)" unidad="m³" />
+      </div>
+
+      <!-- KPIs por estado (memory/relevamiento-sistema-viejo.md §1) — acotados
+           al período filtrado (semana en curso por default), no al histórico
+           completo del sistema. -->
       <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
         <VCard v-for="estado in ESTADOS" :key="estado">
           <div class="flex items-center gap-2">
@@ -154,8 +181,33 @@ iniciar()
         </VCard>
       </div>
 
+      <!-- Vista por semana (2026-09-01): default acotado a la semana en curso
+           para no listar los 184 pedidos históricos de golpe — mismo cálculo
+           de semana que Plan Semanal. "Ver histórico completo" saca el
+           acotado de fecha sin tocar el resto de los filtros. -->
       <VCard class="mb-4">
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div v-if="vistaSemana" class="flex items-center gap-2">
+            <VButton variant="ghost" size="sm" @click="semanaAnterior">‹ Semana anterior</VButton>
+            <p class="text-sm font-semibold text-text">{{ rangoSemanaLabel }}</p>
+            <VButton variant="ghost" size="sm" @click="semanaSiguiente">Semana siguiente ›</VButton>
+            <VButton variant="ghost" size="sm" @click="irASemanaActual">Hoy</VButton>
+          </div>
+          <p v-else class="text-sm font-semibold text-text">Histórico completo</p>
+          <VButton
+            v-if="vistaSemana"
+            variant="secondary"
+            size="sm"
+            @click="verHistoricoCompleto"
+          >
+            Ver histórico completo
+          </VButton>
+          <VButton v-else variant="secondary" size="sm" @click="irASemanaActual">Volver a la semana actual</VButton>
+        </div>
+      </VCard>
+
+      <VCard class="mb-4">
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <label class="text-sm text-text-mid">
             Estado
             <select
@@ -176,33 +228,27 @@ iniciar()
               <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
             </select>
           </label>
-          <label class="text-sm text-text-mid">
-            Tipo
-            <select
-              v-model="filtros.tipo"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            >
-              <option value="">Todos</option>
-              <option value="asfalto">Asfalto</option>
-              <option value="hormigon">Hormigón</option>
-            </select>
-          </label>
-          <label class="text-sm text-text-mid">
-            Desde
-            <input
-              v-model="filtros.desde"
-              type="date"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-          <label class="text-sm text-text-mid">
-            Hasta
-            <input
-              v-model="filtros.hasta"
-              type="date"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
+          <template v-if="!vistaSemana">
+            <label class="text-sm text-text-mid">
+              Desde
+              <input
+                v-model="filtros.desde"
+                type="date"
+                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              />
+            </label>
+            <label class="text-sm text-text-mid">
+              Hasta
+              <input
+                v-model="filtros.hasta"
+                type="date"
+                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              />
+            </label>
+          </template>
+          <p v-else class="col-span-2 self-end text-xs text-text-soft">
+            Fecha acotada a la semana en curso — usá "Ver histórico completo" para elegir un rango.
+          </p>
         </div>
         <label class="mt-3 flex items-center gap-2 text-sm text-text-mid">
           <input v-model="filtros.incluirArchivados" type="checkbox" />
@@ -214,7 +260,28 @@ iniciar()
         </div>
       </VCard>
 
-      <div class="mb-3 flex justify-end">
+      <div class="mb-3 flex items-center justify-between">
+        <!-- Listado separado por material (2026-09-01, pedido de Federico):
+             2 tabs en vez de un filtro "Tipo" combinado — cada una lista
+             SOLO su material, el rango de semana/filtros de arriba les
+             aplica a las dos por igual (comparten los mismos `filtros`,
+             solo cambia `tabTipo`). -->
+        <div class="flex gap-1 border-b border-border">
+          <button
+            v-for="tab in TABS_TIPO"
+            :key="tab.valor"
+            type="button"
+            class="border-b-2 px-3 py-2 text-sm font-semibold transition-colors duration-150"
+            :class="
+              tab.valor === tabTipo
+                ? 'border-vialtec text-vialtec'
+                : 'border-transparent text-text-soft hover:text-text-mid'
+            "
+            @click="cambiarTabTipo(tab.valor)"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
         <VButton size="sm" @click="abrirNuevo">+ Nuevo pedido</VButton>
       </div>
 
@@ -229,9 +296,6 @@ iniciar()
           :total="totalPedidos"
           @update:page="cambiarPagina"
         >
-          <template #cell-tipo="{ row }">
-            {{ row.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto' }}
-          </template>
           <template #cell-cantidad_solicitada="{ row }">
             {{ row.cantidad_solicitada }} {{ row.tipo === 'hormigon' ? 'm³' : 'tn' }}
           </template>
