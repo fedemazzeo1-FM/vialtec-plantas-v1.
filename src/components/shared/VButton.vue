@@ -18,9 +18,14 @@ defineEmits(['click'])
 const BASE =
   'inline-flex items-center justify-center font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 gap-1.5'
 
+// Área táctil (roadmap Mobile, memory/pending.md 2026-09-02): mobile-first,
+// el padding grande de acá abajo es el que rige por debajo de 768px
+// (~44px de alto en `sm`, ~48px en `md`); `md:` (mismo breakpoint que
+// useBreakpoint()) lo recorta a las medidas compactas originales para
+// desktop, donde el mouse no necesita ese margen.
 const SIZE_CLASS = {
-  sm: 'px-[10px] py-[5px] text-xs rounded-md',
-  md: 'px-4 py-2 text-sm rounded-lg',
+  sm: 'px-3 py-3 text-xs rounded-md md:px-[10px] md:py-[5px]',
+  md: 'px-4 py-3 text-sm rounded-lg md:py-2',
 }
 
 const VARIANT_CLASS = {
