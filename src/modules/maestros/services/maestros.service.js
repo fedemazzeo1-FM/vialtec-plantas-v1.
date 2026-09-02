@@ -73,12 +73,25 @@ export const choferesService = crudEntidad('plantas_choferes')
 export const materialesService = crudEntidad('plantas_materiales')
 
 /** Acceso agrupado, útil para vistas con tabs (ej. MaestrosView). */
+// Fix 2026-09-02 (roadmap Mobile, auditoría de Maestros — pedido explícito
+// de Federico de auditar la carga de vehículos): las claves de acá tenían
+// que coincidir con las de ENTIDADES en MaestrosView.vue
+// (maestrosService[tabActiva.value].fetch()), pero decían patentesPropias/
+// patentesExternas mientras la vista usa vehiculosPropios/vehiculosExternos
+// (nombres de tab más claros, elegidos aparte al armar la vista) — las tabs
+// "Vehículos propios"/"Vehículos externos" quedaban 100% rotas
+// ("Cannot read properties of undefined (reading 'fetch')" en cada acción:
+// listar, crear, editar, activar/desactivar), sin ningún error visible más
+// que el mensaje genérico — nunca se había smoke-testeado en vivo desde que
+// se separaron las 2 tabs. Se renombran las claves acá para matchear la
+// vista (patentesPropiasService/patentesExternasService, los named exports
+// de abajo, no se tocan — no se usan en ningún otro lado).
 export const maestrosService = {
   encargados: encargadosService,
   proveedores: proveedoresService,
   patentes: patentesService,
-  patentesPropias: patentesPropiasService,
-  patentesExternas: patentesExternasService,
+  vehiculosPropios: patentesPropiasService,
+  vehiculosExternos: patentesExternasService,
   choferes: choferesService,
   materiales: materialesService,
 }
