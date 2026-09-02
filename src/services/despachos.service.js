@@ -161,6 +161,7 @@ export async function fetchResumenPorObra(mes) {
 /**
  * @param {string} pedidoId
  * @param {'asfalto'|'hormigon'} tipo
+ * @returns {Promise<Array<{ id, patente, cantidad, numeroRemitoOVale, fecha, fuente: 'cargas'|'bascula' }>>}
  */
 export async function fetchCargasDelPedido(pedidoId, tipo) {
   const tabla = tipo === 'hormigon' ? 'plantas_cargas_hormigon' : 'plantas_cargas_asfalto'
@@ -173,12 +174,71 @@ export async function fetchCargasDelPedido(pedidoId, tipo) {
 
   // Normaliza a una forma común (cantidad + numeroRemitoOVale) para que el
   // modal no tenga que conocer las columnas específicas de cada tabla.
-  return (data ?? []).map((c) => ({
+  const cargas = (data ?? []).map((c) => ({
     id: c.id,
     patente: tipo === 'hormigon' ? c.patente_mixer : c.patente,
     cantidad: tipo === 'hormigon' ? c.volumen_m3 : c.cantidad_tn,
     numeroRemitoOVale: tipo === 'hormigon' ? c.numero_remito : c.numero_vale,
     fecha: c.fecha_carga,
+    fuente: 'cargas',
+  }))
+  if (cargas.length || tipo === 'hormigon') return cargas
+
+  // Fallback a Báscula (2026-09-02, roadmap Mobile — gap real encontrado al
+  // auditar la comparativa "Real vs. Pedido" del legado): los despachos de
+  // asfalto migrados del histórico legado (memory/pending.md, migración
+  // 2026-09-01) NO tienen filas en plantas_cargas_asfalto — ese detalle por
+  // camión nunca se guardó ahí en el legado, no fue un dato perdido en la
+  // migración. `plantas_vales` SÍ se migró completo (885 vales) y tiene el
+  // mismo patrón camión-por-fila — es exactamente el "detalle auditable por
+  // camión" que memory/business-rules.md ya documenta para Báscula. Se usa
+  // como fallback, nunca como fuente de la cantidad oficial (esa sigue
+  // siendo siempre `cantidad_despachada`, ver comentario de archivo).
+  return fetchValesDelPedido(pedidoId).then((vales) =>
+    vales.map((v) => ({
+      id: v.id,
+      patente: v.patente,
+      cantidad: v.pesoNetoTn,
+      numeroRemitoOVale: v.numeroVale,
+      fecha: v.fechaPesada,
+      fuente: 'bascula',
+    }))
+  )
+}
+
+/**
+ * Vales de báscula (asfalto) asociados a un pedido — usado por el fallback
+ * de fetchCargasDelPedido() de arriba y por el selector "Imprimir vale" de
+ * Despachos (reusa el mismo dato, no se duplica la query).
+ * @param {string} pedidoId
+ */
+/**
+ * Vale completo por id (todas las columnas de plantas_vales) — para el
+ * selector "Imprimir vale" de Despachos, que reusa ValeImprimible.vue tal
+ * cual lo arma useBascula.js (mismas props, mismo componente, memory/
+ * conventions.md: no duplicar el imprimible).
+ * @param {string} valeId
+ */
+export async function fetchValeCompleto(valeId) {
+  const { data, error } = await supabase.from('plantas_vales').select('*').eq('id', valeId).single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchValesDelPedido(pedidoId) {
+  const { data, error } = await supabase
+    .from('plantas_vales')
+    .select('id, numero_vale, patente, peso_neto, unidad, fecha_pesada')
+    .eq('pedido_id', pedidoId)
+    .eq('tipo_vale', 'asfalto')
+    .order('fecha_pesada', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map((v) => ({
+    id: v.id,
+    numeroVale: v.numero_vale,
+    patente: v.patente,
+    pesoNetoTn: v.unidad === 'kg' ? Number(v.peso_neto) / 1000 : Number(v.peso_neto),
+    fechaPesada: v.fecha_pesada,
   }))
 }
 

@@ -15,6 +15,7 @@ import VButton from '@/components/shared/VButton.vue'
 import VKpiCard from '@/components/shared/VKpiCard.vue'
 import { useDespachos } from '@/modules/despachos/composables/useDespachos'
 import DespachoImprimible from '@/modules/despachos/components/DespachoImprimible.vue'
+import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const mesActualLabel = MESES[new Date().getMonth()]
@@ -33,6 +34,7 @@ const {
   error,
   obras,
   formulas,
+  patentes,
   kpisMes,
   kpisHistorico,
   filas,
@@ -66,6 +68,17 @@ const {
   cargandoRemito,
   abrirRemito,
   imprimir,
+  modalSeleccionValeAbierto,
+  pedidoParaSeleccionVale,
+  valesDisponibles,
+  modalImpresionValeAbierto,
+  valeParaImprimir,
+  pedidoParaImprimirVale,
+  acumuladoParaImprimirVale,
+  rangoValesParaImprimirVale,
+  abrirImpresionVale,
+  elegirVale,
+  formatearNumeroVale,
   destinoDe,
   iniciar,
 } = useDespachos()
@@ -172,6 +185,14 @@ function unidadDe(tipo) {
           :total="totalDespachos"
           @update:page="cambiarPagina"
         >
+          <template #cell-fecha_programada="{ row }">
+            <p>{{ row.fecha_programada }}</p>
+            <!-- Solicitante junto a la fecha (2026-09-02, réplica del legado:
+                 memory/relevamiento-sistema-viejo.md §3 muestra "👤 <nombre>"
+                 debajo de la fecha) — plantas_pedidos.encargado ya existía en
+                 el schema, solo faltaba mostrarlo acá. -->
+            <p v-if="row.encargado" class="text-xs text-text-soft">👤 {{ row.encargado }}</p>
+          </template>
           <template #cell-cantidad_solicitada="{ row }">
             {{ row.cantidad_solicitada }} {{ unidadDe(row.tipo) }}
           </template>
@@ -185,9 +206,22 @@ function unidadDe(tipo) {
           </template>
           <template #cell-acciones="{ row }">
             <div class="flex flex-wrap gap-1.5">
-              <VButton variant="secondary" size="sm" @click="abrirDetalle(row)">🚛 Ver detalle de cargas</VButton>
+              <VButton variant="secondary" size="sm" @click="abrirDetalle(row)">🚛 Detalle de cargas</VButton>
               <VButton variant="secondary" size="sm" @click="abrirCorreccion(row)">Corregir</VButton>
-              <VButton variant="ghost" size="sm" @click="abrirRemito(row)">👁 Ver remito</VButton>
+              <!-- Selector Vale/Remito (2026-09-02, pedido de Federico): 2
+                   botones en vez de un <select> — más claro en mobile, el
+                   "Vale" internamente pregunta cuál si el despacho tuvo más
+                   de un camión pesado en báscula. -->
+              <VButton variant="ghost" size="sm" @click="abrirRemito(row)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 shrink-0">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                Remito
+              </VButton>
+              <VButton v-if="row.tipo === 'asfalto'" variant="ghost" size="sm" @click="abrirImpresionVale(row)">
+                🖨 Vale
+              </VButton>
             </div>
           </template>
         </VTable>
@@ -204,9 +238,16 @@ function unidadDe(tipo) {
           <strong>{{ destinoDe(pedidoDetalle) }}</strong> — {{ pedidoDetalle.fecha_programada }} — {{ formulas.find((f) => f.id === pedidoDetalle.formula_id)?.nombre }}
         </p>
         <p v-if="cargandoDetalle" class="text-sm text-text-soft">Cargando…</p>
-        <ul v-else-if="cargasDetalle.length" class="space-y-1.5">
+        <p
+          v-else-if="cargasDetalle.length && cargasDetalle[0].fuente === 'bascula'"
+          class="mb-2 rounded-lg bg-info-light px-3 py-2 text-xs text-info"
+        >
+          Este despacho no tiene cargas registradas en Pedidos (típico de despachos migrados del histórico
+          anterior) — el detalle de abajo sale de los vales de báscula asociados, a título de auditoría.
+        </p>
+        <ul v-if="cargasDetalle.length" class="space-y-1.5">
           <li v-for="(carga, i) in cargasDetalle" :key="carga.id" class="rounded-lg border border-border px-3 py-2 text-sm">
-            Carga {{ i + 1 }} — {{ carga.patente || 'sin patente' }} — {{ carga.cantidad }} {{ unidadDe(pedidoDetalle.tipo) }}
+            Carga {{ i + 1 }} — {{ carga.patente || 'sin patente' }} — {{ Number(carga.cantidad).toFixed(2) }} {{ unidadDe(pedidoDetalle.tipo) }}
             <span class="text-text-soft">— {{ pedidoDetalle.tipo === 'hormigon' ? 'Remito' : 'Vale' }}: {{ carga.numeroRemitoOVale || '—' }}</span>
           </li>
         </ul>
@@ -269,6 +310,53 @@ function unidadDe(tipo) {
       </div>
       <div class="mt-4 flex justify-end gap-2">
         <VButton variant="secondary" @click="modalRemitoAbierto = false">Cerrar</VButton>
+        <VButton @click="imprimir">Imprimir</VButton>
+      </div>
+    </VModal>
+
+    <!-- Modal: elegir cuál vale imprimir (solo cuando el despacho tuvo más de un camión pesado en báscula) -->
+    <VModal
+      :open="modalSeleccionValeAbierto"
+      title="Elegir vale a imprimir"
+      @update:open="modalSeleccionValeAbierto = $event"
+    >
+      <p class="mb-3 text-sm text-text-mid">
+        Este despacho tiene {{ valesDisponibles.length }} vales de báscula asociados — elegí cuál imprimir:
+      </p>
+      <ul class="space-y-1.5">
+        <li v-for="v in valesDisponibles" :key="v.id">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2.5 text-left text-sm hover:border-vialtec"
+            @click="elegirVale(v.id)"
+          >
+            <span>N° {{ formatearNumeroVale(v.numeroVale) }} — {{ v.patente || 'sin patente' }}</span>
+            <span class="text-text-soft">{{ v.pesoNetoTn.toFixed(2) }} tn</span>
+          </button>
+        </li>
+      </ul>
+      <div class="mt-4 flex justify-end">
+        <VButton variant="secondary" @click="modalSeleccionValeAbierto = false">Cancelar</VButton>
+      </div>
+    </VModal>
+
+    <!-- Modal: Imprimir vale (reusa ValeImprimible.vue de Báscula, mismo componente que useBascula.js) -->
+    <VModal :open="modalImpresionValeAbierto" title="Vale de pesaje" @update:open="modalImpresionValeAbierto = $event">
+      <div class="imprimible">
+        <ValeImprimible
+          v-if="valeParaImprimir && pedidoParaImprimirVale"
+          :vale="valeParaImprimir"
+          :obra-nombre="destinoDe(pedidoParaImprimirVale)"
+          :mezcla-nombre="formulas.find((f) => f.id === pedidoParaImprimirVale.formula_id)?.nombre"
+          modo="vale"
+          :acumulado-tn="acumuladoParaImprimirVale"
+          :pedido="pedidoParaImprimirVale"
+          :rango-vales="rangoValesParaImprimirVale"
+          :patentes="patentes"
+        />
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <VButton variant="secondary" @click="modalImpresionValeAbierto = false">Cerrar</VButton>
         <VButton @click="imprimir">Imprimir</VButton>
       </div>
     </VModal>

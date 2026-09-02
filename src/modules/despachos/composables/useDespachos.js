@@ -17,10 +17,17 @@ import {
   fetchTotalesMes,
   fetchResumenPorObra,
   fetchCargasDelPedido,
+  fetchValesDelPedido,
+  fetchValeCompleto,
   corregirDespacho,
 } from '@/services/despachos.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+import { patentesService } from '@/modules/maestros/services/maestros.service'
+// Reuso de Báscula (memory/conventions.md: no duplicar lógica compartida
+// entre módulos) — el acumulado dinámico del día y el formato de N° de vale
+// son exactamente los mismos que usa ValeImprimible.vue desde BasculaView.
+import { obtenerAcumuladoHastaFecha, formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
 
 const TAMANO_PAGINA = 20
 
@@ -38,6 +45,10 @@ export function useDespachos() {
 
   const obras = ref([])
   const formulas = ref([])
+  // Patentes: solo para resolver Propio/Tercero en el remito/vale imprimible
+  // (ValeImprimible.vue#transporteLabel, mismo criterio que Báscula) — no se
+  // usa en ningún otro lado de esta vista.
+  const patentes = ref([])
   const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
   const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
 
@@ -55,9 +66,14 @@ export function useDespachos() {
     // del error real. Mismo patrón que ya usan cargarBase() en
     // useBascula.js/useSimulador.js.
     try {
-      const [listaObras, listaFormulas] = await Promise.all([fetchObras(), fetchFormulas({ soloActivas: false })])
+      const [listaObras, listaFormulas, listaPatentes] = await Promise.all([
+        fetchObras(),
+        fetchFormulas({ soloActivas: false }),
+        patentesService.fetch(),
+      ])
       obras.value = listaObras
       formulas.value = listaFormulas
+      patentes.value = listaPatentes
     } catch (e) {
       error.value = e.message
     }
@@ -269,6 +285,71 @@ export function useDespachos() {
   }
 
   // -------------------------------------------------------------------------
+  // "Imprimir vale" (2026-09-02, roadmap Mobile/UX — selector Vale/Remito
+  // pedido por Federico para las salidas de asfalto): Despachos ya tenía
+  // "Ver remito" (arriba); esto agrega la otra opción, reusando
+  // ValeImprimible.vue tal cual lo arma useBascula.js (mismo componente,
+  // mismas props — memory/conventions.md, no duplicar el imprimible). Un
+  // despacho puede tener 0 vales asociados (hormigón, o asfalto sin pesar en
+  // báscula), 1 (caso típico) o varios (multi-camión) — con más de uno se
+  // pide elegir cuál antes de abrir el modal de impresión.
+  // -------------------------------------------------------------------------
+
+  const modalSeleccionValeAbierto = ref(false)
+  const pedidoParaSeleccionVale = ref(null)
+  const valesDisponibles = ref([])
+
+  const modalImpresionValeAbierto = ref(false)
+  const valeParaImprimir = ref(null)
+  const pedidoParaImprimirVale = ref(null)
+  const acumuladoParaImprimirVale = ref(null)
+  const rangoValesParaImprimirVale = ref({ valeDesde: null, valeHasta: null, cantidadVales: 0 })
+
+  async function abrirVale(valeId, pedido) {
+    error.value = null
+    try {
+      const vale = await fetchValeCompleto(valeId)
+      valeParaImprimir.value = vale
+      pedidoParaImprimirVale.value = pedido
+      modalImpresionValeAbierto.value = true
+      const { acumuladoTn, valeDesde, valeHasta, cantidadVales } = await obtenerAcumuladoHastaFecha({
+        pedidoId: pedido.id,
+        obraId: pedido.obra_id,
+        fechaCorte: vale.fecha_pesada,
+      })
+      acumuladoParaImprimirVale.value = acumuladoTn
+      rangoValesParaImprimirVale.value = { valeDesde, valeHasta, cantidadVales }
+    } catch (e) {
+      error.value = e.message
+    }
+  }
+
+  async function abrirImpresionVale(pedido) {
+    error.value = null
+    try {
+      const vales = await fetchValesDelPedido(pedido.id)
+      if (!vales.length) {
+        error.value = 'Este despacho no tiene vales de báscula asociados para imprimir.'
+        return
+      }
+      if (vales.length === 1) {
+        await abrirVale(vales[0].id, pedido)
+      } else {
+        pedidoParaSeleccionVale.value = pedido
+        valesDisponibles.value = vales
+        modalSeleccionValeAbierto.value = true
+      }
+    } catch (e) {
+      error.value = e.message
+    }
+  }
+
+  async function elegirVale(valeId) {
+    modalSeleccionValeAbierto.value = false
+    await abrirVale(valeId, pedidoParaSeleccionVale.value)
+  }
+
+  // -------------------------------------------------------------------------
   // Arranque
   // -------------------------------------------------------------------------
 
@@ -284,6 +365,7 @@ export function useDespachos() {
     error,
     obras,
     formulas,
+    patentes,
     obrasPorId,
     formulasPorId,
     kpisMes,
@@ -320,6 +402,17 @@ export function useDespachos() {
     cargandoRemito,
     abrirRemito,
     imprimir,
+    modalSeleccionValeAbierto,
+    pedidoParaSeleccionVale,
+    valesDisponibles,
+    modalImpresionValeAbierto,
+    valeParaImprimir,
+    pedidoParaImprimirVale,
+    acumuladoParaImprimirVale,
+    rangoValesParaImprimirVale,
+    abrirImpresionVale,
+    elegirVale,
+    formatearNumeroVale,
     destinoDe,
     iniciar,
   }
