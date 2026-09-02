@@ -32,20 +32,22 @@
   tipo `vt_usuarios9`, `vt_bak_YYYY-MM-DD`, etc. La migración a `plantas_*` implica
   pasar de ese modelo documental a tablas relacionales reales. Ver `pending.md`.
 
-**Ubicación del sistema legado (confirmado por Federico, 2026-08-27):** los
-datos legacy (tablas/claves `vt_*`) residen en una base y motor
-**completamente externos** a este proyecto de Supabase — no en
-`ejitztewkpnmrckwmvny` ni en ningún otro schema de esta instancia (se
-verificó contra `information_schema.tables` de todos los schemas antes de
-esta aclaración: no hay ninguna tabla `vt_*` acá). El proyecto de Supabase
-actual es **exclusivo para el nuevo esquema** (`plantas_*` + lectura de
-`flota_*`). La migración del histórico se va a hacer más adelante
-exportando desde esa base externa e importando vía CSV/ETL hacia las tablas
-`plantas_*` — no hay una conexión directa ni un `dblink`/FDW entre ambas
-bases planeado por ahora. Ver `pending.md` para el detalle de qué falta
-migrar y el borrador de script en `supabase/scripts/migracion_historial_borrador.sql`
-(ese borrador va a necesitar ajustarse: asumía staging tables cargadas desde
-un export ya en Postgres, no un ETL cross-motor).
+**Ubicación del sistema legado (corregido 2026-09-01, confirmado en vivo
+leyendo su contenido real):** el dato de 2026-08-27 de abajo era incorrecto
+— no se había buscado en el lugar correcto. El legado **sí vive en este
+mismo proyecto de Supabase** (`ejitztewkpnmrckwmvny`), dentro de una tabla
+genérica `kv_store(key text, value jsonb, updated_at timestamptz)`. No hay
+tablas `vt_*` reales (por eso la búsqueda contra `information_schema.tables`
+de 2026-08-27 no encontró nada) — son **claves** dentro de `kv_store`:
+`vt_p9` (pedidos), `vt_s9` (stock actual), `vt_f9` (fórmulas), `vt_vales9`
+(vales de asfalto), `vt_ingaridos9`/`vt_egaridos9` (ingreso/egreso de
+áridos), `vt_m9` (movimientos de stock), `vt_usuarios9`, `vt_maestros9`
+(obras/materiales/proveedores/patentes propias del legado). No hace falta
+ETL cross-motor ni CSV: la migración lee `kv_store` directo con
+`jsonb_array_elements` en el mismo `SELECT`. Ver `pending.md` para el
+estado de la migración y `supabase/scripts/migracion_historial_v2.sql`
+(reemplaza al `migracion_historial_borrador.sql` anterior, que asumía el
+origen externo incorrecto — ya no es la referencia vigente).
 
 ## REGLA DE PAGINACIÓN CRÍTICA
 

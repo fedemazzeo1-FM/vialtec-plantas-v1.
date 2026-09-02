@@ -1,6 +1,137 @@
 # pending.md — Pendientes
 
-## Migración del historial del sistema anterior (prioritaria)
+## Migración del historial del sistema anterior — COMPLETADA (2026-09-01)
+
+**Ejecutada en producción con autorización explícita de Federico**, el mismo
+día de la validación. `supabase/scripts/migracion_historial_v2.sql` corrió
+con `commit;` real — el archivo queda como referencia histórica de la
+migración ya aplicada, no se debe volver a correr.
+
+**Conteos finales persistidos (verificados con una query nueva, fuera de la
+transacción, después del commit — no son solo el resultado de la propia
+corrida):** 184 pedidos, 543 eventos de historial, 19 fórmulas, 885 vales
+(382 asfalto + 500 ingreso_arido + 3 egreso_arido), 500 ingresos, 780
+movimientos de stock, 114 cargas de hormigón, 18 materiales, 8 proveedores,
+51 patentes, 16 materiales con saldo en `plantas_stock`.
+
+**Por qué estos números no son los "181/884/779" de la validación de la
+mañana**: el sistema legado (`produccion.vialtec.app`) sigue LIVE y en uso
+real durante todo el día — escribe directo a `kv_store` de este mismo
+proyecto (ver `architecture.md`). Entre el dry-run de validación y el
+commit real pasaron varias horas en las que la planta siguió operando: 3
+pedidos nuevos + 1 vale de ingreso de áridos nuevo (con su ingreso y
+movimiento de stock correspondientes) se cargaron en el legado y quedaron
+migrados también — **no es una discrepancia ni un bug**, es exactamente el
+comportamiento esperado de migrar un origen que seguía vivo. Verificado
+explícitamente: al momento del commit, `vt_p9` tenía 185 pedidos, se migraron
+184, y el único excluido sigue siendo el mismo de siempre (`wmcde37`,
+`cantidad="-1"`, cancelado) — 185 − 1 = 184, cierra exacto.
+
+**Verificación de integridad post-migración (pedida explícitamente por
+Federico):**
+- 0 vales con `numero_vale` duplicado (constraint UNIQUE + verificado con
+  `group by ... having count(*) > 1`).
+- 0 pedidos con el mismo `id` legado insertado dos veces.
+- Único pedido sin migrar: `wmcde37` (mismo caso documentado desde el
+  primer dry-run, no uno nuevo).
+- Única obra sin mapear a `flota_obras`: `cjlmpvj` / Municipalidad
+  Exaltación de la Cruz (mismo caso documentado desde el primer dry-run).
+- **Secuencia `plantas_vales_numero_vale_seq`**: `last_value = 10493`,
+  `is_called = true`, exactamente igual a `max(numero_vale)` real de la
+  tabla — sin gap, el próximo vale que se pese en producción va a tomar
+  `10494` sin colisión ni salto artificial.
+
+## Migración del historial del sistema anterior — script validado, pendiente de autorización para commit (2026-09-01) — histórico, ver sección de arriba para el resultado final
+
+**Estado actual:** `supabase/scripts/migracion_historial_v2.sql` está escrito,
+corregido y **validado end-to-end en dry-run** (transacción completa con
+`ROLLBACK`, 0 filas persistidas, secuencia de `plantas_vales.numero_vale`
+restaurada a su valor previo — sin ningún rastro en la base compartida).
+Reemplaza por completo al `migracion_historial_borrador.sql` anterior (que
+asumía un origen externo — ver corrección en `architecture.md`).
+
+Origen real de los datos, confirmado en vivo leyendo `kv_store` de
+`ejitztewkpnmrckwmvny`: 182 pedidos, 19 fórmulas, 382 vales de asfalto, 499
+ingresos de áridos, 3 egresos de áridos, 678 movimientos de stock, 15
+usuarios, 14 obras propias, 18 materiales, 8 proveedores, 32+23 patentes.
+
+**Dos bugs encontrados y corregidos durante la validación:**
+1. Orden de la secuencia `numero_vale`: el `setval()` de sincronización
+   corría *después* de que `ingreso_arido` ya había repartido números
+   nuevos vía `nextval()` — con la secuencia todavía desincronizada de los
+   números reales de asfalto (9582–9993), esos `nextval()` iban a colisionar
+   contra vales reales ya insertados. Se reordenó: `asfalto` → `egreso_arido`
+   (ambos con número real) → `setval()` → recién ahí `ingreso_arido` reparte
+   números nuevos.
+2. Fallback `fecha`+`hora` de `vt_m9` (movimientos de stock): en 130 de 678
+   registros `hora` viene vacío y el fallback real es `fechaHora`, que a
+   diferencia de `hora` en el resto del legado **no es una hora suelta sino
+   un timestamp ISO completo** (`"2026-08-24T18:01:23.563Z"`) — concatenarlo
+   con `fecha` como si fuera solo la hora rompía el cast a `timestamptz`.
+   Se corrigió con un `case` que castea `fechaHora` directo cuando está
+   presente. Afecta a los 23 eventos `relevamiento` completos (ninguno se
+   hubiera migrado sin este fix) más 103 `ingreso` y 4 `salida`.
+
+**Conteos de la corrida de validación — 100% conformes** contra lo esperado
+(detalle completo en la sesión del 2026-09-01): 181 pedidos migrados (182
+menos 1 excluido por `cantidad="-1"`, documentado y esperado), 19 fórmulas,
+884 vales (382 asfalto + 499 ingreso + 3 egreso, sin colisiones — máximo
+`numero_vale` alcanzado en la transacción: 10492), 499 ingresos, 18
+materiales, 8 proveedores, 51 patentes (55 brutas − 4 duplicados por casing,
+dedupe a propósito), 1 obra sin mapear a `flota_obras` (Municipalidad
+Exaltación de la Cruz, esperado), 0 materiales de movimientos sin match.
+
+**Pendiente antes de correr la migración real:** autorización explícita de
+Federico para cambiar `rollback;` por `commit;` al final del script (ver
+protocolo en `procedimientos.md` — cambio de datos en la instancia
+compartida con Flota). El script deja ambas líneas listas (rollback activo,
+commit comentado) para que ese cambio sea mínimo y explícito. Fuera de
+alcance de esta pasada, documentado en el propio encabezado del script:
+`plantas_cargas_asfalto.numero_vale` sin dato real que migrar,
+`stock_minimo_kg`/`stock_maximo_kg` vacíos en el legado,
+`plantas_clientes_frecuentes` no existe todavía,
+`fecha_programada_anterior`/`nueva` de pedidos postergados históricos queda
+`NULL`, y `plantas_stock.cantidad_kg` final se toma directo de `vt_s9` (no
+es la suma de los movimientos migrados — límite real de qué guardaba el
+legado, no un bug).
+
+**Idempotencia (2026-09-01, revisión posterior al dry-run):** se encontraron
+y corrigieron 3 `INSERT` sin guarda anti-duplicados (`plantas_pedidos_historial`,
+`plantas_cargas_hormigon`, `plantas_stock_movimientos` ×2 bloques) — sin
+esto, correr el script dos veces habría duplicado esas filas. Se agregó
+columna `datos_legados jsonb` a `plantas_cargas_hormigon` y
+`plantas_stock_movimientos` (mismo patrón que ya usaba `plantas_formulas`)
+para poder dedupear por el objeto crudo del legado. **Re-validado corriendo
+los 3 bloques dos veces dentro de la misma transacción de dry-run**: los
+conteos finales fueron idénticos entre una pasada y dos — confirma que el
+script es seguro de reintentar si algo falla a mitad de camino.
+
+### Checklist post-migración (para cuando se autorice y corra el `commit;`)
+
+1. Verificar en la UI real (no solo conteos SQL): Pedidos filtra/lista los
+   181 migrados, Báscula/Despachos muestran los vales y despachos
+   históricos, Stock refleja el saldo de `vt_s9`, Maestros lista
+   materiales/proveedores/patentes migrados.
+2. Resolver a mano el pedido con `obra_id = null` (Municipalidad Exaltación
+   de la Cruz, 3 pedidos) si Federico decide crear esa obra en `flota_obras`
+   — ver detalle en la sección de arriba y en el encabezado del script.
+3. Correr `select setval('plantas_vales_numero_vale_seq', (select max(numero_vale) from plantas_vales), true);`
+   ya lo hace el propio script antes del `commit;` (sección 7) — no hace
+   falta repetirlo a mano, pero confirmar en la UI que "Próximo N° de vale"
+   (header de Báscula) da un valor coherente después del commit.
+4. Revisar `plantas_usuarios_roles` para los 2 usuarios nuevos que crea el
+   script (`angel.moreira@vialtec.com.ar`, `juan.heinrich@vialtec.com.ar`,
+   este último inactivo) — confirmar que el rol/obras asignadas quedaron
+   como se espera en la UI de gestión de usuarios (todavía no existe un
+   módulo dedicado, ver fila #9 de la tabla de módulos).
+5. Avisar a Federico el resultado final (conteos reales post-commit) y
+   actualizar esta sección de `pending.md` + la fila #13 de
+   `modules-status.md` a `LISTO`.
+6. Recién después de todo lo anterior, evaluar si corresponde archivar/
+   limpiar `supabase/scripts/migracion_historial_v2.sql` o dejarlo como
+   referencia histórica del proceso.
+
+## Migración del historial del sistema anterior (prioritaria) — contexto original
 
 El sistema anterior guardaba casi todo como documentos JSON (claves tipo
 `vt_usuarios9`, `vt_bak_YYYY-MM-DD`, listados de pedidos/vales/stock como blobs)
@@ -118,7 +249,16 @@ el sistema legado valida que no se duplique, pero probablemente esa unicidad
 es por proveedor/transportista, no global. Confirmar con Federico antes de
 agregar esa restricción.
 
-## Migración del historial legado — mapeo y schema de soporte (avance)
+## Migración del historial legado — mapeo y schema de soporte (avance histórico, ver sección de arriba para el estado vigente)
+
+**Nota 2026-09-01:** las decisiones de mapeo de esta sección siguen vigentes
+y ya están reflejadas en `migracion_historial_v2.sql`. Los puntos
+"pendientes antes de correr el borrador en serio" que estaban más abajo (ver
+al final de esta sección) **quedaron resueltos u obsoletos** una vez
+confirmado que el legado vive en `kv_store` de este mismo proyecto (no en
+una base externa): no hace falta ETL/CSV ni staging tables — el script v2
+lee `kv_store` directo. Se dejan tachados/aclarados in-situ para no perder
+el historial de la decisión.
 
 Federico confirmó las siguientes decisiones sobre el mapeo campo a campo
 propuesto para migrar pedidos/historial/vales del legado hacia `plantas_*`:
@@ -152,26 +292,26 @@ Escrito, **NO aplicado**:
   diseño: no persiste nada hasta que se revise a mano y se cambie por
   `commit;`.
 
-Pendiente antes de poder correr el borrador en serio:
-- **Resuelto en parte (2026-08-27, ver `architecture.md`):** el sistema
-  legado vive en una base/motor externo a Supabase, no en este proyecto —
-  confirmado por Federico. El borrador asume staging tables (`raw jsonb`) ya
-  cargadas en Postgres; con un origen externo real, la carga va a ser vía
-  ETL/CSV, no un `insert` directo — el paso 0 del borrador hay que
-  reemplazarlo por lo que sea que exporte ese sistema (CSV → `\copy` a una
-  tabla intermedia con columnas tipadas, o CSV → jsonb si el export lo
-  permite). El resto del script (reconciliación de obras, inserts a
-  `plantas_*`) no cambia.
-- Sigue sin definir el formato/estructura exacta del export CSV (columnas,
-  encoding, cómo vienen los arrays anidados como `historial` o `camiones` en
-  un CSV plano) — no hay ninguna muestra real todavía.
-- Contra qué campo del legado se hace el lookup de `plantas_formulas` (el
-  pedido legado trae `formulaId`, pero es FK al scaffold huérfano ya
-  descartado — el borrador asume un lookup por nombre, sin confirmar).
-- Validar contra un pedido/vale real si el supuesto de
-  `fecha_programada_anterior`/`nueva` en `plantas_pedidos_historial` para
-  eventos `postergado` es correcto (el borrador deja ese cálculo fuera,
-  como TODO explícito).
+Pendiente antes de poder correr el borrador en serio (histórico — ver
+sección "estado vigente" al inicio del archivo, 2026-09-01):
+- ~~El sistema legado vive en una base/motor externo a Supabase~~ —
+  **corregido 2026-09-01**: vive en `kv_store` de este mismo proyecto (ver
+  `architecture.md`). No hace falta ETL/CSV ni staging tables — el script
+  v2 lee `kv_store` directo con `jsonb_array_elements` en el mismo `SELECT`.
+  Este punto y los dos siguientes (formato de export CSV, encoding) quedan
+  **obsoletos**, no aplican más.
+- ~~Sigue sin definir el formato/estructura exacta del export CSV~~ —
+  obsoleto, no hay export, se lee `kv_store` directo (ver arriba).
+- Contra qué campo del legado se hace el lookup de `plantas_formulas`:
+  **resuelto** en `migracion_historial_v2.sql` — se preserva el `id` legado
+  en `plantas_formulas.datos_legados` y el lookup de cada pedido es exacto
+  por ese id, no por nombre (mejora respecto de este borrador original).
+- `fecha_programada_anterior`/`nueva` en eventos `postergado` del histórico:
+  **sigue sin resolver**, confirmado que queda fuera de alcance de la v2
+  también (requeriría `lag()`/`lead()` sobre el array `historial` de cada
+  pedido) — ver nota de alcance en el encabezado de
+  `migracion_historial_v2.sql`. Queda `NULL` en los eventos migrados; no
+  bloquea la migración.
 
 ## Relevamiento funcional del sistema viejo (produccion.vialtec.app) — CERRADO (Etapa 1) + ampliado (Etapa 3)
 
@@ -199,6 +339,135 @@ multi-carga de asfalto). Ver la sección "Etapa 3" al final de
 `relevamiento-sistema-viejo.md` para el detalle completo y el resumen de
 acciones concretas al pie del documento — **todavía no implementado**, queda
 para la próxima sesión de trabajo sobre código.
+
+## Maestros — auditoría de `vt_maestros9` + separación Vehículos Propios/Externos (2026-09-01)
+
+`vt_maestros9` tiene 6 arrays: `obras` (14), `clientes` (7), `patentes` (32),
+`materiales` (18), `proveedores` (8), `patenteExternas` (23). Estado real
+contra `plantas_*`:
+
+- ✅ Obras, materiales, proveedores, patentes: migrados (ver reconciliación
+  de la sección de arriba).
+- ❌ **`clientes` (7 registros — Municipalidad de Pilar, Colegio Moorlands,
+  Corralon Filiberti, etc.) NUNCA se migró — no existe `plantas_clientes_frecuentes`**
+  (gap ya documentado desde el relevamiento original, confirmado de nuevo
+  acá). Crear esa tabla es un cambio de schema — **necesito tu autorización
+  explícita** antes de hacerlo (protocolo de `procedimientos.md`).
+- ❌ **No hay catálogo de "choferes" ni "transportistas" en el legado** — el
+  nombre del chofer es texto libre dentro de cada patente
+  (`chofer_habitual`) y de cada vale/pedido, nunca una entidad propia. Por
+  eso `plantas_choferes` está vacía: no hay nada 1:1 para migrar.
+  Extraje los nombres únicos de choferes que aparecen en patentes + vales
+  (47 variantes de texto) para evaluar poblarla, pero **tienen inconsistencias
+  reales de formato** (mismo chofer escrito "Nombre Apellido" en un lado y
+  "Apellido Nombre" en otro, alguna variante de tildeo/ortografía —
+  ej. "Basabe Alejandro" (34 apariciones) vs. "Alejandro Sanchez"/"Sanchez
+  Alejandro" (20+1) probablemente la misma persona en 2 formatos). **No
+  las cargué automáticamente** — un merge automático arriesga fusionar dos
+  personas distintas o duplicar una sola. Recomiendo cargar los choferes a
+  mano desde la tab "Choferes" (ya anda) a medida que se necesiten, en vez
+  de un import masivo de datos sucios.
+- "Transportista" no es un catálogo aparte del legado — en la práctica es
+  el mismo campo que "chofer" (confirmado contra el remito real: el campo
+  "TRANSPORTISTA" del papel lleva el nombre de la persona, no de una
+  empresa).
+
+**Separación Vehículos Propios/Externos aplicada**: `plantas_patentes` ya
+tenía `es_externa` (30 propias / 21 externas reales, deduplicadas de 55
+brutas). Antes convivían en una sola tab "Patentes" con una columna
+"Origen". Ahora son 2 tabs separadas en Maestros — "Vehículos propios" /
+"Vehículos externos" — cada una con su propio service
+(`patentesPropiasService`/`patentesExternasService`, mismo
+`plantas_patentes`, filtro fijo por `es_externa`, no tablas nuevas). Ya se
+reflejaba correctamente en el remito de Báscula (`ValeImprimible.vue`,
+campo "Transporte: Propio/Tercero" agregado en la sesión anterior) — sin
+cambios ahí, ya estaba resuelto.
+
+## Hallazgos de relevamiento en vivo del sistema viejo (2026-09-01, sesión con acceso real)
+
+Con sesión real logueada en `produccion.vialtec.app` (Federico ya estaba
+adentro), se navegó Pedidos, Despachos, Báscula, Fórmulas y Stock a fondo.
+Dos hallazgos accionables, no triviales:
+
+1. **2 pedidos reales quedaron con `obra_id = NULL`** por un efecto
+   colateral del script de migración: `x882wic` (23,38 tn, despachado,
+   16/05/2026) y `fjabb3s` (34,38 tn, despachado, 23/05/2026) referencian la
+   obra legado `htfk5kp` (código `PRUEBAS-01`, "PRUEBAS MEZCLA ASFALTO") —
+   el script la excluye a propósito asumiendo que es 100% de prueba
+   (`delete from stg_obras_legado where codigo = 'PRUEBAS-01'`), pero estos
+   2 despachos son reales. No hay forma de inferir la obra real desde acá
+   (el legado no guardó ese dato en ningún otro lado) — **pendiente que
+   Federico diga a qué obra correspondían en realidad** para un `UPDATE`
+   puntual de esos 2 registros.
+
+2. **⚠️ CRÍTICO — el stock migrado (`plantas_stock`, desde `vt_s9`) puede
+   estar desactualizado respecto de lo que el sistema viejo muestra HOY en
+   vivo**, para al menos 3 de 16 materiales (comparado a mano, pantalla
+   Stock del legado vs. el valor guardado en `vt_s9` al momento de migrar):
+   - Asfalto AM3 (Autovia): legado en vivo **47,46 t** vs. `vt_s9` (y por lo
+     tanto lo migrado) **21,26 t** — diferencia de +26,2 t.
+   - Arena 0/6: legado en vivo **2.911,61 t** vs. `vt_s9` **2.616,17 t** —
+     diferencia de +295,44 t.
+   - Piedra 6/20: legado en vivo **2.398,86 t** vs. `vt_s9` **2.136,86 t** —
+     diferencia de +262 t.
+   - Los otros 13 materiales sí coincidían exacto entre `vt_s9` y la
+     pantalla en vivo del legado.
+
+   No se pudo determinar la causa exacta (`vt_s9` no se actualiza en tiempo
+   real con cada ingreso, o el legado calcula el número que muestra en
+   pantalla de otra forma que no queda grabada en `vt_s9`) — lo que importa
+   es que **nuestro `plantas_stock` recién migrado puede estar
+   subestimando el stock real de esos 3 materiales**. Recomendación: antes
+   de operar Stock en el sistema nuevo, hacer un **relevamiento real** (ya
+   construido, `registrarRelevamiento()`/módulo Stock) contando estos 3
+   materiales (y de paso confirmando los otros 13) para corregir vía el
+   flujo de ajuste auditado, en vez de confiar en el valor migrado tal cual.
+
+   **✅ RESUELTO 2026-09-01** — corregido vía el flujo auditado real
+   (`Relevamiento mensual` en la UI de Stock, no un UPDATE directo):
+   `plantas_stock.cantidad_kg` ahora es exacto contra la pantalla del legado
+   para los 3 — Arena 0/6: `2.911.613 kg` (2.911,613 t), Piedra 6/20:
+   `2.398.861 kg` (2.398,861 t), Asfalto AM3 (Autovia): `47.465 kg`
+   (47,465 t). Quedó registrado como 3 movimientos `tipo='ajuste'` en
+   `plantas_stock_movimientos` (deltas +295.443,1 kg / +261.996,85 kg /
+   +26.200,1 kg respectivamente), `origen`/motivo = "Ajuste por conciliación
+   contra sistema legado (auditoría 2026-09-01)", `responsable_email` =
+   `federico.mazzeo@vialtec.com.ar` (vía `auth.email()` server-side, RPC
+   `registrar_relevamiento_stock` — mismo mecanismo que cualquier
+   relevamiento real, con `saveStockGuard` de por medio). Verificado con
+   query directa a `plantas_stock` y visualmente en la UI de Stock — los 3
+   materiales pasaron a "OK" con el valor exacto del legado.
+
+   **Adicional**: el legado tiene umbrales mín/máx configurados por
+   material (visibles como barra de progreso en su pantalla de Stock — ej.
+   Arena 0/6 min 100t/máx 200t, Cemento min 8t/máx 15t) que **no existen en
+   ningún lado de `kv_store`** (ni en `vt_maestros9.materiales` ni en
+   `vt_s9`) — deben estar hardcodeados en el frontend del legado. Quedaron
+   NULL en `plantas_materiales.stock_minimo_kg/stock_maximo_kg` tal como ya
+   estaba documentado, pero ahora se confirma que si Federico quiere esos
+   valores reales, hay que transcribirlos a mano desde la pantalla del
+   legado (no hay ningún dato para migrar automáticamente).
+
+Otros puntos relevados, sin acción pendiente (documentados para referencia):
+- **Pedidos del legado no filtra por fecha ni pagina**: muestra solo los
+  pedidos activos (no despachado/cancelado) agrupados por material
+  (Hormigón/Asfalto), sin límite — el archivo ("Archivo") estaba vacío al
+  momento de relevar. El historial completo vive en **Despachos** (159
+  resultados al momento de revisar), no en Pedidos — confirma que nuestra
+  separación Pedidos/Despachos ya replica esa idea, y justifica por qué
+  acotar Pedidos por semana (ver módulo Pedidos, ajuste de esta sesión) es
+  la solución correcta para nuestro diseño aunque el legado no filtre así.
+- **Despachos del legado tiene ícono de eliminar por fila** (🗑) — contradice
+  `business-rules.md` ("los pedidos nunca se eliminan"). Deliberadamente
+  NO replicado — ya era una decisión tomada en sesiones anteriores.
+- **Báscula del legado**: mismo patrón que el nuestro (movimientos del día,
+  próximo N° de vale, tabla con Bruto/Tara/Neto/Acum./S-Remito/Dif.) — sin
+  gaps nuevos encontrados.
+- **Fórmulas del legado**: grid de cards (no tabla) agrupadas por
+  Todas/Hormigón/Asfalto con contador, insumos con tag "sin stock" en
+  Agua/Purgue — confirma que nuestra regla de exclusión de Agua/Purgue del
+  descuento de stock es consistente con el legado. Diseño visual distinto
+  (cards vs. tabla) pero sin gap funcional.
 
 ## Guía de estilo de Flota (equipos2.vialtec.app) — borrador listo
 

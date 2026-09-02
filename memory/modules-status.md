@@ -6,22 +6,46 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 | # | Módulo | Descripción breve | Estado |
 |---|--------|--------------------|--------|
 | 1 | Dashboard | KPIs del mes, analítica de proveedores, despacho por camión | EN CURSO — service + `DashboardView` listos (KPIs dobles tn/m³, comparativa de proveedores por período, detalle por camión con remito garantizado); falta aplicar migración SQL 05; **el semáforo de stock 🔴/🟡 proyectado semanal (banner de alerta) sigue sin construir en la UI del Dashboard** — la dependencia de datos ya está resuelta (módulo Stock, `plantas_stock`), falta el banner/cálculo de proyección en sí (`business-rules.md`, `UMBRAL=0.2`) |
-| 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado→postergado | EN CURSO — **Fase 1 de fidelidad funcional cerrada (2026-08-28)**: ver detalle abajo. |
+| 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado→postergado | EN CURSO — **Fase 1 de fidelidad funcional cerrada (2026-08-28)**: ver detalle abajo. **Vista por semana agregada 2026-09-01** (default semana en curso + histórico completo, ver `pending.md`). |
 | 3 | Plan semanal | Vista de pedidos confirmados/despachados agrupados por día | EN CURSO — service + `PlanSemanalView` (matriz lunes-domingo, KPIs tn/m³ por obra y total) listos; falta aplicar migración SQL |
 | 4 | Stock | Stock por material en kg, ingresos/salidas manuales, guardas | **COMPLETADO (MVP) — 2026-08-31**: ver detalle abajo. |
 | 5 | Despachos | Historial de pedidos despachados, filtros, exportación Excel | EN CURSO — **fidelidad funcional cerrada (2026-08-31)**: ver detalle abajo. Falta exports Excel (fuera de alcance de esta tanda). |
 | 6 | Báscula / Balanza | Puertas de pesaje, vales de asfalto, ingreso/egreso de áridos | EN CURSO — **fidelidad funcional con el legado cerrada (2026-08-28, Fase 1+2 sobre el relevamiento Etapa 3)**: ver detalle abajo. **Descuento/ingreso de stock ya resuelto (migraciones 13/14)**: ingreso/egreso de áridos mueve `plantas_stock` directo desde `registrar_pesada_bascula`; el pesaje de asfalto YA NO toca `plantas_pedidos` (ver "Stock e Inventarios" abajo, migración 14) — el cierre del pedido y su descuento de stock son exclusivos de Pedidos |
 | 7 | Fórmulas | Composición de mezclas (asfalto/hormigón), conversión a kg | EN CURSO — service + `FormulasView` con edición inline de insumos listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_formulas` (pendiente de confirmación). `calcularConsumoKg()`/`calcularConsumoTotalKg()` tienen gemela SQL (`plantas_calcular_consumo_kg`, migración 13) usada por el descuento de stock — si se cambia una, cambiar la otra. |
-| 8 | Maestros | Obras, encargados, proveedores, patentes, choferes, materiales | EN CURSO — service + `MaestrosView` (tabs) listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_encargados/proveedores/patentes/choferes` (pendiente de confirmación). **Tab "Materiales" agregada 2026-08-31** (`plantas_materiales`, migración 13) — catálogo del módulo Stock, mismo patrón `crudEntidad` que el resto. |
+| 8 | Maestros | Obras, encargados, proveedores, patentes, choferes, materiales | EN CURSO — service + `MaestrosView` (tabs) listos. **Tab "Materiales" agregada 2026-08-31**. **2026-09-01: separación Vehículos Propios/Externos** (2 tabs en vez de 1 con columna "Origen") + auditoría completa de `vt_maestros9` — `clientes` (7) sin migrar (falta tabla, requiere autorización) y `choferes` sin poblar (no hay catálogo 1:1 en el legado, texto libre con inconsistencias — ver `pending.md`). |
 | 9 | Usuarios | ABM de usuarios, mapeo con Supabase Auth y roles | PENDIENTE |
 | 10 | Roles | Configuración de permisos por rol (override sobre defaults) | PENDIENTE |
 | 11 | Backup | Backups automáticos/manuales y restauración | PENDIENTE |
 | 12 | Resumen mensual / Reportes | Excel mensual de producción por obra e insumos | PENDIENTE |
-| 13 | Migración de historial | Migrar datos del sistema anterior a `plantas_*` | PENDIENTE |
+| 13 | Migración de historial | Migrar datos del sistema anterior a `plantas_*` | **COMPLETADA — 2026-09-01**: 184 pedidos, 885 vales, 780 movimientos de stock, 19 fórmulas, 114 cargas de hormigón, 18 materiales, 8 proveedores, 51 patentes. Ver `pending.md` para el detalle e integridad verificada. |
 | 14 | Simulador de producción | Simular mix de fórmulas contra el stock actual, sin tocar datos reales | **COMPLETADO (MVP) — 2026-08-31**: ver detalle abajo. (No tenía fila propia en esta tabla hasta ahora — el relevamiento original lo mencionaba solo de paso dentro de Stock.) |
 
 Actualizar el estado de cada fila a medida que se avanza (PENDIENTE → EN CURSO →
 LISTO), no borrar filas.
+
+## Migración de historial legado — COMPLETADA en producción (2026-09-01)
+
+`supabase/scripts/migracion_historial_v2.sql` ejecutado con `commit;` real,
+autorización explícita de Federico, después de dos dry-runs validados (ver
+sesión completa en `pending.md`). Resumen — detalle completo, incluida la
+explicación de por qué los conteos finales no son idénticos a los de la
+última validación (el legado sigue vivo y en uso durante todo el proceso),
+en `pending.md`:
+
+- **184 pedidos**, 543 eventos de historial, 19 fórmulas, **885 vales**
+  (382 asfalto + 500 ingreso_arido + 3 egreso_arido), 500 ingresos de
+  áridos, **780 movimientos de stock**, 114 cargas de hormigón, 18
+  materiales, 8 proveedores, 51 patentes, 16 materiales con saldo inicial
+  de stock.
+- Integridad verificada post-commit: 0 vales con `numero_vale` duplicado, 0
+  pedidos con `id` legado duplicado, secuencia `plantas_vales_numero_vale_seq`
+  sincronizada exacta en `10493` (`is_called=true`) contra el
+  `max(numero_vale)` real de la tabla.
+- Únicos casos sin migrar (mismos ya documentados desde el primer dry-run,
+  no hallazgos nuevos): 1 pedido (`wmcde37`, `cantidad="-1"`, cancelado) y 1
+  obra sin equivalente en `flota_obras` (Municipalidad Exaltación de la
+  Cruz, `cjlmpvj` — 3 pedidos quedan con `obra_id = null`, dato preservado
+  en `datos_legados`).
 
 ## Fase 1 de mejoras (auth + RPC atómicas + paginación UI) — APLICADO en Supabase
 
@@ -484,3 +508,176 @@ validaciones, columnas), no asumirlo solo desde `Logica sis. plantas
 v1.rtf`/`v2.rtf` o `business-rules.md`. Esos documentos son la base, pero
 el relevamiento en vivo ya corrigió varias veces cosas que decían distinto
 de lo que el sistema real hace hoy (ver `relevamiento-sistema-viejo.md`).
+
+## Auditoría de paginación y calidad de código — 2026-09-01 (trabajo autónomo)
+
+Pasada de auditoría defensiva sobre los 8 `*.service.js` existentes +
+componentes compartidos (`VTable`, `VModal`, `VCard`, `VKpiCard`,
+`VSection`, `VSemaforo`) + vistas (`DashboardView`, `PlanSemanalView`,
+`DespachosView`). Metodología: grep de todo `supabase.from(...)`/`.rpc(...)`
+del código, clasificar cada query como acotada (catálogo chico, filtro por
+id único, rango de fecha corto) vs. potencialmente creciente sin límite, y
+verificar que esta última categoría pase por `fetchPaginado()`/`fetchPagina()`
+(`src/services/fetch-paginado.js`).
+
+**Resultado general: la disciplina de paginación ya estaba bien aplicada**
+en la mayoría del código (`despachos.service.js`, `pedidos.service.js`,
+`stock.service.js` y `bascula.service.js#fetchHistorialVales` ya usaban los
+helpers correctamente). Se encontraron y corrigieron **2 gaps reales**:
+
+1. **`bascula.service.js#fetchPedidosAsfaltoParaPesada()`** — filtraba
+   `estado in (confirmado, despachado)` sin corte de fecha. `despachado` es
+   un estado terminal que nunca se revierte, así que el total crece sin
+   límite con el uso normal del sistema (hoy ~181 tras la migración
+   histórica, seguirá subiendo). Sin `fetchPaginado()`, al superar 1000
+   filas PostgREST cortaría en silencio — y como el `order` es ascendente
+   (más viejo primero), lo que se hubiera perdido eran los pedidos MÁS
+   RECIENTES, justo los que un operador necesita en el selector de Báscula.
+   **Fix:** envuelto en `fetchPaginado()`.
+2. **`analytics.service.js#fetchDetalleDespachosCamion()`** — el lookup
+   secundario de `formula_id` (`.in('id', pedidoIds)`) no estaba acotado:
+   si `filas` (ya paginada completa vía `fetchPaginado`) traía más de 1000
+   `pedido_id` únicos, esta segunda query quedaba sujeta al mismo corte
+   silencioso — `formulaId` hubiera quedado `null` para los pedidos que no
+   entraban en las primeras 1000, sin ningún error visible. **Fix:**
+   troceado en lotes de 500 ids (evita el corte Y una URL de `.in()`
+   demasiado larga).
+
+Además, por consistencia y como margen de seguridad (no eran casos
+críticos, pero costaba lo mismo corregirlos): `analytics.service.js#fetchResumenGeneral()`
+(acotada a un mes, pero mismo patrón de query que `totalesPorProveedor()`
+que sí ya usaba `fetchPaginado()`) pasó a usar el helper también.
+
+**Defensivo (bajo impacto, corregido):** `DashboardView.vue#filasDespachos`
+— `fechaLabel`/`volumenLabel` podían mostrar `"Invalid Date"`/`"NaN"` sin
+explicación si una fila de `plantas_v_despachos_camion` viniera con
+`fecha`/`volumen` nulo (no debería pasar hoy, pero no había guarda). Se
+agregó fallback a `'—'`.
+
+**Sin hallazgos:** no se encontraron catch vacíos (43 bloques `catch`
+revisados, todos setean `error.value` o relanzan), ni queries con `error`
+destructurado y no chequeado, ni `.toFixed()` sobre valores no numéricos
+(todos los casos revisados vienen de acumuladores `Number(x) || 0` o de
+computed con default numérico). `maestros.service.js`/`formulas.service.js`
+confirmados como catálogos chicos por diseño (documentado in-situ, no
+necesitan paginar).
+
+**Build:** `npm run build` limpio después de todos los cambios (112 módulos,
+sin warnings).
+
+No se revisaron línea por línea `PedidosView.vue`/`BasculaView.vue`/
+`StockView.vue`/`SimuladorView.vue`/`MaestrosView.vue`/`FormulasView.vue`/
+`LoginView.vue` completos en esta pasada (alcance acotado a services +
+componentes compartidos + las vistas más grandes/con más queries
+compuestas) — quedan para una próxima pasada dedicada si se quiere
+cobertura 100%. **✅ hecha, ver sección siguiente.**
+
+## Pasada 100% de vistas + navegación + imprimibles reales — 2026-09-01 (trabajo autónomo)
+
+Cobertura completa de los 7 archivos que habían quedado pendientes:
+`PedidosView.vue` (+ sus 3 composables), `BasculaView.vue`, `StockView.vue`,
+`SimuladorView.vue`, `MaestrosView.vue`, `FormulasView.vue`, `LoginView.vue`
+— revisados línea por línea, más verificación EN VIVO en el navegador (el
+browser ya tenía una sesión real persistida como Federico/Admin, aprovechada
+para probar F5/reload real, no solo lectura de código).
+
+**Bugs de manejo de errores encontrados y corregidos** (mismo patrón en dos
+composables): `usePedidos.js#cargarBase()` y `useDespachos.js#cargarBase()`
+no tenían try/catch propio y se llamaban vía `.then()` sin `.catch()` — un
+fallo de red ahí (ej. `fetchObras()`) generaba una promesa rechazada sin
+manejar, la carga principal (`cargarPedidos()`/`cargarDespachos()`) nunca se
+ejecutaba, y la vista quedaba mostrando un **falso estado vacío** ("No hay
+pedidos/despachos que coincidan con el filtro") en vez del error real —
+`useBascula.js`/`useSimulador.js`/`useStock.js` ya tenían el patrón correcto
+(try/catch propio), se alinearon los otros dos al mismo criterio.
+
+**Bug de layout encontrado y corregido**: `DesktopLayout.vue`'s `<main>` era
+un flex-item sin `min-w-0` — en viewports angostos (confirmado en vivo a
+959px), el contenido interno (grillas de filtros a 5 columnas, tablas)
+forzaba TODA la página a scroll horizontal a nivel `<body>` en vez de que
+cada tabla scrollee dentro de su propio `overflow-x-auto` (que ya existía en
+`VTable.vue` pero no podía actuar). Fix: `min-w-0 overflow-x-auto` en
+`<main>` — verificado en vivo, `document.documentElement.scrollWidth >
+clientWidth` pasó de `true` a `false`.
+
+**Persistencia de navegación (F5 / duplicar pestaña) — verificado en vivo,
+ya funcionaba correctamente por diseño:**
+- Sesión: `supabase-js` usa `persistSession: true` por default (no hay
+  override en `src/config/supabase.js`) → el token vive en `localStorage`.
+- Router: `createWebHistory()` (URLs reales por vista) + guard en
+  `router/index.js` que espera `auth.restaurarSesion()` antes de decidir
+  redirect — `App.vue` también gatea el render con un loader hasta
+  `auth.listo`.
+- Probado en vivo (`location.reload()` real en `/stock`, `/pedidos`,
+  Maestros con tab activa): el usuario queda exactamente en la misma URL,
+  logueado, sin rebote a `/login` ni a `/dashboard` — al revés de lo que
+  hacía el sistema anterior.
+- **Único gap real encontrado**: el *sub-estado* dentro de una vista (tab
+  activa en Maestros) no estaba en la URL, así que sí se perdía al recargar.
+  **Fix**: `MaestrosView.vue` ahora sincroniza la tab activa con `?tab=` vía
+  `router.replace` (no `push`, para no ensuciar el historial) — probado en
+  vivo: click en "Materiales" → URL pasa a `?tab=materiales` → F5 → sigue en
+  Materiales. El resto de las vistas (filtros de Pedidos/Despachos/Dashboard,
+  página de paginación) quedan con su estado local de siempre — sync a URL
+  para esos casos queda como mejora aparte si se pide explícitamente, no se
+  tocó sin necesidad.
+- **Fix colateral de eficiencia**: `App.vue` (onMounted) y el guard de
+  `router/index.js` llaman a `restaurarSesion()` en el mismo tick de arranque
+  — sin guarda, cada carga de página disparaba DOS llamadas concurrentes a
+  `supabase.auth.getSession()` + el query de perfil. No rompía nada (mismo
+  resultado final) pero duplicaba requests. `auth.store.js#restaurarSesion()`
+  ahora comparte la misma promesa en vuelo entre llamadas concurrentes.
+
+**Remito de báscula — rediseñado contra una foto real** (Federico compartió
+una foto de un remito físico de VialTec S.A. durante la sesión): el modo
+"remito" de `ValeImprimible.vue` era un slip genérico, nada que ver con el
+documento fiscal real. Reescrito para replicar el formato real: membrete con
+domicilio/CUIT/IERIC/IIBB/Inicio de actividad, caja "Remito N°"/"Fecha",
+Desde/Destino, tabla Cantidad/Detalle con la línea **"S/Vale de báscula N°
+X al Y (correlativos)"** (rango real de vales de báscula del acumulado del
+día — antes no existía este dato), Transporte (Propio/Tercero, deducido de
+`plantas_patentes.es_externa` por patente)/Patente/Transportista/Lugar de
+entrega, firmas Despacho + Recibe conforme/Aclaración, pie Depósito.
+- `bascula.service.js#obtenerAcumuladoHastaFecha()` ahora también devuelve
+  `valeDesde`/`valeHasta`/`cantidadVales` (antes solo el acumulado en tn) —
+  mismo query, un `select` más (`numero_vale`).
+- `useBascula.js` expone `pedidoParaImprimir`/`rangoValesParaImprimir`
+  nuevos.
+- **Fix de impresión física**: el remito real es A4 **vertical**, pero el
+  `@page` global (`src/assets/main.css`) estaba fijo en A4 horizontal (para
+  que el vale de báscula entre en dos copias lado a lado). Se resolvió con
+  una "named page" de CSS (`@page remito { size: A4 portrait }` +
+  `.imprimible.modo-remito { page: remito }`) — el vale sigue horizontal, el
+  remito ahora imprime vertical, sin tocar el otro.
+- `DespachoImprimible.vue` (remito de Despachos, distinto del de Báscula)
+  fuera de alcance de este rediseño — solo se le sumó el logo real (ver
+  abajo), su formato de slip informal no cambió.
+
+**Logo real** (Federico compartió el archivo, 2026-09-01): reemplaza el
+mockup en CSS/texto que se usaba desde la Fase 1 de Báscula (no se había
+podido bajar el archivo a disco en sesiones anteriores). Guardado en
+`src/assets/img/logo-vialtec.png`, usado en `ValeImprimible.vue` (los dos
+modos), `DespachoImprimible.vue`, `LoginView.vue` y el sidebar de
+`DesktopLayout.vue`.
+
+**Plan Semanal — calendario rediseñado** (pedido explícito de Federico,
+"dejalo bien profesional"): la matriz de 7 `VCard` sueltas se reemplazó por
+una sola grilla con separadores internos (como un calendario real), header
+por día con número + mes, día actual resaltado con el acento de marca
+(`esHoy`, comparado contra la fecha real del navegador), fin de semana con
+fondo levemente distinto. Solo cambios de template/computed — la lógica de
+`usePedidos`-equivalente de esta vista (fetch, confirmar) no se tocó.
+
+**Sistema viejo (produccion.vialtec.app)**: se dejó una pestaña abierta a
+pedido de Federico, pero **no hay sesión persistida en el navegador
+automatizado** y no se ingresaron credenciales (política: nunca escribir
+contraseñas en un campo, ni siquiera si el usuario las da) — el remito y el
+logo de referencia se obtuvieron de fotos que Federico compartió
+directamente en el chat, no de una sesión en vivo del sistema viejo. Si se
+necesita relevar algo más de ahí (otros imprimibles, comportamiento de
+alguna pantalla puntual), alguien tiene que loguearse a mano primero.
+
+Build verificado (`npm run build` limpio, 113 módulos) + verificación en
+vivo en el navegador (Dashboard, Pedidos, Báscula, Stock, Simulador,
+Maestros, Plan semanal, Fórmulas) con la sesión real de Federico — sin
+errores de consola en ninguna.
