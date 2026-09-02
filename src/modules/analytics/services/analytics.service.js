@@ -150,6 +150,60 @@ export async function fetchAnaliticaProveedores(rangoFechas = {}) {
     .sort((a, b) => b.cantidadActualTn - a.cantidadActualTn)
 }
 
+/**
+ * Detalle por proveedor con desglose insumo/viajes/toneladas — réplica
+ * exacta del formato del legado (2026-09-02, roadmap Mobile, pedido de
+ * Federico: "analítica de proveedores, copiar formato al sistema viejo").
+ * memory/relevamiento-sistema-viejo.md §Stock: "Por proveedor: card con
+ * nombre + KPIs (viajes, total tn) + tabla insumo/viajes/toneladas con fila
+ * TOTAL resaltada". Vive acá (no en stock.service.js) porque analytics.service.js
+ * ya es el dueño de toda la analítica de proveedores — evita un segundo
+ * lugar con la misma responsabilidad (memory/conventions.md). Complementa a
+ * fetchAnaliticaProveedores() de arriba (comparativo mes actual vs.
+ * anterior, usado por el Dashboard) sin reemplazarlo — formatos distintos
+ * para pantallas distintas.
+ *
+ * @param {{ desde?: string, hasta?: string }} rangoFechas 'YYYY-MM-DD'. Por defecto, el mes en curso.
+ * @returns {Promise<Array<{ proveedor: string, viajes: number, totalTn: number,
+ *   insumos: Array<{ material: string, viajes: number, toneladas: number }> }>>}
+ */
+export async function fetchAnaliticaProveedoresDetalle(rangoFechas = {}) {
+  const { desde, hasta } = normalizarRango(rangoFechas)
+  const filas = await fetchPaginado(() =>
+    supabase
+      .from('plantas_ingresos')
+      .select('proveedor, material, cantidad, unidad')
+      .gte('fecha_ingreso', desde.toISOString())
+      .lte('fecha_ingreso', hasta.toISOString())
+  )
+
+  const porProveedor = new Map()
+  for (const fila of filas) {
+    const proveedor = fila.proveedor || 'Sin especificar'
+    if (!porProveedor.has(proveedor)) porProveedor.set(proveedor, new Map())
+    const porInsumo = porProveedor.get(proveedor)
+    const material = fila.material || 'Sin especificar'
+    if (!porInsumo.has(material)) porInsumo.set(material, { viajes: 0, toneladas: 0 })
+    const acc = porInsumo.get(material)
+    acc.viajes += 1
+    acc.toneladas += aTn(fila.cantidad, fila.unidad)
+  }
+
+  return Array.from(porProveedor.entries())
+    .map(([proveedor, porInsumo]) => {
+      const insumos = Array.from(porInsumo.entries())
+        .map(([material, { viajes, toneladas }]) => ({ material, viajes, toneladas }))
+        .sort((a, b) => b.toneladas - a.toneladas)
+      return {
+        proveedor,
+        viajes: insumos.reduce((acc, i) => acc + i.viajes, 0),
+        totalTn: insumos.reduce((acc, i) => acc + i.toneladas, 0),
+        insumos,
+      }
+    })
+    .sort((a, b) => b.totalTn - a.totalTn)
+}
+
 // ---------------------------------------------------------------------------
 // Detalle de despachos por camión (CAMBIO 8)
 // ---------------------------------------------------------------------------

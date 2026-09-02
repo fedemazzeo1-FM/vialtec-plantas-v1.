@@ -1,12 +1,17 @@
 <script setup>
-// Vista de Stock e Inventarios: cards de insumos con semáforo, ingreso/
-// salida manual, relevamiento mensual (ajuste auditable) e historial de
-// movimientos paginado. Toda la lógica vive en useStock() (memory/
-// conventions.md: esta vista es template puro).
-//
-// Analítica de proveedores queda en el Dashboard (decisión Federico
-// 2026-08-31) — acá solo hay un link de acceso rápido, no se duplica la vista.
+// Vista de Stock e Inventarios: 3 tabs — Stock actual (cards con semáforo),
+// Historial de ingresos (movimientos paginados) y Analítica de proveedores
+// (2026-09-02, roadmap Mobile, pedido de Federico — réplica del formato del
+// legado, ver useStock.js#cargarAnaliticaProveedores). Reemplaza la decisión
+// anterior (2026-08-31) de dejar la analítica solo en el Dashboard — Federico
+// pidió explícitamente sumarla acá también, mismo dato/service, sin sacar la
+// del Dashboard (formatos distintos, ver comentario en analytics.service.js).
+// Toda la lógica vive en useStock() (memory/conventions.md: esta vista es
+// template puro). Ingreso/salida manual, relevamiento y modales quedan
+// disponibles solo en la tab "Stock actual", igual que antes.
 
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import VCard from '@/components/shared/VCard.vue'
 import VTable from '@/components/shared/VTable.vue'
 import VModal from '@/components/shared/VModal.vue'
@@ -14,6 +19,18 @@ import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
 import VSemaforo from '@/components/shared/VSemaforo.vue'
 import { useStock } from '@/modules/stock/composables/useStock'
+
+const TABS = [
+  { valor: 'actual', label: 'Stock actual' },
+  { valor: 'ingresos', label: 'Historial de ingresos' },
+  { valor: 'proveedores', label: 'Analítica de proveedores' },
+]
+// Persistencia de navegación (mismo patrón que MaestrosView.vue,
+// memory/modules-status.md — "F5 / duplicar pestaña"): la tab activa vive
+// en `?tab=`, router.replace (no push) para no ensuciar el historial.
+const route = useRoute()
+const router = useRouter()
+const tabActiva = ref(TABS.some((t) => t.valor === route.query.tab) ? route.query.tab : 'actual')
 
 const ESTADO_A_COLOR = { rojo: 'rojo', amarillo: 'amarillo', verde: 'verde' }
 const ESTADO_LABEL = { rojo: 'Insuficiente', amarillo: 'Ajustado', verde: 'OK' }
@@ -67,15 +84,45 @@ const {
   cambiarPaginaHistorial,
   etiquetaTipo,
   catalogoMateriales,
+  mesProveedores,
+  analiticaProveedores,
+  cargandoProveedores,
+  cargarAnaliticaProveedores,
+  exportando,
+  exportarStockActualExcel,
+  exportarMovimientosExcel,
+  exportarProveedoresExcel,
   iniciar,
 } = useStock()
 
 iniciar()
 
+// La tab "Analítica de proveedores" carga sus datos recién la primera vez
+// que se visita (no en iniciar()) — evita una query de más en la carga
+// inicial para el caso común (usuario que solo mira Stock actual).
+let proveedoresCargadosAlMenosUnaVez = false
+watch(
+  tabActiva,
+  (nueva) => {
+    router.replace({ query: { ...route.query, tab: nueva } })
+    if (nueva === 'proveedores' && !proveedoresCargadosAlMenosUnaVez) {
+      proveedoresCargadosAlMenosUnaVez = true
+      cargarAnaliticaProveedores()
+    }
+  },
+  { immediate: true }
+)
+
 function anchoBarra(material) {
   if (!material.stock_maximo_kg) return null
   return Math.min(100, Math.max(0, (material.cantidadKg / material.stock_maximo_kg) * 100))
 }
+
+const columnasProveedorInsumo = [
+  { key: 'material', label: 'Insumo' },
+  { key: 'viajes', label: 'Viajes' },
+  { key: 'toneladas', label: 'Toneladas', format: (v) => v.toFixed(2) },
+]
 </script>
 
 <template>
@@ -85,69 +132,94 @@ function anchoBarra(material) {
         {{ error }}
       </div>
 
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-text-mid">Unidad:</span>
-          <div class="flex rounded-lg border border-border p-0.5">
-            <button
-              type="button"
-              class="rounded-md px-3 py-1 text-xs font-semibold"
-              :class="unidadVista === 'tn' ? 'bg-vialtec text-white' : 'text-text-mid'"
-              @click="unidadVista = 'tn'"
-            >
-              Toneladas
-            </button>
-            <button
-              type="button"
-              class="rounded-md px-3 py-1 text-xs font-semibold"
-              :class="unidadVista === 'kg' ? 'bg-vialtec text-white' : 'text-text-mid'"
-              @click="unidadVista = 'kg'"
-            >
-              Kilogramos
-            </button>
-          </div>
-          <router-link to="/dashboard" class="text-sm text-vialtec hover:underline">
-            Ver analítica de proveedores en el Dashboard →
-          </router-link>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <VButton size="sm" variant="success" @click="abrirMovimiento('ingreso_manual')">+ Ingreso manual</VButton>
-          <VButton size="sm" variant="secondary" @click="abrirMovimiento('egreso_manual')">+ Salida manual</VButton>
-          <VButton size="sm" variant="secondary" @click="abrirRelevamiento">▤ Relevamiento mensual</VButton>
-        </div>
+      <!-- 3 tabs (2026-09-02, réplica del legado): Stock actual / Historial
+           de ingresos / Analítica de proveedores. -->
+      <div class="mb-4 flex gap-1 border-b border-border">
+        <button
+          v-for="tab in TABS"
+          :key="tab.valor"
+          type="button"
+          class="border-b-2 px-3 py-2 text-sm font-semibold transition-colors duration-150"
+          :class="tab.valor === tabActiva ? 'border-vialtec text-vialtec' : 'border-transparent text-text-soft hover:text-text-mid'"
+          @click="tabActiva = tab.valor"
+        >
+          {{ tab.label }}
+        </button>
       </div>
 
-      <p v-if="cargandoStock" class="text-sm text-text-soft">Cargando…</p>
-      <div v-else-if="!materiales.length" class="rounded-lg border border-border bg-white p-6 text-center text-sm text-text-soft">
-        No hay materiales que controlen stock todavía.
-        <router-link to="/maestros" class="text-vialtec hover:underline">Cargalos en Maestros → Materiales</router-link>.
-      </div>
-      <div v-else class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <VCard v-for="material in materiales" :key="material.id">
-          <div class="flex items-center justify-between">
-            <p class="truncate text-sm font-semibold text-text">{{ material.nombre }}</p>
-            <VSemaforo :estado="ESTADO_A_COLOR[material.estado]" />
+      <!-- Tab: Stock actual -->
+      <template v-if="tabActiva === 'actual'">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-text-mid">Unidad:</span>
+            <div class="flex rounded-lg border border-border p-0.5">
+              <button
+                type="button"
+                class="rounded-md px-3 py-1 text-xs font-semibold"
+                :class="unidadVista === 'tn' ? 'bg-vialtec text-white' : 'text-text-mid'"
+                @click="unidadVista = 'tn'"
+              >
+                Toneladas
+              </button>
+              <button
+                type="button"
+                class="rounded-md px-3 py-1 text-xs font-semibold"
+                :class="unidadVista === 'kg' ? 'bg-vialtec text-white' : 'text-text-mid'"
+                @click="unidadVista = 'kg'"
+              >
+                Kilogramos
+              </button>
+            </div>
           </div>
-          <p class="mt-2 text-2xl font-extrabold text-text">
-            {{ formatearCantidad(material.cantidadKg) }}
-            <span class="text-sm font-normal text-text-soft">{{ unidadVista }}</span>
-          </p>
-          <p class="text-xs text-text-soft">{{ ESTADO_LABEL[material.estado] }}</p>
-          <div v-if="material.stock_maximo_kg" class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
-            <div
-              class="h-full rounded-full"
-              :class="{ 'bg-danger': material.estado === 'rojo', 'bg-warning': material.estado === 'amarillo', 'bg-success': material.estado === 'verde' }"
-              :style="{ width: anchoBarra(material) + '%' }"
-            />
+          <div class="flex flex-wrap gap-2">
+            <VButton size="sm" variant="success" @click="abrirMovimiento('ingreso_manual')">+ Ingreso manual</VButton>
+            <VButton size="sm" variant="secondary" @click="abrirMovimiento('egreso_manual')">+ Salida manual</VButton>
+            <VButton size="sm" variant="secondary" @click="abrirRelevamiento">▤ Relevamiento mensual</VButton>
+            <VButton size="sm" variant="secondary" :disabled="exportando || !materiales.length" @click="exportarStockActualExcel">
+              ⬇ Excel
+            </VButton>
           </div>
-          <p v-if="material.stock_minimo_kg || material.stock_maximo_kg" class="mt-1 text-[11px] text-text-soft">
-            min {{ ((material.stock_minimo_kg || 0) / 1000).toFixed(1) }}t · máx {{ material.stock_maximo_kg ? (material.stock_maximo_kg / 1000).toFixed(1) + 't' : '—' }}
-          </p>
-        </VCard>
-      </div>
+        </div>
 
+        <p v-if="cargandoStock" class="text-sm text-text-soft">Cargando…</p>
+        <div v-else-if="!materiales.length" class="rounded-lg border border-border bg-white p-6 text-center text-sm text-text-soft">
+          No hay materiales que controlen stock todavía.
+          <router-link to="/maestros" class="text-vialtec hover:underline">Cargalos en Maestros → Materiales</router-link>.
+        </div>
+        <div v-else class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <VCard v-for="material in materiales" :key="material.id">
+            <div class="flex items-center justify-between">
+              <p class="truncate text-sm font-semibold text-text">{{ material.nombre }}</p>
+              <VSemaforo :estado="ESTADO_A_COLOR[material.estado]" />
+            </div>
+            <p class="mt-2 text-2xl font-extrabold text-text">
+              {{ formatearCantidad(material.cantidadKg) }}
+              <span class="text-sm font-normal text-text-soft">{{ unidadVista }}</span>
+            </p>
+            <p class="text-xs text-text-soft">{{ ESTADO_LABEL[material.estado] }}</p>
+            <div v-if="material.stock_maximo_kg" class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                class="h-full rounded-full"
+                :class="{ 'bg-danger': material.estado === 'rojo', 'bg-warning': material.estado === 'amarillo', 'bg-success': material.estado === 'verde' }"
+                :style="{ width: anchoBarra(material) + '%' }"
+              />
+            </div>
+            <p v-if="material.stock_minimo_kg || material.stock_maximo_kg" class="mt-1 text-[11px] text-text-soft">
+              min {{ ((material.stock_minimo_kg || 0) / 1000).toFixed(1) }}t · máx {{ material.stock_maximo_kg ? (material.stock_maximo_kg / 1000).toFixed(1) + 't' : '—' }}
+            </p>
+          </VCard>
+        </div>
+      </template>
+
+      <!-- Tab: Historial de ingresos -->
+      <template v-if="tabActiva === 'ingresos'">
       <VCard class="mb-3">
-        <p class="mb-2 text-sm font-bold text-text">Historial de movimientos</p>
+        <div class="mb-2 flex items-center justify-between">
+          <p class="text-sm font-bold text-text">Historial de ingresos</p>
+          <VButton size="sm" variant="secondary" :disabled="exportando || !movimientos.length" @click="exportarMovimientosExcel">
+            ⬇ Excel
+          </VButton>
+        </div>
         <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <label class="text-sm text-text-mid">
             Material
@@ -201,6 +273,67 @@ function anchoBarra(material) {
           No hay movimientos que coincidan con el filtro.
         </p>
       </VCard>
+      </template>
+
+      <!-- Tab: Analítica de proveedores (2026-09-02, réplica exacta del
+           legado — memory/relevamiento-sistema-viejo.md §Stock: selector de
+           mes + card por proveedor con KPIs viajes/total tn + tabla
+           insumo/viajes/toneladas con fila TOTAL resaltada). -->
+      <template v-if="tabActiva === 'proveedores'">
+        <VCard class="mb-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <label class="text-sm text-text-mid">
+              Mes
+              <input
+                v-model="mesProveedores"
+                type="month"
+                class="ml-2 rounded-lg border border-border px-2 py-1 text-sm focus:border-vialtec focus:outline-none"
+                @change="cargarAnaliticaProveedores"
+              />
+            </label>
+            <VButton
+              size="sm"
+              variant="secondary"
+              :disabled="exportando || !analiticaProveedores.length"
+              @click="exportarProveedoresExcel"
+            >
+              ⬇ Descargar en Excel
+            </VButton>
+          </div>
+        </VCard>
+
+        <p v-if="cargandoProveedores" class="text-sm text-text-soft">Cargando…</p>
+        <p
+          v-else-if="!analiticaProveedores.length"
+          class="rounded-lg border border-border bg-white p-6 text-center text-sm text-text-soft"
+        >
+          No hay ingresos de proveedores registrados en el mes elegido.
+        </p>
+        <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <VCard v-for="p in analiticaProveedores" :key="p.proveedor">
+            <div class="mb-3 flex items-center justify-between">
+              <p class="truncate text-sm font-bold text-text">{{ p.proveedor }}</p>
+            </div>
+            <div class="mb-3 grid grid-cols-2 gap-3">
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Viajes</p>
+                <p class="text-xl font-extrabold text-text">{{ p.viajes }}</p>
+              </div>
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Total tn</p>
+                <p class="text-xl font-extrabold text-text">{{ p.totalTn.toFixed(2) }}</p>
+              </div>
+            </div>
+            <VTable :columns="columnasProveedorInsumo" :rows="p.insumos" />
+            <!-- Fila TOTAL resaltada (igual que el legado) — VTable no tiene
+                 footer de agregados, se agrega acá al pie de cada card. -->
+            <div class="mt-2 flex items-center justify-between rounded-lg bg-vialtec/5 px-3 py-2 text-sm font-bold text-vialtec">
+              <span>TOTAL</span>
+              <span>{{ p.viajes }} viajes · {{ p.totalTn.toFixed(2) }} tn</span>
+            </div>
+          </VCard>
+        </div>
+      </template>
     </VSection>
 
     <!-- Ingreso / salida manual -->

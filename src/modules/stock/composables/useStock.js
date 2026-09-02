@@ -3,8 +3,16 @@
 // paginado. StockView.vue queda como template puro (memory/conventions.md).
 
 import { computed, reactive, ref } from 'vue'
-import { fetchStockActual, fetchMovimientos, registrarMovimientoManual, registrarRelevamiento } from '@/services/stock.service'
+import {
+  fetchStockActual,
+  fetchMovimientos,
+  fetchTodosLosMovimientos,
+  registrarMovimientoManual,
+  registrarRelevamiento,
+} from '@/services/stock.service'
 import { materialesService } from '@/modules/maestros/services/maestros.service'
+import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
+import { exportarExcel, nombreArchivoConFecha } from '@/services/excel-export'
 
 const TAMANO_PAGINA_HISTORIAL = 30
 
@@ -222,6 +230,132 @@ export function useStock() {
   }
 
   // -------------------------------------------------------------------------
+  // Tab "Analítica de proveedores" (2026-09-02, roadmap Mobile — pedido de
+  // Federico: réplica del formato del legado, memory/relevamiento-sistema-
+  // viejo.md §Stock — card por proveedor con KPIs + tabla insumo/viajes/
+  // toneladas). Antes solo vivía en el Dashboard (formato distinto,
+  // comparativo mes actual vs. anterior) — acá se agrega como tab propia de
+  // Stock sin sacar la del Dashboard, son 2 vistas con propósito distinto
+  // del mismo dato (fetchAnaliticaProveedoresDetalle() es la nueva).
+  // -------------------------------------------------------------------------
+
+  function mesActualInput() {
+    const hoy = new Date()
+    return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
+  }
+
+  const mesProveedores = ref(mesActualInput())
+  const analiticaProveedores = ref([])
+  const cargandoProveedores = ref(false)
+
+  async function cargarAnaliticaProveedores() {
+    cargandoProveedores.value = true
+    error.value = null
+    try {
+      const [anio, mes] = mesProveedores.value.split('-').map(Number)
+      const desde = `${mesProveedores.value}-01`
+      const hasta = new Date(anio, mes, 0).toISOString().slice(0, 10) // último día del mes
+      analiticaProveedores.value = await fetchAnaliticaProveedoresDetalle({ desde, hasta })
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      cargandoProveedores.value = false
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Exportar a Excel — un botón por tab (2026-09-02, pedido de Federico,
+  // mismo botón "⬇ Excel" que tenía el legado en Stock). Reusa
+  // src/services/excel-export.js (memory/conventions.md, no duplicado).
+  // -------------------------------------------------------------------------
+
+  const exportando = ref(false)
+
+  async function exportarStockActualExcel() {
+    exportando.value = true
+    try {
+      await exportarExcel(nombreArchivoConFecha('stock-actual'), [
+        {
+          nombre: 'Stock actual',
+          filas: materiales.value,
+          columnas: [
+            { key: 'nombre', label: 'Material' },
+            { key: 'cantidadKg', label: 'Cantidad (tn)', format: (v) => (v / 1000).toFixed(3) },
+            { key: 'stock_minimo_kg', label: 'Mínimo (tn)', format: (v) => (v ? (v / 1000).toFixed(1) : '') },
+            { key: 'stock_maximo_kg', label: 'Máximo (tn)', format: (v) => (v ? (v / 1000).toFixed(1) : '') },
+            { key: 'estado', label: 'Estado', format: (v) => ({ rojo: 'Insuficiente', amarillo: 'Ajustado', verde: 'OK' })[v] ?? v },
+          ],
+        },
+      ])
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      exportando.value = false
+    }
+  }
+
+  async function exportarMovimientosExcel() {
+    exportando.value = true
+    error.value = null
+    try {
+      const filas = await fetchTodosLosMovimientos({
+        materialId: filtrosHistorial.materialId || undefined,
+        tipo: filtrosHistorial.tipo || undefined,
+        desde: filtrosHistorial.desde || undefined,
+        hasta: filtrosHistorial.hasta || undefined,
+      })
+      await exportarExcel(nombreArchivoConFecha('stock-historial-ingresos'), [
+        {
+          nombre: 'Historial',
+          filas,
+          columnas: [
+            { key: 'fecha_movimiento', label: 'Fecha', format: (v) => new Date(v).toLocaleString('es-AR') },
+            { key: 'tipo', label: 'Tipo', format: (v) => etiquetaTipo(v) },
+            { key: 'materialNombre', label: 'Material' },
+            { key: 'cantidad_kg', label: 'Cantidad (tn)', format: (v) => (v / 1000).toFixed(3) },
+            { key: 'origen', label: 'Proveedor / Motivo' },
+            { key: 'numero_remito', label: 'Remito' },
+            { key: 'responsableNombre', label: 'Responsable' },
+          ],
+        },
+      ])
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      exportando.value = false
+    }
+  }
+
+  async function exportarProveedoresExcel() {
+    exportando.value = true
+    try {
+      // Aplana proveedor+insumo en una fila por línea (formato tabular
+      // estándar de Excel) en vez del formato de cards agrupadas de la UI —
+      // una columna PROVEEDOR repetida por cada insumo es más útil para
+      // filtrar/pivotear en Excel que replicar la jerarquía visual.
+      const filas = analiticaProveedores.value.flatMap((p) =>
+        p.insumos.map((i) => ({ proveedor: p.proveedor, ...i }))
+      )
+      await exportarExcel(nombreArchivoConFecha('stock-analitica-proveedores'), [
+        {
+          nombre: 'Proveedores',
+          filas,
+          columnas: [
+            { key: 'proveedor', label: 'Proveedor' },
+            { key: 'material', label: 'Insumo' },
+            { key: 'viajes', label: 'Viajes' },
+            { key: 'toneladas', label: 'Toneladas', format: (v) => v.toFixed(2) },
+          ],
+        },
+      ])
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      exportando.value = false
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Arranque
   // -------------------------------------------------------------------------
 
@@ -259,6 +393,14 @@ export function useStock() {
     limpiarFiltrosHistorial,
     cambiarPaginaHistorial,
     etiquetaTipo,
+    mesProveedores,
+    analiticaProveedores,
+    cargandoProveedores,
+    cargarAnaliticaProveedores,
+    exportando,
+    exportarStockActualExcel,
+    exportarMovimientosExcel,
+    exportarProveedoresExcel,
     iniciar,
   }
 }

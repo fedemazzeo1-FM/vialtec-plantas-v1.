@@ -12,7 +12,7 @@
 // perdería el registro en plantas_stock_movimientos.
 
 import { supabase } from '@/config/supabase'
-import { fetchPagina } from '@/services/fetch-paginado'
+import { fetchPagina, fetchPaginado } from '@/services/fetch-paginado'
 import { fetchNombresPorEmail } from '@/services/flota.service'
 
 /**
@@ -71,42 +71,57 @@ export async function fetchStockActual() {
 const TIPOS_INGRESO = ['ingreso_proveedor', 'ingreso_manual']
 
 /**
- * @param {{ materialId?: string, tipo?: string, desde?: string, hasta?: string }} filtros
+ * Query base compartida entre fetchMovimientos() (paginada, UI) y
+ * fetchTodosLosMovimientos() (sin paginar, export a Excel — memory/
+ * conventions.md, un solo lugar para el filtro).
  */
-export async function fetchMovimientos(filtros = {}, { pagina = 1, tamanoPagina = 30 } = {}) {
-  const resultado = await fetchPagina(
-    () => {
-      let query = supabase
-        .from('plantas_stock_movimientos')
-        .select('*, plantas_materiales(nombre)', { count: 'exact' })
-        .order('fecha_movimiento', { ascending: false })
+function queryMovimientos(filtros) {
+  let query = supabase
+    .from('plantas_stock_movimientos')
+    .select('*, plantas_materiales(nombre)', { count: 'exact' })
+    .order('fecha_movimiento', { ascending: false })
 
-      if (filtros.materialId) query = query.eq('material_id', filtros.materialId)
-      if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
-      if (filtros.desde) query = query.gte('fecha_movimiento', filtros.desde)
-      if (filtros.hasta) query = query.lte('fecha_movimiento', `${filtros.hasta}T23:59:59`)
+  if (filtros.materialId) query = query.eq('material_id', filtros.materialId)
+  if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
+  if (filtros.desde) query = query.gte('fecha_movimiento', filtros.desde)
+  if (filtros.hasta) query = query.lte('fecha_movimiento', `${filtros.hasta}T23:59:59`)
 
-      return query
-    },
-    { pagina, tamanoPagina }
-  )
+  return query
+}
 
+/** Enriquece con materialNombre/responsableNombre/esIngreso — reusado por las dos funciones de abajo. */
+async function enriquecerMovimientos(filas) {
   // Responsable (migración 15): plantas_stock_movimientos solo guarda
   // responsable_email (auth.email(), server-side) — acá se resuelve el
   // nombre a mostrar contra flota_usuarios_email, mismo patrón que
   // auth.store.js usa para el usuario logueado. Si no hay match (usuario sin
   // fila en flota_usuarios_email), se muestra el email tal cual.
-  const nombresPorEmail = await fetchNombresPorEmail(resultado.filas.map((m) => m.responsable_email))
+  const nombresPorEmail = await fetchNombresPorEmail(filas.map((m) => m.responsable_email))
+  return filas.map((m) => ({
+    ...m,
+    materialNombre: m.plantas_materiales?.nombre ?? '—',
+    responsableNombre: m.responsable_email ? nombresPorEmail[m.responsable_email] ?? m.responsable_email : '—',
+    esIngreso: TIPOS_INGRESO.includes(m.tipo) || m.cantidad_kg > 0,
+  }))
+}
 
-  return {
-    ...resultado,
-    filas: resultado.filas.map((m) => ({
-      ...m,
-      materialNombre: m.plantas_materiales?.nombre ?? '—',
-      responsableNombre: m.responsable_email ? nombresPorEmail[m.responsable_email] ?? m.responsable_email : '—',
-      esIngreso: TIPOS_INGRESO.includes(m.tipo) || m.cantidad_kg > 0,
-    })),
-  }
+/**
+ * @param {{ materialId?: string, tipo?: string, desde?: string, hasta?: string }} filtros
+ */
+export async function fetchMovimientos(filtros = {}, { pagina = 1, tamanoPagina = 30 } = {}) {
+  const resultado = await fetchPagina(() => queryMovimientos(filtros), { pagina, tamanoPagina })
+  return { ...resultado, filas: await enriquecerMovimientos(resultado.filas) }
+}
+
+/**
+ * Todos los movimientos que matchean el filtro, sin paginar — usado por el
+ * botón "Excel" de la tab "Historial de ingresos" de Stock (memory/
+ * architecture.md, regla de paginación: fetchPaginado(), no un .select()
+ * sin límite).
+ */
+export async function fetchTodosLosMovimientos(filtros = {}) {
+  const filas = await fetchPaginado(() => queryMovimientos(filtros))
+  return enriquecerMovimientos(filas)
 }
 
 // ---------------------------------------------------------------------------
