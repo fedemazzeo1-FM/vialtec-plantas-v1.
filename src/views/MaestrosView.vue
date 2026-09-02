@@ -4,11 +4,13 @@
 // no llama a Supabase directamente (memory/conventions.md).
 
 import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import VCard from '@/components/shared/VCard.vue'
 import VTable from '@/components/shared/VTable.vue'
 import VModal from '@/components/shared/VModal.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
+import VButton from '@/components/shared/VButton.vue'
 import { maestrosService } from '@/modules/maestros/services/maestros.service'
 
 // Config declarativa por catálogo: columnas de tabla, campos de formulario y
@@ -16,6 +18,7 @@ import { maestrosService } from '@/modules/maestros/services/maestros.service'
 const ENTIDADES = {
   encargados: {
     label: 'Encargados',
+    nombreSingular: 'encargado',
     columnas: [
       { key: 'nombre', label: 'Nombre' },
       { key: 'telefono', label: 'Teléfono' },
@@ -28,6 +31,7 @@ const ENTIDADES = {
   },
   proveedores: {
     label: 'Proveedores',
+    nombreSingular: 'proveedor',
     columnas: [
       { key: 'nombre', label: 'Nombre' },
       { key: 'material_principal', label: 'Material principal' },
@@ -38,33 +42,50 @@ const ENTIDADES = {
     ],
     vacio: () => ({ nombre: '', material_principal: '', activo: true }),
   },
-  patentes: {
-    label: 'Patentes',
+  // Separación Vehículos Propios/Externos (2026-09-01, pedido de Federico —
+  // relevado contra el legado: 30 patentes propias / 21 externas reales,
+  // `es_externa` ya existía en el schema pero convivían sin distinción
+  // visual clara en una sola tabla). Misma `plantas_patentes`, 2 tabs con
+  // filtro fijo cada una (ver patentesPropiasService/patentesExternasService
+  // en maestros.service.js) — "es_externa" ya no es columna/campo visible
+  // porque queda implícito por la tab en la que se está parado.
+  vehiculosPropios: {
+    label: 'Vehículos propios',
+    nombreSingular: 'vehículo propio',
     columnas: [
       { key: 'patente', label: 'Patente' },
       { key: 'tipo_camion', label: 'Tipo camión' },
       { key: 'tara', label: 'Tara (tn)' },
       { key: 'chofer_habitual', label: 'Chofer habitual' },
-      { key: 'es_externa', label: 'Origen', format: (v) => (v ? 'Externa' : 'Propia') },
     ],
     campos: [
       { key: 'patente', label: 'Patente', type: 'text', required: true },
       { key: 'tipo_camion', label: 'Tipo de camión', type: 'text' },
       { key: 'tara', label: 'Tara (tn)', type: 'number' },
       { key: 'chofer_habitual', label: 'Chofer habitual', type: 'text' },
-      { key: 'es_externa', label: 'Es externa', type: 'checkbox' },
     ],
-    vacio: () => ({
-      patente: '',
-      tipo_camion: '',
-      tara: null,
-      chofer_habitual: '',
-      es_externa: false,
-      activo: true,
-    }),
+    vacio: () => ({ patente: '', tipo_camion: '', tara: null, chofer_habitual: '', activo: true }),
+  },
+  vehiculosExternos: {
+    label: 'Vehículos externos',
+    nombreSingular: 'vehículo externo',
+    columnas: [
+      { key: 'patente', label: 'Patente' },
+      { key: 'tipo_camion', label: 'Tipo camión' },
+      { key: 'tara', label: 'Tara (tn)' },
+      { key: 'chofer_habitual', label: 'Chofer / transportista' },
+    ],
+    campos: [
+      { key: 'patente', label: 'Patente', type: 'text', required: true },
+      { key: 'tipo_camion', label: 'Tipo de camión', type: 'text' },
+      { key: 'tara', label: 'Tara (tn)', type: 'number' },
+      { key: 'chofer_habitual', label: 'Chofer / transportista', type: 'text' },
+    ],
+    vacio: () => ({ patente: '', tipo_camion: '', tara: null, chofer_habitual: '', activo: true }),
   },
   choferes: {
     label: 'Choferes',
+    nombreSingular: 'chofer',
     columnas: [
       { key: 'nombre', label: 'Nombre' },
       { key: 'dni', label: 'DNI' },
@@ -81,6 +102,7 @@ const ENTIDADES = {
   // insensitive, ver plantas_buscar_material_id() en la migración).
   materiales: {
     label: 'Materiales',
+    nombreSingular: 'material',
     columnas: [
       { key: 'nombre', label: 'Nombre' },
       { key: 'unidad', label: 'Unidad' },
@@ -110,7 +132,16 @@ const ENTIDADES = {
 }
 
 const tabs = Object.keys(ENTIDADES)
-const tabActiva = ref(tabs[0])
+
+// Persistencia de navegación (2026-09-01, memory/modules-status.md — "F5 /
+// duplicar pestaña"): la tab activa se sincroniza con `?tab=` en la URL. Sin
+// esto, recargar la página (o abrir el link desde otro lado) siempre volvía
+// a "Encargados" aunque el usuario estuviera parado en "Materiales". Se usa
+// `router.replace` (no `push`) para no ensuciar el historial con una entrada
+// nueva por cada click de tab.
+const route = useRoute()
+const router = useRouter()
+const tabActiva = ref(tabs.includes(route.query.tab) ? route.query.tab : tabs[0])
 const entidadActual = computed(() => ENTIDADES[tabActiva.value])
 const columnasConAcciones = computed(() => [
   ...entidadActual.value.columnas,
@@ -139,7 +170,14 @@ async function cargarRegistros() {
   }
 }
 
-watch(tabActiva, cargarRegistros, { immediate: true })
+watch(
+  tabActiva,
+  (nueva) => {
+    cargarRegistros()
+    router.replace({ query: { ...route.query, tab: nueva } })
+  },
+  { immediate: true }
+)
 
 function abrirNuevo() {
   editandoId.value = null
@@ -193,16 +231,16 @@ async function toggleActivo(registro) {
 <template>
   <div>
     <VSection title="Maestros">
-      <div class="mb-4 flex gap-1 border-b border-gray-200">
+      <div class="mb-4 flex gap-1 border-b border-border">
         <button
           v-for="tab in tabs"
           :key="tab"
           type="button"
-          class="px-3 py-2 text-sm"
+          class="border-b-2 px-3 py-2 text-sm font-semibold transition-colors duration-150"
           :class="
             tab === tabActiva
-              ? 'border-b-2 border-gray-900 font-medium text-gray-900'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'border-vialtec text-vialtec'
+              : 'border-transparent text-text-soft hover:text-text-mid'
           "
           @click="tabActiva = tab"
         >
@@ -210,22 +248,16 @@ async function toggleActivo(registro) {
         </button>
       </div>
 
-      <div v-if="error" class="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
 
       <div class="mb-3 flex justify-end">
-        <button
-          type="button"
-          class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700"
-          @click="abrirNuevo"
-        >
-          + Nuevo{{ tabActiva === 'patentes' ? 'a' : '' }} {{ entidadActual.label.slice(0, -1).toLowerCase() }}
-        </button>
+        <VButton size="sm" @click="abrirNuevo"> + Nuevo {{ entidadActual.nombreSingular }} </VButton>
       </div>
 
       <VCard>
-        <p v-if="cargando" class="text-sm text-gray-500">Cargando…</p>
+        <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
         <VTable v-else :columns="columnasConAcciones" :rows="registros">
           <template #cell-activo="{ row }">
             <VBadge :variant="row.activo ? 'success' : 'default'">
@@ -233,17 +265,15 @@ async function toggleActivo(registro) {
             </VBadge>
           </template>
           <template #cell-acciones="{ row }">
-            <div class="flex gap-3 text-sm">
-              <button type="button" class="text-blue-600 hover:underline" @click="abrirEdicion(row)">
-                Editar
-              </button>
-              <button type="button" class="text-gray-500 hover:underline" @click="toggleActivo(row)">
+            <div class="flex gap-1.5">
+              <VButton variant="secondary" size="sm" @click="abrirEdicion(row)">Editar</VButton>
+              <VButton variant="ghost" size="sm" @click="toggleActivo(row)">
                 {{ row.activo ? 'Desactivar' : 'Activar' }}
-              </button>
+              </VButton>
             </div>
           </template>
         </VTable>
-        <p v-if="!cargando && !registros.length" class="py-4 text-center text-sm text-gray-400">
+        <p v-if="!cargando && !registros.length" class="py-4 text-center text-sm text-text-soft">
           No hay {{ entidadActual.label.toLowerCase() }} cargados todavía.
         </p>
       </VCard>
@@ -251,11 +281,11 @@ async function toggleActivo(registro) {
 
     <VModal
       :open="modalAbierto"
-      :title="(editandoId ? 'Editar ' : 'Nuevo/a ') + entidadActual.label.slice(0, -1)"
+      :title="(editandoId ? 'Editar ' : 'Nuevo ') + entidadActual.nombreSingular"
       @update:open="modalAbierto = $event"
     >
       <form class="space-y-3" @submit.prevent="guardar">
-        <label v-for="campo in entidadActual.campos" :key="campo.key" class="block text-sm">
+        <label v-for="campo in entidadActual.campos" :key="campo.key" class="block text-sm text-text-mid">
           <template v-if="campo.type === 'checkbox'">
             <span class="flex items-center gap-2">
               <input v-model="formData[campo.key]" type="checkbox" />
@@ -267,7 +297,7 @@ async function toggleActivo(registro) {
             <input
               v-model.number="formData[campo.key]"
               type="number"
-              class="mt-1 w-full rounded border-gray-300 text-sm"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
             />
           </template>
           <template v-else>
@@ -275,31 +305,19 @@ async function toggleActivo(registro) {
             <input
               v-model="formData[campo.key]"
               type="text"
-              class="mt-1 w-full rounded border-gray-300 text-sm"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
             />
           </template>
         </label>
 
-        <label class="flex items-center gap-2 text-sm">
+        <label class="flex items-center gap-2 text-sm text-text-mid">
           <input v-model="formData.activo" type="checkbox" />
           Activo
         </label>
 
         <div class="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-            @click="modalAbierto = false"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            :disabled="guardando"
-            class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
-          >
-            {{ guardando ? 'Guardando…' : 'Guardar' }}
-          </button>
+          <VButton type="button" variant="secondary" @click="modalAbierto = false">Cancelar</VButton>
+          <VButton type="submit" :disabled="guardando">{{ guardando ? 'Guardando…' : 'Guardar' }}</VButton>
         </div>
       </form>
     </VModal>
