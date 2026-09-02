@@ -9,6 +9,7 @@ import VTable from '@/components/shared/VTable.vue'
 import VModal from '@/components/shared/VModal.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
+import VButton from '@/components/shared/VButton.vue'
 import {
   fetchFormulas,
   crearFormula,
@@ -147,22 +148,16 @@ cargarFormulas()
 <template>
   <div>
     <VSection title="Fórmulas">
-      <div v-if="error" class="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
 
       <div class="mb-3 flex justify-end">
-        <button
-          type="button"
-          class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700"
-          @click="abrirNueva"
-        >
-          + Nueva fórmula
-        </button>
+        <VButton size="sm" @click="abrirNueva">+ Nueva fórmula</VButton>
       </div>
 
       <VCard>
-        <p v-if="cargando" class="text-sm text-gray-500">Cargando…</p>
+        <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
         <VTable v-else :columns="columnas" :rows="formulas">
           <template #cell-tipo="{ row }">
             {{ row.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto' }}
@@ -173,13 +168,11 @@ cargarFormulas()
             </VBadge>
           </template>
           <template #cell-acciones="{ row }">
-            <div class="flex gap-3 text-sm">
-              <button type="button" class="text-blue-600 hover:underline" @click="abrirEdicion(row)">
-                Editar
-              </button>
-              <button type="button" class="text-gray-500 hover:underline" @click="toggleActivo(row)">
+            <div class="flex gap-1.5">
+              <VButton variant="secondary" size="sm" @click="abrirEdicion(row)">Editar</VButton>
+              <VButton variant="ghost" size="sm" @click="toggleActivo(row)">
                 {{ row.activo ? 'Desactivar' : 'Activar' }}
-              </button>
+              </VButton>
             </div>
           </template>
         </VTable>
@@ -193,35 +186,38 @@ cargarFormulas()
     >
       <form class="space-y-4" @submit.prevent="guardar">
         <div class="grid grid-cols-2 gap-3">
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Nombre
             <input
               v-model="formData.nombre"
               type="text"
-              class="mt-1 w-full rounded border-gray-300 text-sm"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
               placeholder="Ej: CAC D19"
             />
           </label>
 
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Tipo
-            <select v-model="formData.tipo" class="mt-1 w-full rounded border-gray-300 text-sm">
+            <select
+              v-model="formData.tipo"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            >
               <option value="asfalto">Asfalto</option>
               <option value="hormigon">Hormigón</option>
             </select>
           </label>
 
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Unidad de producción
             <input
               :value="formData.unidad"
               type="text"
               disabled
-              class="mt-1 w-full rounded border-gray-200 bg-gray-50 text-sm text-gray-500"
+              class="mt-1 w-full rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm text-text-soft"
             />
           </label>
 
-          <label class="flex items-center gap-2 self-end text-sm">
+          <label class="flex items-center gap-2 self-end text-sm text-text-mid">
             <input v-model="formData.activo" type="checkbox" />
             Activa
           </label>
@@ -229,10 +225,8 @@ cargarFormulas()
 
         <div>
           <div class="mb-2 flex items-center justify-between">
-            <p class="text-sm font-medium">Insumos</p>
-            <button type="button" class="text-sm text-blue-600 hover:underline" @click="agregarInsumo">
-              + Agregar insumo
-            </button>
+            <p class="text-sm font-semibold text-text">Insumos</p>
+            <VButton type="button" variant="ghost" size="sm" @click="agregarInsumo">+ Agregar insumo</VButton>
           </div>
 
           <VTable :columns="columnasInsumos" :rows="formData.insumos">
@@ -240,7 +234,7 @@ cargarFormulas()
               <input
                 v-model="row.material"
                 type="text"
-                class="w-full rounded border-gray-300 text-sm"
+                class="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
                 placeholder="Material"
               />
             </template>
@@ -249,41 +243,30 @@ cargarFormulas()
                 v-model.number="row.cantidad"
                 type="number"
                 step="0.01"
-                class="w-24 rounded border-gray-300 text-sm"
+                class="w-24 rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
               />
             </template>
             <template #cell-unidad="{ row }">
-              <select v-model="row.unidad" class="rounded border-gray-300 text-sm">
+              <select
+                v-model="row.unidad"
+                class="rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              >
                 <option v-for="u in UNIDADES_INSUMO" :key="u" :value="u">{{ u }}</option>
               </select>
             </template>
             <template #cell-acciones="{ row }">
-              <button type="button" class="text-red-500 hover:text-red-700" @click="quitarInsumo(row.id)">
-                Quitar
-              </button>
+              <VButton type="button" variant="ghost" size="sm" @click="quitarInsumo(row.id)">Quitar</VButton>
             </template>
           </VTable>
 
-          <p v-if="!formData.insumos.length" class="mt-2 text-sm text-gray-400">
+          <p v-if="!formData.insumos.length" class="mt-2 text-sm text-text-soft">
             Sin insumos cargados todavía.
           </p>
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-            @click="modalAbierto = false"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            :disabled="guardando"
-            class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
-          >
-            {{ guardando ? 'Guardando…' : 'Guardar' }}
-          </button>
+          <VButton type="button" variant="secondary" @click="modalAbierto = false">Cancelar</VButton>
+          <VButton type="submit" :disabled="guardando">{{ guardando ? 'Guardando…' : 'Guardar' }}</VButton>
         </div>
       </form>
     </VModal>

@@ -9,10 +9,13 @@ defineProps({
   },
 })
 
+// Colores clonados de Flota (equipos2.vialtec.app) — ver
+// memory/guia-estilo-flota.md. Mismo semáforo de 3 estados que el módulo
+// Stock del sistema legado (memory/relevamiento-sistema-viejo.md §6).
 const colorClass = {
-  rojo: 'bg-red-500',
-  amarillo: 'bg-yellow-400',
-  verde: 'bg-green-500',
+  rojo: 'bg-danger',
+  amarillo: 'bg-warning',
+  verde: 'bg-success',
 }
 </script>
 

@@ -11,6 +11,7 @@ import VKpiCard from '@/components/shared/VKpiCard.vue'
 import VTable from '@/components/shared/VTable.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
+import VButton from '@/components/shared/VButton.vue'
 import {
   fetchResumenGeneral,
   fetchAnaliticaProveedores,
@@ -105,10 +106,13 @@ const columnasDespachos = [
 const filasDespachos = computed(() =>
   despachos.value.map((d) => ({
     ...d,
-    fechaLabel: new Date(d.fecha).toLocaleString('es-AR'),
+    // Defensivo (2026-09-01): fecha/volumen deberían venir siempre completos
+    // desde plantas_v_despachos_camion, pero una fila con dato faltante no
+    // debe mostrar "Invalid Date"/"NaN" sin explicación en la tabla.
+    fechaLabel: d.fecha ? new Date(d.fecha).toLocaleString('es-AR') : '—',
     obraNombre: d.obra_id ? obrasPorId.value[d.obra_id]?.nombre ?? `Obra #${d.obra_id}` : '—',
     formulaNombre: d.formulaId ? formulasPorId.value[d.formulaId]?.nombre ?? '—' : '—',
-    volumenLabel: `${Number(d.volumen).toFixed(2)} ${d.unidad_volumen}`,
+    volumenLabel: d.volumen != null ? `${Number(d.volumen).toFixed(2)} ${d.unidad_volumen ?? ''}`.trim() : '—',
   }))
 )
 
@@ -146,12 +150,12 @@ cargarDespachos()
 <template>
   <div>
     <VSection title="Dashboard">
-      <div v-if="error" class="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
 
       <!-- KPIs del mes -->
-      <p v-if="cargandoResumen" class="mb-4 text-sm text-gray-500">Cargando resumen…</p>
+      <p v-if="cargandoResumen" class="mb-4 text-sm text-text-soft">Cargando resumen…</p>
       <div v-else class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <VKpiCard label="Asfalto (mes)" :value="resumen.asfaltoTn.toFixed(1)" unidad="tn" />
         <VKpiCard label="Hormigón (mes)" :value="resumen.hormigonM3.toFixed(1)" unidad="m³" />
@@ -164,25 +168,31 @@ cargarDespachos()
     <VSection title="Analítica de proveedores">
       <VCard class="mb-4">
         <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Desde
-            <input v-model="filtrosProveedores.desde" type="date" class="mt-1 w-full rounded border-gray-300 text-sm" />
+            <input
+              v-model="filtrosProveedores.desde"
+              type="date"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
           </label>
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Hasta
-            <input v-model="filtrosProveedores.hasta" type="date" class="mt-1 w-full rounded border-gray-300 text-sm" />
+            <input
+              v-model="filtrosProveedores.hasta"
+              type="date"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
           </label>
         </div>
-        <p class="mt-2 text-xs text-gray-400">
+        <p class="mt-2 text-xs text-text-soft">
           Sin fechas, muestra el mes en curso comparado contra el mismo largo de período inmediatamente anterior.
         </p>
-        <button type="button" class="mt-3 rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700" @click="cargarProveedores">
-          Filtrar
-        </button>
+        <VButton size="sm" class="mt-3" @click="cargarProveedores">Filtrar</VButton>
       </VCard>
 
       <VCard>
-        <p v-if="cargandoProveedores" class="text-sm text-gray-500">Cargando…</p>
+        <p v-if="cargandoProveedores" class="text-sm text-text-soft">Cargando…</p>
         <VTable v-else :columns="columnasProveedores" :rows="proveedores">
           <template #cell-cantidadActualTn="{ row }">{{ row.cantidadActualTn.toFixed(2) }} tn</template>
           <template #cell-cantidadAnteriorTn="{ row }">{{ row.cantidadAnteriorTn.toFixed(2) }} tn</template>
@@ -193,7 +203,7 @@ cargarDespachos()
             </VBadge>
           </template>
         </VTable>
-        <p v-if="!cargandoProveedores && !proveedores.length" class="py-4 text-center text-sm text-gray-400">
+        <p v-if="!cargandoProveedores && !proveedores.length" class="py-4 text-center text-sm text-text-soft">
           Sin ingresos de proveedores registrados en el rango elegido.
         </p>
       </VCard>
@@ -203,44 +213,54 @@ cargarDespachos()
     <VSection title="Historial detallado de despachos por camión">
       <VCard class="mb-4">
         <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Material
-            <select v-model="filtrosDespachos.material" class="mt-1 w-full rounded border-gray-300 text-sm">
+            <select
+              v-model="filtrosDespachos.material"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            >
               <option value="">Todos</option>
               <option value="asfalto">Asfalto</option>
               <option value="hormigon">Hormigón</option>
             </select>
           </label>
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Obra
-            <select v-model="filtrosDespachos.obraId" class="mt-1 w-full rounded border-gray-300 text-sm">
+            <select
+              v-model="filtrosDespachos.obraId"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            >
               <option value="">Todas</option>
               <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
             </select>
           </label>
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Desde
-            <input v-model="filtrosDespachos.desde" type="date" class="mt-1 w-full rounded border-gray-300 text-sm" />
+            <input
+              v-model="filtrosDespachos.desde"
+              type="date"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
           </label>
-          <label class="text-sm">
+          <label class="text-sm text-text-mid">
             Hasta
-            <input v-model="filtrosDespachos.hasta" type="date" class="mt-1 w-full rounded border-gray-300 text-sm" />
+            <input
+              v-model="filtrosDespachos.hasta"
+              type="date"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
           </label>
         </div>
         <div class="mt-3 flex gap-2">
-          <button type="button" class="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700" @click="cargarDespachos">
-            Filtrar
-          </button>
-          <button type="button" class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" @click="limpiarFiltrosDespachos">
-            Limpiar
-          </button>
+          <VButton size="sm" @click="cargarDespachos">Filtrar</VButton>
+          <VButton variant="ghost" size="sm" @click="limpiarFiltrosDespachos">Limpiar</VButton>
         </div>
       </VCard>
 
       <VCard>
-        <p v-if="cargandoDespachos" class="text-sm text-gray-500">Cargando…</p>
+        <p v-if="cargandoDespachos" class="text-sm text-text-soft">Cargando…</p>
         <VTable v-else :columns="columnasDespachos" :rows="filasDespachos" />
-        <p v-if="!cargandoDespachos && !filasDespachos.length" class="py-4 text-center text-sm text-gray-400">
+        <p v-if="!cargandoDespachos && !filasDespachos.length" class="py-4 text-center text-sm text-text-soft">
           No hay despachos que coincidan con el filtro.
         </p>
       </VCard>

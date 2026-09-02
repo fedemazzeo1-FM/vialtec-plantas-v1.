@@ -27,21 +27,25 @@ defineEmits(['update:page'])
 
 <template>
   <div class="overflow-x-auto">
-    <table class="min-w-full divide-y divide-gray-200 text-sm">
-      <thead>
+    <table class="min-w-full divide-y divide-border text-sm">
+      <thead class="bg-gray-50">
         <tr>
           <th
             v-for="col in columns"
             :key="col.key"
-            class="px-3 py-2 text-left font-medium text-gray-500"
+            class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-text-soft"
           >
             {{ col.label }}
           </th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-100">
-        <tr v-for="(row, i) in rows" :key="row.id ?? i">
-          <td v-for="col in columns" :key="col.key" class="px-3 py-2 align-middle">
+      <tbody class="divide-y divide-border">
+        <tr
+          v-for="(row, i) in rows"
+          :key="row.id ?? i"
+          class="text-text transition-colors duration-150 hover:bg-gray-50"
+        >
+          <td v-for="col in columns" :key="col.key" class="px-4 py-3 align-middle">
             <slot :name="`cell-${col.key}`" :row="row" :index="i">
               {{ col.format ? col.format(row[col.key], row) : row[col.key] }}
             </slot>
@@ -50,7 +54,7 @@ defineEmits(['update:page'])
       </tbody>
     </table>
 
-    <div v-if="total != null" class="mt-3 flex items-center justify-between text-xs text-gray-500">
+    <div v-if="total != null" class="mt-3 flex items-center justify-between text-xs text-text-soft">
       <p>
         Mostrando {{ rows.length ? (page - 1) * pageSize + 1 : 0 }}–{{ Math.min(page * pageSize, total) }}
         de {{ total }}

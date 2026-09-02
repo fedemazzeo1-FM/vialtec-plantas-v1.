@@ -7,7 +7,7 @@ defineProps({
 
 <template>
   <section class="mb-6">
-    <h2 v-if="title" class="mb-2 text-lg font-semibold">{{ title }}</h2>
+    <h2 v-if="title" class="mb-2 text-lg font-bold text-text">{{ title }}</h2>
     <slot />
   </section>
 </template>

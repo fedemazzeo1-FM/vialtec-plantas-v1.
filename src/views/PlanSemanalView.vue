@@ -9,6 +9,7 @@ import VCard from '@/components/shared/VCard.vue'
 import VKpiCard from '@/components/shared/VKpiCard.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
+import VButton from '@/components/shared/VButton.vue'
 import {
   obtenerRangoSemana,
   fetchPedidosSemana,
@@ -37,15 +38,32 @@ const error = ref(null)
 const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
 const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
 
+function hoyISO() {
+  const d = new Date()
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+  return d.toISOString().slice(0, 10)
+}
+
+// Formato de mejora visual (2026-09-01, pedido de Federico: "dejalo bien
+// profesional"): cada día ahora trae número de fecha + nombre de mes
+// separados (para el header de la columna) y un flag `esHoy` para resaltar
+// la columna del día actual, mismo criterio que un calendario semanal
+// estándar.
 const diasSemana = computed(() => {
   const { lunes } = obtenerRangoSemana(fechaRef.value)
+  const hoy = hoyISO()
   return Array.from({ length: 7 }, (_, i) => {
     const fecha = new Date(lunes)
     fecha.setDate(lunes.getDate() + i)
     const iso = fecha.toISOString().slice(0, 10)
     return {
       etiqueta: NOMBRES_DIA[i],
+      etiquetaCorta: NOMBRES_DIA[i].slice(0, 3),
+      numeroDia: fecha.getDate(),
+      mesLabel: fecha.toLocaleDateString('es-AR', { month: 'short' }).replace('.', ''),
       iso,
+      esHoy: iso === hoy,
+      esFinDeSemana: i >= 5,
       pedidos: pedidos.value.filter((p) => p.fecha_programada === iso),
     }
   })
@@ -111,22 +129,18 @@ cargarSemana()
   <div>
     <VSection title="Plan semanal">
       <div class="mb-4 flex items-center justify-between">
-        <button type="button" class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" @click="semanaAnterior">
-          ‹ Semana anterior
-        </button>
-        <p class="text-sm font-medium text-gray-700">{{ rangoLabel }}</p>
-        <button type="button" class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" @click="semanaSiguiente">
-          Semana siguiente ›
-        </button>
+        <VButton variant="ghost" size="sm" @click="semanaAnterior">‹ Semana anterior</VButton>
+        <p class="text-sm font-semibold text-text">{{ rangoLabel }}</p>
+        <VButton variant="ghost" size="sm" @click="semanaSiguiente">Semana siguiente ›</VButton>
       </div>
 
-      <div v-if="error" class="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
 
       <!-- Totalizador general: siempre las dos métricas en paralelo -->
       <VCard class="mb-4">
-        <p class="mb-2 text-sm font-medium text-gray-500">Total semana — todas las obras</p>
+        <p class="mb-2 text-sm font-semibold text-text-soft">Total semana — todas las obras</p>
         <div class="grid grid-cols-2 gap-3">
           <VKpiCard label="Asfalto" :value="totales.total.asfaltoTn.toFixed(1)" unidad="tn" />
           <VKpiCard label="Hormigón" :value="totales.total.hormigonM3.toFixed(1)" unidad="m³" />
@@ -136,7 +150,7 @@ cargarSemana()
       <!-- Totales por obra: mismas dos métricas en paralelo -->
       <div v-if="totales.porObra.length" class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <VCard v-for="t in totales.porObra" :key="t.obraId">
-          <p class="mb-2 text-sm font-medium text-gray-500">{{ nombreObra(t.obraId) }}</p>
+          <p class="mb-2 text-sm font-semibold text-text-soft">{{ nombreObra(t.obraId) }}</p>
           <div class="grid grid-cols-2 gap-3">
             <VKpiCard label="Asfalto" :value="t.asfaltoTn.toFixed(1)" unidad="tn" />
             <VKpiCard label="Hormigón" :value="t.hormigonM3.toFixed(1)" unidad="m³" />
@@ -144,34 +158,64 @@ cargarSemana()
         </VCard>
       </div>
 
-      <p v-if="cargando" class="text-sm text-gray-500">Cargando…</p>
+      <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
 
-      <!-- Matriz lunes a domingo -->
-      <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-7">
-        <VCard v-for="dia in diasSemana" :key="dia.iso">
-          <p class="mb-2 text-sm font-semibold">
-            {{ dia.etiqueta }} <span class="font-normal text-gray-400">{{ dia.iso }}</span>
-          </p>
-          <p v-if="!dia.pedidos.length" class="text-xs text-gray-400">Sin pedidos</p>
-          <div v-for="p in dia.pedidos" :key="p.id" class="mb-2 rounded border border-gray-100 p-2 text-xs">
-            <p class="font-medium">{{ nombreObra(p.obra_id) }}</p>
-            <p class="text-gray-500">
-              {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
-              {{ p.cantidad_solicitada }} {{ p.tipo === 'hormigon' ? 'm³' : 'tn' }}
-            </p>
-            <div class="mt-1 flex items-center justify-between">
-              <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>
-              <button
-                v-if="p.estado === 'solicitado'"
-                type="button"
-                class="text-blue-600 hover:underline"
-                @click="confirmar(p)"
+      <!-- Matriz lunes a domingo: grilla de calendario real (una sola grilla
+           con separadores internos, no 7 cards sueltas) — el día actual se
+           resalta con el acento de marca y fin de semana lleva un fondo
+           levemente distinto, mismo lenguaje visual que un calendario
+           semanal estándar. -->
+      <div v-else class="overflow-hidden rounded-xl border border-border">
+        <div class="grid grid-cols-1 divide-y divide-border md:grid-cols-7 md:divide-x md:divide-y-0">
+          <div
+            v-for="dia in diasSemana"
+            :key="dia.iso"
+            class="flex flex-col"
+            :class="dia.esFinDeSemana && !dia.esHoy ? 'bg-gray-50/60' : ''"
+          >
+            <div
+              class="flex items-baseline justify-between gap-2 border-b px-3 py-2"
+              :class="dia.esHoy ? 'border-vialtec/30 bg-vialtec/5' : 'border-border'"
+            >
+              <p
+                class="text-xs font-bold uppercase tracking-wide"
+                :class="dia.esHoy ? 'text-vialtec' : 'text-text-soft'"
               >
-                Confirmar
-              </button>
+                {{ dia.etiquetaCorta }}
+              </p>
+              <p class="flex items-center gap-1 text-xs">
+                <span
+                  class="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold"
+                  :class="dia.esHoy ? 'bg-vialtec text-white' : 'text-text-mid'"
+                >
+                  {{ dia.numeroDia }}
+                </span>
+                <span class="text-text-soft">{{ dia.mesLabel }}</span>
+              </p>
+            </div>
+
+            <div class="min-h-[88px] flex-1 space-y-2 p-2">
+              <p v-if="!dia.pedidos.length" class="px-1 py-2 text-center text-xs text-text-soft/70">Sin pedidos</p>
+              <div
+                v-for="p in dia.pedidos"
+                :key="p.id"
+                class="rounded-lg border border-border bg-white p-2 text-xs shadow-sm transition-shadow duration-150 hover:shadow"
+              >
+                <p class="truncate font-semibold text-text" :title="nombreObra(p.obra_id)">{{ nombreObra(p.obra_id) }}</p>
+                <p class="truncate text-text-soft">
+                  {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
+                  {{ p.cantidad_solicitada }} {{ p.tipo === 'hormigon' ? 'm³' : 'tn' }}
+                </p>
+                <div class="mt-1.5 flex items-center justify-between gap-1">
+                  <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>
+                  <VButton v-if="p.estado === 'solicitado'" variant="ghost" size="sm" @click="confirmar(p)">
+                    Confirmar
+                  </VButton>
+                </div>
+              </div>
             </div>
           </div>
-        </VCard>
+        </div>
       </div>
     </VSection>
   </div>

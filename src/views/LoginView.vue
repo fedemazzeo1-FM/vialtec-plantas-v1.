@@ -7,6 +7,8 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
+import VButton from '@/components/shared/VButton.vue'
+import logoVialtec from '@/assets/img/logo-vialtec.png'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -33,41 +35,38 @@ async function enviar() {
 
 <template>
   <div class="flex min-h-screen items-center justify-center bg-gray-50">
-    <form class="w-full max-w-sm rounded border border-gray-200 bg-white p-6 shadow-sm" @submit.prevent="enviar">
-      <p class="mb-4 text-lg font-semibold">VialTec Plantas</p>
+    <form class="w-full max-w-sm rounded-xl border border-border bg-white p-6 shadow-sm" @submit.prevent="enviar">
+      <img :src="logoVialtec" alt="VIAL-TEC S.A." class="mx-auto mb-4 h-14 w-auto" />
+      <p class="mb-4 text-center text-sm font-semibold uppercase tracking-wide text-text-soft">Plantas</p>
 
-      <div v-if="error" class="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
 
-      <label class="mb-3 block text-sm">
+      <label class="mb-3 block text-sm text-text-mid">
         Email
         <input
           v-model="email"
           type="email"
           required
           autocomplete="username"
-          class="mt-1 w-full rounded border-gray-300 text-sm"
+          class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
         />
       </label>
-      <label class="mb-4 block text-sm">
+      <label class="mb-4 block text-sm text-text-mid">
         Contraseña
         <input
           v-model="password"
           type="password"
           required
           autocomplete="current-password"
-          class="mt-1 w-full rounded border-gray-300 text-sm"
+          class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
         />
       </label>
 
-      <button
-        type="submit"
-        :disabled="enviando"
-        class="w-full rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
-      >
+      <VButton type="submit" :disabled="enviando" class="w-full">
         {{ enviando ? 'Ingresando…' : 'Ingresar' }}
-      </button>
+      </VButton>
     </form>
   </div>
 </template>
