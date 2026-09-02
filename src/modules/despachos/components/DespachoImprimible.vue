@@ -6,6 +6,8 @@
 // ValeImprimible.vue), misma mecánica de impresión (.imprimible + @page en
 // src/assets/main.css, botón "Imprimir" -> window.print()).
 
+import logoVialtec from '@/assets/img/logo-vialtec.png'
+
 const props = defineProps({
   pedido: { type: Object, required: true },
   obraNombre: { type: String, default: '' },
@@ -26,16 +28,7 @@ function unidad(tipo) {
 <template>
   <div class="border border-gray-300 p-6 text-sm text-gray-800">
     <div class="mb-4 flex items-start justify-between border-b border-gray-300 pb-3">
-      <div>
-        <p class="text-lg font-extrabold leading-none text-gray-800">
-          VIAL<span class="text-vialtec">-TEC</span> <span class="font-semibold text-gray-400">S.A.</span>
-        </p>
-        <p class="text-[10px] uppercase tracking-[0.2em] text-gray-400">Obras viales</p>
-        <div
-          class="mt-1 h-1.5 w-28"
-          style="background-color: #7b2f8e; background-image: repeating-linear-gradient(90deg, transparent 0 4px, white 4px 6px)"
-        ></div>
-      </div>
+      <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-12 w-auto" />
       <div class="text-right">
         <p class="text-lg font-bold">Remito de despacho</p>
         <p class="text-gray-500">N° remito: {{ pedido.nro_remito_global || '—' }}</p>

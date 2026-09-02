@@ -52,6 +52,8 @@ const {
   obraNombreParaImprimir,
   mezclaNombreParaImprimir,
   acumuladoParaImprimir,
+  pedidoParaImprimir,
+  rangoValesParaImprimir,
   abrirImpresionVale,
   abrirImpresionRemito,
   imprimir,
@@ -376,7 +378,7 @@ iniciar()
       :title="modoImpresion === 'remito' ? 'Remito de entrega' : 'Vale de pesaje'"
       @update:open="modalImpresionAbierto = $event"
     >
-      <div class="imprimible">
+      <div class="imprimible" :class="{ 'modo-remito': modoImpresion === 'remito' }">
         <ValeImprimible
           v-if="valeParaImprimir"
           :vale="valeParaImprimir"
@@ -384,6 +386,9 @@ iniciar()
           :mezcla-nombre="mezclaNombreParaImprimir"
           :modo="modoImpresion"
           :acumulado-tn="acumuladoParaImprimir"
+          :pedido="pedidoParaImprimir"
+          :rango-vales="rangoValesParaImprimir"
+          :patentes="patentes"
         />
       </div>
       <div class="mt-4 flex justify-end gap-2">

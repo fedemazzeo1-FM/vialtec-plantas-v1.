@@ -15,7 +15,7 @@
 // filas de golpe cuando se migre el historial legado).
 
 import { supabase } from '@/config/supabase'
-import { fetchPagina } from '@/services/fetch-paginado'
+import { fetchPagina, fetchPaginado } from '@/services/fetch-paginado'
 
 const TABLA_PEDIDOS = 'plantas_pedidos'
 const TABLA_VALES = 'plantas_vales'
@@ -45,17 +45,25 @@ export function formatearNumeroVale(numero) {
  * "Vale Asfalto" de Báscula. Sin filtro por saldo pendiente a propósito
  * (decisión de Federico, 2026-08-28): el sistema legado permite seguir
  * pesando contra un pedido ya despachado — memory/relevamiento-sistema-viejo.md §2.
+ *
+ * Fix 2026-09-01 (regla de paginación, memory/architecture.md): el filtro
+ * `estado in (confirmado, despachado)` NO tiene corte de fecha — `despachado`
+ * acumula para siempre (nunca vuelve a otro estado), así que el total crece
+ * sin límite con el historial migrado + el uso normal del sistema. Sin
+ * fetchPaginado() acá, al superar 1000 filas PostgREST cortaría en silencio
+ * — y como el `order` es ascendente (más viejo primero), lo que se pierde
+ * serían los pedidos MÁS RECIENTES, justo los que un operador necesita
+ * elegir en el selector.
  */
 export async function fetchPedidosAsfaltoParaPesada() {
-  const { data, error } = await supabase
-    .from(TABLA_PEDIDOS)
-    .select('*')
-    .eq('tipo', 'asfalto')
-    .in('estado', ['confirmado', 'despachado'])
-    .order('fecha_programada', { ascending: true })
-
-  if (error) throw error
-  return data ?? []
+  return fetchPaginado(() =>
+    supabase
+      .from(TABLA_PEDIDOS)
+      .select('*')
+      .eq('tipo', 'asfalto')
+      .in('estado', ['confirmado', 'despachado'])
+      .order('fecha_programada', { ascending: true })
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +104,14 @@ export async function obtenerProximoNumeroVale() {
  * nunca se lee de `plantas_vales.acumulado_obra_tn` como fuente de verdad —
  * esa columna es solo una foto informativa al momento de pesar.
  *
+ * Devuelve también el rango de `numero_vale` correlativos del día (2026-09-01,
+ * a pedido de Federico con una foto de un remito real de VialTec): el
+ * "REMITO" impreso tiene que mostrar "S/VALE DE BALANZA N° <desde> AL
+ * <hasta> (CORRELATIVOS)" — el respaldo de básculas de todo lo acumulado ese
+ * día para ese pedido/obra, no solo el vale individual que se está mirando.
+ *
  * @param {{ pedidoId?: string|null, obraId?: number|null, fechaCorte: string|Date }} args
+ * @returns {Promise<{ acumuladoTn: number, valeDesde: number|null, valeHasta: number|null, cantidadVales: number }>}
  */
 export async function obtenerAcumuladoHastaFecha({ pedidoId, obraId, fechaCorte }) {
   const corte = new Date(fechaCorte)
@@ -105,7 +120,7 @@ export async function obtenerAcumuladoHastaFecha({ pedidoId, obraId, fechaCorte 
 
   let query = supabase
     .from(TABLA_VALES)
-    .select('peso_neto, unidad')
+    .select('peso_neto, unidad, numero_vale')
     .eq('tipo_vale', 'asfalto')
     .gte('fecha_pesada', inicioDia.toISOString())
     .lte('fecha_pesada', corte.toISOString())
@@ -115,7 +130,15 @@ export async function obtenerAcumuladoHastaFecha({ pedidoId, obraId, fechaCorte 
   const { data, error } = await query
   if (error) throw error
 
-  return (data ?? []).reduce((acumulado, vale) => acumulado + aTn(vale.peso_neto, vale.unidad), 0)
+  const vales = data ?? []
+  const numeros = vales.map((v) => v.numero_vale).filter((n) => n != null)
+
+  return {
+    acumuladoTn: vales.reduce((acumulado, vale) => acumulado + aTn(vale.peso_neto, vale.unidad), 0),
+    valeDesde: numeros.length ? Math.min(...numeros) : null,
+    valeHasta: numeros.length ? Math.max(...numeros) : null,
+    cantidadVales: numeros.length,
+  }
 }
 
 // ---------------------------------------------------------------------------

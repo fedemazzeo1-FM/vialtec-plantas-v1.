@@ -22,14 +22,24 @@
    el resto de la página (sidebar, modal, botones) se oculta. Reutilizable por
    cualquier módulo que necesite imprimir un comprobante.
 
-   @page en A4 landscape: el vale de báscula se imprime en dos copias
-   (planta + chofer) lado a lado (Logica sis. plantas v1.rtf §2.4) — solo
-   entra en una hoja apaisada. El remito (una sola copia) también hereda esta
-   orientación; no hay otro documento imprimible en la app hoy que la
-   necesite distinta. */
+   @page en A4 landscape por default: el vale de báscula se imprime en dos
+   copias (planta + chofer) lado a lado (Logica sis. plantas v1.rtf §2.4) —
+   solo entra en una hoja apaisada.
+
+   Fix 2026-09-01 (contra una foto real de un remito de VialTec S.A.): el
+   REMITO es un documento A4 vertical (portrait), no apaisado — es la réplica
+   de un formulario preimpreso en papel carta/A4 común. Se resuelve con una
+   "named page" de CSS (`@page remito`) + la propiedad `page` en el elemento
+   `.imprimible.modo-remito` — el vale sigue usando el `@page` por default
+   (landscape), el remito pisa la orientación solo para sí mismo. */
 @media print {
   @page {
     size: A4 landscape;
+    margin: 10mm;
+  }
+
+  @page remito {
+    size: A4 portrait;
     margin: 10mm;
   }
 
@@ -45,5 +55,8 @@
     top: 0;
     left: 0;
     width: 100%;
+  }
+  .imprimible.modo-remito {
+    page: remito;
   }
 }

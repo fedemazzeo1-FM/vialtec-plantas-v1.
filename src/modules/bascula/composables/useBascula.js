@@ -361,21 +361,33 @@ export function useBascula() {
   const obraNombreParaImprimir = ref('')
   const mezclaNombreParaImprimir = ref('')
   const acumuladoParaImprimir = ref(null)
+  // Sección "remito" (2026-09-01, contra foto real de un remito de VialTec —
+  // ver ValeImprimible.vue): pedido completo (nro_remito_global, ubicacion,
+  // cliente_externo) + rango de vales correlativos del acumulado del día.
+  const pedidoParaImprimir = ref(null)
+  const rangoValesParaImprimir = ref({ valeDesde: null, valeHasta: null, cantidadVales: 0 })
 
   async function abrirImpresion(vale, modo) {
     valeParaImprimir.value = vale
-    obraNombreParaImprimir.value = vale.obra_id ? obrasPorId.value[vale.obra_id]?.nombre ?? '' : ''
     const pedido = vale.pedido_id ? pedidosPorId.value[vale.pedido_id] : null
+    pedidoParaImprimir.value = pedido
+    // Destino: obra si la tiene; si no, venta externa -> cliente_externo del
+    // pedido (una pesada de venta externa no trae obra_id, memory/business-rules.md).
+    obraNombreParaImprimir.value = vale.obra_id
+      ? obrasPorId.value[vale.obra_id]?.nombre ?? ''
+      : pedido?.cliente_externo ?? ''
     mezclaNombreParaImprimir.value = pedido ? formulasPorId.value[pedido.formula_id]?.nombre ?? '' : ''
     modoImpresion.value = modo
     modalImpresionAbierto.value = true
     error.value = null
     try {
-      acumuladoParaImprimir.value = await obtenerAcumuladoHastaFecha({
+      const { acumuladoTn, valeDesde, valeHasta, cantidadVales } = await obtenerAcumuladoHastaFecha({
         pedidoId: vale.pedido_id,
         obraId: vale.obra_id,
         fechaCorte: vale.fecha_pesada,
       })
+      acumuladoParaImprimir.value = acumuladoTn
+      rangoValesParaImprimir.value = { valeDesde, valeHasta, cantidadVales }
     } catch (e) {
       error.value = e.message
     }
@@ -438,6 +450,8 @@ export function useBascula() {
     obraNombreParaImprimir,
     mezclaNombreParaImprimir,
     acumuladoParaImprimir,
+    pedidoParaImprimir,
+    rangoValesParaImprimir,
     abrirImpresionVale,
     abrirImpresionRemito,
     imprimir,
