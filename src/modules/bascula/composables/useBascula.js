@@ -22,14 +22,18 @@ import { computed, reactive, ref } from 'vue'
 import {
   fetchPedidosAsfaltoParaPesada,
   fetchHistorialVales,
+  fetchTodosLosVales,
   registrarPesada,
   obtenerAcumuladoHastaFecha,
   obtenerProximoNumeroVale,
   calcularDiferencia,
+  formatearNumeroVale,
 } from '@/modules/bascula/services/bascula.service'
-import { fetchObras } from '@/services/flota.service'
+import { fetchObras, fetchNombresPorEmail } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { patentesService, proveedoresService } from '@/modules/maestros/services/maestros.service'
+import { hoyISO } from '@/services/fecha'
+import { exportarExcel, nombreArchivoConFecha } from '@/services/excel-export'
 
 export const ETIQUETA_TIPO_VALE = {
   asfalto: 'Salida asfalto',
@@ -42,6 +46,24 @@ export const VARIANTE_TIPO_VALE = {
   hormigon: 'default',
   ingreso_arido: 'warning',
   egreso_arido: 'danger',
+}
+
+// Códigos cortos TIPO/E-S del cuadro "Movimientos del día" (réplica exacta
+// del legado, memory/relevamiento-sistema-viejo.md §2, verificado en vivo
+// 2026-09-02): la columna TIPO short-codea a "ING"/"VALE" (ambos "Vale
+// Asfalto" y "Vale Salida Áridos" quedan como "VALE" — el legado los
+// nombra igual, la columna E/S es la que distingue entrada/salida real).
+export const TIPO_CORTO_VALE = {
+  asfalto: 'VALE',
+  hormigon: 'VALE',
+  ingreso_arido: 'ING',
+  egreso_arido: 'VALE',
+}
+export const ENTRADA_SALIDA_VALE = {
+  asfalto: 'S',
+  hormigon: 'S',
+  ingreso_arido: 'E',
+  egreso_arido: 'S',
 }
 
 // Opciones del select de tipo dentro de cada puerta — mismo texto exacto que
@@ -288,20 +310,69 @@ export function useBascula() {
   const totalHistorial = ref(0)
   const paginaHistorial = ref(1)
   const cargandoHistorial = ref(false)
-  const filtros = reactive({ tipoVale: '', obraId: '', patente: '', desde: '', hasta: '' })
+  // Default "Hoy" (2026-09-02, réplica del legado — memory/relevamiento-
+  // sistema-viejo.md §2: "Movimientos del día" filtra Desde/Hasta
+  // prellenado con la fecha de hoy, verificado de nuevo en vivo hoy contra
+  // produccion.vialtec.app). "Ver histórico completo" limpia el rango.
+  const filtros = reactive({ tipoVale: '', obraId: '', patente: '', desde: hoyISO(), hasta: hoyISO() })
 
-  const filasHistorial = computed(() =>
-    historial.value.map((v) => {
-      const diferencia = calcularDiferencia(v)
-      return {
-        ...v,
-        obraNombre: v.obra_id ? obrasPorId.value[v.obra_id]?.nombre ?? `Obra #${v.obra_id}` : '—',
-        pesoNetoLabel: `${v.peso_neto} ${v.unidad}`,
-        fechaLabel: new Date(v.fecha_pesada).toLocaleString('es-AR'),
-        diferenciaLabel: diferencia == null ? '—' : `${diferencia > 0 ? '+' : ''}${diferencia.toFixed(2)} tn`,
-      }
-    })
-  )
+  // Nombres de responsable (2026-09-02, réplica exacta del cuadro del
+  // legado, migración 20): `responsable_email` viene crudo en cada vale —
+  // se cruza una sola vez por página contra flota_usuarios_email (mismo
+  // mecanismo que ya usa auth.store.js/stock.service.js, no duplicado) en
+  // vez de una consulta por fila.
+  const nombresPorEmail = ref({})
+
+  /**
+   * Enriquece una fila cruda de plantas_vales con los labels que arma la
+   * réplica del cuadro del legado — factoreado acá (no inline en el
+   * computed) porque lo reusa tal cual exportarHistorialExcel() más abajo,
+   * memory/conventions.md: no duplicar la misma transformación dos veces.
+   */
+  function enriquecerVale(v, mapaNombres = nombresPorEmail.value) {
+    const diferencia = calcularDiferencia(v)
+    const numeroRemitoIngreso = v.plantas_ingresos?.[0]?.numero_remito
+    const cantidadRemitoIngreso = v.plantas_ingresos?.[0]?.cantidad
+    // Obra efectiva: vale.obra_id si la tiene, si no la del pedido
+    // asociado (vales de asfalto migrados del histórico legado quedan con
+    // obra_id NULL en la fila del vale — memory/pending.md, ver comentario
+    // de fetchHistorialVales()).
+    const obraIdEfectiva = v.obra_id ?? v.plantas_pedidos?.obra_id
+    return {
+      ...v,
+      obraNombre: obraIdEfectiva
+        ? obrasPorId.value[obraIdEfectiva]?.nombre ?? `Obra #${obraIdEfectiva}`
+        : v.plantas_pedidos?.cliente_externo || '—',
+      pesoNetoLabel: `${v.peso_neto} ${v.unidad}`,
+      fechaLabel: new Date(v.fecha_pesada).toLocaleString('es-AR'),
+      horaLabel: new Date(v.fecha_pesada).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+      diferenciaLabel: diferencia == null ? '—' : `${diferencia > 0 ? '+' : ''}${diferencia.toFixed(2)} tn`,
+      // MATERIAL/OBRA combinada (columna única en el legado): obra para
+      // asfalto (con el mismo fallback al pedido de arriba), material de
+      // texto libre para ingreso (vive en plantas_ingresos.material, no
+      // en el vale — ver comentario de fetchHistorialVales()) / egreso.
+      materialObraLabel:
+        v.tipo_vale === 'asfalto'
+          ? obraIdEfectiva
+            ? obrasPorId.value[obraIdEfectiva]?.nombre ?? `Obra #${obraIdEfectiva}`
+            : v.plantas_pedidos?.cliente_externo || '—'
+          : v.tipo_vale === 'ingreso_arido'
+            ? v.plantas_ingresos?.[0]?.material || '—'
+            : v.material || '—',
+      remitoLabel: numeroRemitoIngreso || '—',
+      responsableLabel: v.responsable_email ? mapaNombres[v.responsable_email] ?? v.responsable_email : '—',
+      acumuladoLabel: v.tipo_vale === 'asfalto' && v.acumulado_obra_tn != null ? `${Number(v.acumulado_obra_tn).toFixed(2)} tn` : '—',
+      // S/REMITO y DIF. (legado): solo tienen valor en filas de ingreso —
+      // memory/relevamiento-sistema-viejo.md §2, verificado en vivo: vacías
+      // en filas de asfalto/egreso. calcularDiferencia() ya devuelve null
+      // para esos casos, mismo criterio acá.
+      sRemitoLabel: cantidadRemitoIngreso != null ? `${Number(cantidadRemitoIngreso).toFixed(2)} tn` : '—',
+      tipoCorto: TIPO_CORTO_VALE[v.tipo_vale] ?? v.tipo_vale,
+      entradaSalida: ENTRADA_SALIDA_VALE[v.tipo_vale] ?? '—',
+    }
+  }
+
+  const filasHistorial = computed(() => historial.value.map(enriquecerVale))
 
   async function cargarHistorial() {
     cargandoHistorial.value = true
@@ -319,6 +390,8 @@ export function useBascula() {
       )
       historial.value = resultado.filas
       totalHistorial.value = resultado.total
+      const emails = resultado.filas.map((v) => v.responsable_email).filter(Boolean)
+      if (emails.length) nombresPorEmail.value = await fetchNombresPorEmail(emails)
     } catch (e) {
       error.value = e.message
     } finally {
@@ -344,6 +417,61 @@ export function useBascula() {
   function cambiarPaginaHistorial(pagina) {
     paginaHistorial.value = pagina
     cargarHistorial()
+  }
+
+  // -------------------------------------------------------------------------
+  // Exportar a Excel (2026-09-02, pedido de Federico — botón "Excel" que
+  // tenía el legado sobre "Movimientos del día", memory/relevamiento-sistema-
+  // viejo.md §2). Exporta TODO lo que matchea el filtro activo (no solo la
+  // página de 50 en pantalla, ver fetchTodosLosVales()), mismas columnas y
+  // mismo orden que la tabla — reusa enriquecerVale(), no duplica los labels.
+  // -------------------------------------------------------------------------
+
+  const exportandoHistorial = ref(false)
+
+  async function exportarHistorialExcel() {
+    exportandoHistorial.value = true
+    error.value = null
+    try {
+      const filasCrudas = await fetchTodosLosVales({
+        tipoVale: filtros.tipoVale || undefined,
+        obraId: filtros.obraId || undefined,
+        patente: filtros.patente || undefined,
+        desde: filtros.desde || undefined,
+        hasta: filtros.hasta || undefined,
+      })
+      const emails = filasCrudas.map((v) => v.responsable_email).filter(Boolean)
+      const mapaNombres = emails.length ? await fetchNombresPorEmail(emails) : {}
+      const filas = filasCrudas.map((v) => enriquecerVale(v, mapaNombres))
+
+      await exportarExcel(nombreArchivoConFecha('bascula-movimientos'), [
+        {
+          nombre: 'Movimientos',
+          filas,
+          columnas: [
+            { key: 'horaLabel', label: 'Hora' },
+            { key: 'fecha_pesada', label: 'Fecha', format: (v) => new Date(v).toLocaleDateString('es-AR') },
+            { key: 'tipoCorto', label: 'Tipo' },
+            { key: 'materialObraLabel', label: 'Material/Obra' },
+            { key: 'patente', label: 'Patente' },
+            { key: 'remitoLabel', label: 'Remito' },
+            { key: 'responsableLabel', label: 'Responsable' },
+            { key: 'numero_vale', label: 'N° Vale', format: (v) => formatearNumeroVale(v) },
+            { key: 'peso_bruto', label: 'Bruto (tn)', format: (v) => Number(v).toFixed(2) },
+            { key: 'tara', label: 'Tara (tn)', format: (v) => Number(v).toFixed(2) },
+            { key: 'peso_neto', label: 'Neto (tn)', format: (v) => Number(v).toFixed(2) },
+            { key: 'acumuladoLabel', label: 'Acum.' },
+            { key: 'sRemitoLabel', label: 'S/Remito' },
+            { key: 'diferenciaLabel', label: 'Dif.' },
+            { key: 'entradaSalida', label: 'E/S' },
+          ],
+        },
+      ])
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      exportandoHistorial.value = false
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -406,15 +534,19 @@ export function useBascula() {
   }
 
   // -------------------------------------------------------------------------
-  // Arranque: base + próximo número + primera página de historial + una
-  // puerta de asfalto abierta por default (mismo comportamiento del legado).
+  // Arranque: base + próximo número + primera página de historial (filtrada
+  // a hoy por default). Sin ninguna puerta abierta (2026-09-02, corrección
+  // de un supuesto anterior: el comentario acá decía "una puerta de asfalto
+  // abierta por default, mismo comportamiento del legado" — verificado de
+  // nuevo en vivo hoy contra produccion.vialtec.app, el legado arranca en
+  // "0 puertas abiertas", el operador abre la que necesita con "+ Abrir
+  // puerta". El supuesto anterior era incorrecto, no un cambio de diseño.
   // -------------------------------------------------------------------------
 
   function iniciar() {
     cargarBase()
     cargarHistorial()
     cargarProximoNumero()
-    crearSlot('asfalto')
   }
 
   return {
@@ -444,6 +576,8 @@ export function useBascula() {
     limpiarFiltrosHistorial,
     cambiarPaginaHistorial,
     TAMANO_PAGINA_HISTORIAL,
+    exportandoHistorial,
+    exportarHistorialExcel,
     modalImpresionAbierto,
     modoImpresion,
     valeParaImprimir,

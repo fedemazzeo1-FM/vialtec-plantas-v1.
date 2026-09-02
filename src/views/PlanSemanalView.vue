@@ -18,6 +18,7 @@ import {
 } from '@/modules/pedidos/services/pedidos.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+import { hoyISO } from '@/services/fecha'
 
 const NOMBRES_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 const VARIANTE_ESTADO = {
@@ -37,12 +38,6 @@ const error = ref(null)
 
 const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
 const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
-
-function hoyISO() {
-  const d = new Date()
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
-  return d.toISOString().slice(0, 10)
-}
 
 // Formato de mejora visual (2026-09-01, pedido de Federico: "dejalo bien
 // profesional"): cada día ahora trae número de fecha + nombre de mes

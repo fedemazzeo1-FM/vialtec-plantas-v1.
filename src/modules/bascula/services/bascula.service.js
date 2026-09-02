@@ -195,26 +195,59 @@ export async function registrarPesada(valeData) {
  *   Cada fila trae embebido `plantas_ingresos` (array de a lo sumo 1 elemento,
  *   por el FK plantas_ingresos.vale_id -> plantas_vales.id) para poder
  *   calcular la diferencia peso pesado vs. cantidad declarada en el remito
- *   sin una query aparte — ver calcularDiferencia() más abajo.
+ *   (calcularDiferencia() más abajo) y mostrar material/N° de remito del
+ *   ingreso en la réplica del cuadro del legado (registrar_pesada_bascula
+ *   guarda el material del ingreso en plantas_ingresos.material, no en
+ *   plantas_vales.material — ver comentario de esa RPC). También trae
+ *   `plantas_pedidos(obra_id, cliente_externo)` embebido: los vales de
+ *   asfalto migrados del histórico legado (memory/pending.md) tienen
+ *   `obra_id` NULL en la fila del vale — la obra solo se puede resolver a
+ *   través del pedido asociado, igual que ya hace abrirImpresion() más abajo.
  */
+/**
+ * Query base compartida entre fetchHistorialVales() (paginada, para la UI)
+ * y fetchTodosLosVales() (sin paginar, para el export a Excel — memory/
+ * conventions.md: un solo lugar para armar el filtro, no duplicado).
+ */
+function queryHistorialVales(filtros) {
+  let query = supabase
+    .from(TABLA_VALES)
+    .select('*, plantas_ingresos(cantidad, numero_remito, material), plantas_pedidos(obra_id, cliente_externo)', {
+      count: 'exact',
+    })
+    .order('fecha_pesada', { ascending: false })
+
+  if (filtros.tipoVale) query = query.eq('tipo_vale', filtros.tipoVale)
+  if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
+  if (filtros.patente) query = query.ilike('patente', `%${filtros.patente}%`)
+  if (filtros.desde) query = query.gte('fecha_pesada', filtros.desde)
+  // Fix 2026-09-02 (default "Hoy" nuevo — roadmap Mobile): `fecha_pesada`
+  // es timestamptz, no date. Un `lte('fecha_pesada', '2026-09-02')`
+  // castea el string a medianoche (00:00:00) de ese día y excluye TODO
+  // el resto del día — con desde=hasta=hoy (el default nuevo) esto
+  // dejaba la tabla prácticamente vacía. Se compara contra el día
+  // SIGUIENTE con `lt` (límite exclusivo) para incluir el día completo.
+  if (filtros.hasta) {
+    const diaSiguiente = new Date(`${filtros.hasta}T00:00:00`)
+    diaSiguiente.setDate(diaSiguiente.getDate() + 1)
+    query = query.lt('fecha_pesada', diaSiguiente.toISOString().slice(0, 10))
+  }
+
+  return query
+}
+
 export async function fetchHistorialVales(filtros = {}, { pagina = 1, tamanoPagina = 50 } = {}) {
-  return fetchPagina(
-    () => {
-      let query = supabase
-        .from(TABLA_VALES)
-        .select('*, plantas_ingresos(cantidad)', { count: 'exact' })
-        .order('fecha_pesada', { ascending: false })
+  return fetchPagina(() => queryHistorialVales(filtros), { pagina, tamanoPagina })
+}
 
-      if (filtros.tipoVale) query = query.eq('tipo_vale', filtros.tipoVale)
-      if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
-      if (filtros.patente) query = query.ilike('patente', `%${filtros.patente}%`)
-      if (filtros.desde) query = query.gte('fecha_pesada', filtros.desde)
-      if (filtros.hasta) query = query.lte('fecha_pesada', filtros.hasta)
-
-      return query
-    },
-    { pagina, tamanoPagina }
-  )
+/**
+ * Todos los vales que matchean el filtro, sin paginar (memory/architecture.md,
+ * regla de paginación: usa fetchPaginado() para no pisar el corte silencioso
+ * de 1000 filas de PostgREST) — usado por el botón "Excel" de Báscula, que
+ * tiene que exportar el filtro completo, no solo la página visible en UI.
+ */
+export async function fetchTodosLosVales(filtros = {}) {
+  return fetchPaginado(() => queryHistorialVales(filtros))
 }
 
 // ---------------------------------------------------------------------------

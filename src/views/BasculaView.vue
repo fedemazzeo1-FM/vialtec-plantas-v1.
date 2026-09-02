@@ -18,6 +18,8 @@ import {
   VARIANTE_TIPO_VALE,
   OPCIONES_TIPO_PUERTA,
   COLOR_PUERTA,
+  TIPO_CORTO_VALE,
+  ENTRADA_SALIDA_VALE,
 } from '@/modules/bascula/composables/useBascula'
 import { formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
 
@@ -46,6 +48,8 @@ const {
   limpiarFiltrosHistorial,
   cambiarPaginaHistorial,
   TAMANO_PAGINA_HISTORIAL,
+  exportandoHistorial,
+  exportarHistorialExcel,
   modalImpresionAbierto,
   modoImpresion,
   valeParaImprimir,
@@ -60,14 +64,28 @@ const {
   iniciar,
 } = useBascula()
 
+// Réplica exacta del cuadro "Movimientos del día" del legado (2026-09-02,
+// memory/relevamiento-sistema-viejo.md §2, verificado de nuevo en vivo hoy
+// contra produccion.vialtec.app): HORA, TIPO, MATERIAL/OBRA, PATENTE,
+// REMITO, RESPONSABLE, VALE, BRUTO, TARA, NETO, ACUM., S/REMITO, DIF., E/S.
+// Ancho total intencional (14 columnas + acciones) — en desktop scrollea
+// horizontal como en el legado, en mobile cada vale se ve como card
+// (VTable.vue, roadmap Mobile) sin tocar esta config.
 const columnasHistorial = [
-  { key: 'numero_vale', label: 'N° Vale', format: (v) => formatearNumeroVale(v) },
+  { key: 'horaLabel', label: 'Hora' },
   { key: 'tipo_vale', label: 'Tipo' },
-  { key: 'obraNombre', label: 'Obra' },
+  { key: 'materialObraLabel', label: 'Material/Obra' },
   { key: 'patente', label: 'Patente' },
+  { key: 'remitoLabel', label: 'Remito' },
+  { key: 'responsableLabel', label: 'Responsable' },
+  { key: 'numero_vale', label: 'N° Vale', format: (v) => formatearNumeroVale(v) },
+  { key: 'peso_bruto', label: 'Bruto', format: (v) => Number(v).toFixed(2) },
+  { key: 'tara', label: 'Tara', format: (v) => Number(v).toFixed(2) },
   { key: 'pesoNetoLabel', label: 'Neto' },
-  { key: 'diferenciaLabel', label: 'Dif. s/remito' },
-  { key: 'fechaLabel', label: 'Fecha / hora' },
+  { key: 'acumuladoLabel', label: 'Acum.' },
+  { key: 'sRemitoLabel', label: 'S/Remito' },
+  { key: 'diferenciaLabel', label: 'Dif.' },
+  { key: 'entradaSalida', label: 'E/S' },
   { key: 'acciones', label: '' },
 ]
 
@@ -340,6 +358,9 @@ iniciar()
         <div class="mt-3 flex gap-2">
           <VButton size="sm" @click="aplicarFiltrosHistorial">Filtrar</VButton>
           <VButton variant="ghost" size="sm" @click="limpiarFiltrosHistorial">Limpiar</VButton>
+          <VButton variant="secondary" size="sm" class="ml-auto" :disabled="exportandoHistorial" @click="exportarHistorialExcel">
+            {{ exportandoHistorial ? 'Exportando…' : '⬇ Excel' }}
+          </VButton>
         </div>
       </VCard>
 
@@ -356,12 +377,14 @@ iniciar()
           @update:page="cambiarPaginaHistorial"
         >
           <template #cell-tipo_vale="{ row }">
-            <VBadge :variant="VARIANTE_TIPO_VALE[row.tipo_vale]">{{ ETIQUETA_TIPO_VALE[row.tipo_vale] }}</VBadge>
+            <VBadge :variant="VARIANTE_TIPO_VALE[row.tipo_vale]" :title="ETIQUETA_TIPO_VALE[row.tipo_vale]">
+              {{ row.tipoCorto }}
+            </VBadge>
           </template>
           <template #cell-acciones="{ row }">
             <div v-if="row.tipo_vale === 'asfalto'" class="flex gap-1.5">
-              <VButton variant="secondary" size="sm" @click="abrirImpresionVale(row)">Imprimir vale</VButton>
-              <VButton variant="secondary" size="sm" @click="abrirImpresionRemito(row)">Imprimir remito</VButton>
+              <VButton variant="secondary" size="sm" @click="abrirImpresionVale(row)">Vale</VButton>
+              <VButton variant="secondary" size="sm" @click="abrirImpresionRemito(row)">Remito</VButton>
             </div>
             <span v-else class="text-xs text-gray-300">—</span>
           </template>
