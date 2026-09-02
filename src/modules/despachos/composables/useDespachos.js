@@ -47,9 +47,20 @@ export function useDespachos() {
   }
 
   async function cargarBase() {
-    const [listaObras, listaFormulas] = await Promise.all([fetchObras(), fetchFormulas({ soloActivas: false })])
-    obras.value = listaObras
-    formulas.value = listaFormulas
+    // Fix 2026-09-01: sin try/catch acá, un fallo de red rechazaba la
+    // promesa que consume iniciar() sin `.catch()` — error no manejado en
+    // consola, cargarDespachos()/cargarResumenPorObra() nunca se llamaban,
+    // y la vista quedaba mostrando "No hay despachos que coincidan con el
+    // filtro" (falso estado vacío, `cargando` nunca pasaba a `true`) en vez
+    // del error real. Mismo patrón que ya usan cargarBase() en
+    // useBascula.js/useSimulador.js.
+    try {
+      const [listaObras, listaFormulas] = await Promise.all([fetchObras(), fetchFormulas({ soloActivas: false })])
+      obras.value = listaObras
+      formulas.value = listaFormulas
+    } catch (e) {
+      error.value = e.message
+    }
   }
 
   // -------------------------------------------------------------------------

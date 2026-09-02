@@ -41,34 +41,40 @@ export async function fetchResumenGeneral({ mes } = {}) {
   const desdeISO = inicio.toISOString()
   const hastaISO = fin.toISOString()
 
+  // Fix 2026-09-01 (regla de paginación): acotadas a un mes, hoy muy lejos
+  // de 1000 filas — pero se usa fetchPaginado() igual, por consistencia con
+  // totalesPorProveedor() (misma tabla `plantas_ingresos`, mismo tipo de
+  // query) y para no depender de que el volumen mensual real de la planta
+  // se mantenga bajo para siempre.
   const [pedidosDespachados, ingresos] = await Promise.all([
-    supabase
-      .from('plantas_pedidos')
-      .select('tipo, cantidad_despachada')
-      .eq('estado', 'despachado')
-      .gte('fecha_programada', desdeISO.slice(0, 10))
-      .lte('fecha_programada', hastaISO.slice(0, 10)),
-    supabase.from('plantas_ingresos').select('cantidad, unidad').gte('fecha_ingreso', desdeISO).lte('fecha_ingreso', hastaISO),
+    fetchPaginado(() =>
+      supabase
+        .from('plantas_pedidos')
+        .select('tipo, cantidad_despachada')
+        .eq('estado', 'despachado')
+        .gte('fecha_programada', desdeISO.slice(0, 10))
+        .lte('fecha_programada', hastaISO.slice(0, 10))
+    ),
+    fetchPaginado(() =>
+      supabase.from('plantas_ingresos').select('cantidad, unidad').gte('fecha_ingreso', desdeISO).lte('fecha_ingreso', hastaISO)
+    ),
   ])
-
-  if (pedidosDespachados.error) throw pedidosDespachados.error
-  if (ingresos.error) throw ingresos.error
 
   let asfaltoTn = 0
   let hormigonM3 = 0
-  for (const p of pedidosDespachados.data ?? []) {
+  for (const p of pedidosDespachados) {
     const cantidad = Number(p.cantidad_despachada) || 0
     if (p.tipo === 'hormigon') hormigonM3 += cantidad
     else asfaltoTn += cantidad
   }
 
-  const ingresosInsumosTn = (ingresos.data ?? []).reduce((acc, i) => acc + aTn(i.cantidad, i.unidad), 0)
+  const ingresosInsumosTn = ingresos.reduce((acc, i) => acc + aTn(i.cantidad, i.unidad), 0)
 
   return {
     rango: { desde: desdeISO.slice(0, 10), hasta: hastaISO.slice(0, 10) },
     asfaltoTn,
     hormigonM3,
-    despachosDelMes: (pedidosDespachados.data ?? []).length,
+    despachosDelMes: pedidosDespachados.length,
     ingresosInsumosTn,
   }
 }
@@ -170,12 +176,29 @@ export async function fetchDetalleDespachosCamion(filtros = {}) {
   // La vista no trae formula_id (viene del pedido, no es parte del union de
   // columnas comunes) — se resuelve con una query chica aparte en vez de un
   // embed de PostgREST, que no funciona a través de una vista con UNION.
+  //
+  // Fix 2026-09-01 (regla de paginación): `filas` ya viene de fetchPaginado()
+  // arriba, así que sin fecha/filtro puede ser TODO el historial de
+  // despachos — `pedidoIds` podía superar largamente 1000 ids únicos y esta
+  // query, aunque el .in() acote por pedido, seguía sujeta al mismo corte
+  // silencioso de PostgREST en la respuesta (formulaId quedaba null para los
+  // pedidos que no entraban en las primeras 1000 filas). Se trocea en lotes
+  // de 500 ids — evita el corte Y una URL de .in() demasiado larga.
+  const TAMANO_LOTE_IN = 500
   const pedidoIds = [...new Set(filas.map((f) => f.pedido_id).filter(Boolean))]
   let formulaIdPorPedido = new Map()
   if (pedidoIds.length) {
-    const { data: pedidosData, error } = await supabase.from('plantas_pedidos').select('id, formula_id').in('id', pedidoIds)
-    if (error) throw error
-    formulaIdPorPedido = new Map((pedidosData ?? []).map((p) => [p.id, p.formula_id]))
+    const lotes = []
+    for (let i = 0; i < pedidoIds.length; i += TAMANO_LOTE_IN) {
+      lotes.push(pedidoIds.slice(i, i + TAMANO_LOTE_IN))
+    }
+    const resultados = await Promise.all(
+      lotes.map((lote) => supabase.from('plantas_pedidos').select('id, formula_id').in('id', lote))
+    )
+    for (const { data, error } of resultados) {
+      if (error) throw error
+      for (const p of data ?? []) formulaIdPorPedido.set(p.id, p.formula_id)
+    }
   }
 
   return filas.map((f) => ({

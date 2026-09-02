@@ -9,6 +9,15 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/config/supabase'
 
+// Fix 2026-09-01: App.vue (onMounted) y el guard de router/index.js llaman a
+// restaurarSesion() en el mismo arranque, ambos viendo `listo === false` en
+// el mismo tick — sin esta guarda quedaban DOS llamadas concurrentes a
+// supabase.auth.getSession() + _cargarPerfil() en cada carga de página. No
+// rompía nada (ambas terminaban en el mismo estado final), pero duplicaba
+// requests de red innecesariamente en cada F5. Se comparte la misma promesa
+// en vuelo entre llamadas concurrentes.
+let promesaRestaurarSesion = null
+
 // Matriz de permisos por rol — "Logica sis. plantas v1.rtf" §3 (7 roles).
 // Es la fuente para mostrar/ocultar UI. El enforcement real y no salteable
 // vive en las RPC (registrar_pesada_bascula, registrar_carga_hormigon) y,
@@ -117,8 +126,20 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    /** Se llama una vez al arrancar la app (router guard), para restaurar sesión tras un refresh. */
+    /**
+     * Se llama al arrancar la app (App.vue Y el guard de router/index.js
+     * llaman a esto en el mismo tick — ver nota de `promesaRestaurarSesion`
+     * arriba), para restaurar sesión tras un refresh (F5) o pestaña nueva.
+     */
     async restaurarSesion() {
+      if (promesaRestaurarSesion) return promesaRestaurarSesion
+      promesaRestaurarSesion = this._restaurarSesionInterna().finally(() => {
+        promesaRestaurarSesion = null
+      })
+      return promesaRestaurarSesion
+    },
+
+    async _restaurarSesionInterna() {
       this.cargando = true
       try {
         const { data } = await supabase.auth.getSession()
