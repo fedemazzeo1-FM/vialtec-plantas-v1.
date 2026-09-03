@@ -1,5 +1,36 @@
 # pending.md — Pendientes
 
+## 📋 Resumen de la madrugada 2026-09-03 — para arrancar el día
+
+Trabajé sobre "hasta mañana, seguí trabajando con todo lo que puedas" — esto es
+lo que avancé, en orden de importancia. Todo commiteado localmente (nada
+deployado, nada escrito en producción salvo lo explícitamente confirmado).
+
+1. **🔴 Necesito tu confirmación**: migración 21 (Usuarios y Permisos por
+   rol — sección de abajo) y el ajuste ×1000 de 642 movimientos de stock
+   históricos (sección Báscula/Stock, más abajo) — ninguna de las dos se
+   ejecutó, ambas listas para correr en cuanto digas.
+2. **Módulo Usuarios y Permisos por rol**: pantalla `/usuarios` completa
+   (2 tabs), solo accesible para admin. Tab "Permisos por rol" ya
+   funciona; tab "Usuarios" espera la migración 21.
+3. **Remito rediseñado** (2 copias apiladas, como pediste): verificado
+   visualmente en vivo, se ve bien.
+4. **Ambigüedad sin resolver** sobre la orientación de vale/remito — dejé
+   el vale como ya estaba confirmado (vertical) y necesito que me digas si
+   eso es lo que querías.
+5. **Banner de alerta de stock proyectado** en el Dashboard (🔴/🟡) — gap
+   viejo que estaba anotado en `modules-status.md`, lo cerré. No hay nada
+   en alerta ahora mismo (stock sano vs. los 5 pedidos confirmados de esta
+   semana), es un cambio de bajo riesgo, no necesita tu revisión urgente.
+6. **Auditoría legado vs. nuevo**: encontré y documenté que el sistema
+   viejo sigue en uso real en paralelo (Stock quedó desactualizado ~260tn
+   en Piedra/Arena) — Despachos SÍ coincide exacto. Se cortó a mitad de
+   camino: perdí sin querer la sesión ya logueada de
+   `produccion.vialtec.app` al navegar esa pestaña, y no tengo tus
+   credenciales para volver a entrar.
+
+Detalle completo de cada punto en las secciones de abajo.
+
 ## 🔴 AUDITORÍA CRÍTICA 2026-09-03 (madrugada) — Stock nuevo desactualizado vs. el legado en vivo
 
 Pedido explícito de Federico antes de irse a dormir: "audita el sistema
