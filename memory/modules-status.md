@@ -16,7 +16,7 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 | 9 | Usuarios | ABM de usuarios, mapeo con Supabase Auth y roles | UI LISTA — espera migración 21 (ver pending.md) |
 | 10 | Roles | Configuración de permisos por rol (override sobre defaults) | Vista de solo-lectura de la matriz lista; edición vía DB queda para más adelante |
 | 11 | Backup | Backups automáticos/manuales y restauración | PENDIENTE |
-| 12 | Resumen mensual / Reportes | Excel mensual de producción por obra e insumos | PENDIENTE |
+| 12 | Resumen mensual / Reportes | Excel mensual de producción por obra e insumos | **COMPLETADO — 2026-09-03**: Despachos → Resumen por obra, botón "Exportar informe mensual" (`informe-mensual.service.js` + `excel-informe-mensual.js`), 100% dinámico según el mes elegido — hoja Resumen General, una hoja por obra/cliente externo, Consumo de insumos, Resumen anual y Analítica de proveedores, con el formato corporativo unificado (`excel-corporativo.js`). Borrador de mail con adjunto vía macro VBA (`docs/informe-mensual-macro/`, manual — Federico pidió explícitamente NO auto-enviar). |
 | 13 | Migración de historial | Migrar datos del sistema anterior a `plantas_*` | **COMPLETADA — 2026-09-01**: 184 pedidos, 885 vales, 780 movimientos de stock, 19 fórmulas, 114 cargas de hormigón, 18 materiales, 8 proveedores, 51 patentes. Ver `pending.md` para el detalle e integridad verificada. |
 | 14 | Simulador de producción | Simular mix de fórmulas contra el stock actual, sin tocar datos reales | **COMPLETADO (MVP) — 2026-08-31**: ver detalle abajo. (No tenía fila propia en esta tabla hasta ahora — el relevamiento original lo mencionaba solo de paso dentro de Stock.) |
 
