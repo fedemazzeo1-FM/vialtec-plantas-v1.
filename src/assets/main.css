@@ -22,23 +22,45 @@
    el resto de la página (sidebar, modal, botones) se oculta. Reutilizable por
    cualquier módulo que necesite imprimir un comprobante.
 
-   @page en A4 PORTRAIT (2026-09-03, pedido de Federico: "orientación
-   vertical, debe entrar en 1 sola hoja con su duplicado"). Antes el vale
-   imprimía en A4 landscape con las 2 copias lado a lado — Federico reportó
-   que en la práctica eso le estaba saliendo en 7 hojas (el contenido de
-   cada copia no entraba en la altura acotada de una página apaisada, así
-   que el navegador seguía paginando). En portrait, con las 2 copias
-   apiladas verticalmente en vez de lado a lado, cada una tiene más alto
-   disponible por copia (≈140mm) y bastante menos ancho — layout de
-   ValeImprimible.vue rediseñado para ese espacio (menos campos por fila,
-   fuente más chica, sin perder ningún dato). El remito ya era portrait
-   desde el 2026-09-01 — con el vale ahora también portrait, un solo @page
-   alcanza para los dos, se elimina la "named page" que existía para
-   distinguirlos. */
+   @page ÚNICO en A4 LANDSCAPE, margin:0 (2026-09-03 noche, corrección
+   URGENTE de Federico con foto de la vista previa real: la primera versión
+   de esta tarde usaba una "named page" (`@page bascula` + `page: bascula`
+   solo en ValeImprimible.vue) para que el vale/remito de báscula fueran
+   landscape sin tocar el remito de despacho (portrait) — en la práctica el
+   diálogo de impresión de Chrome NO respetó esa orientación por componente
+   y siguió abriendo en portrait, con el contenido landscape renderizado
+   chico arriba de una hoja vertical. Se simplifica a un solo @page global
+   apaisado sin margen (pedido explícito de Federico: "aprovechá toda la
+   hoja") — Chrome sí respeta el @page default para preseleccionar
+   Landscape en el diálogo de impresión. Efecto colateral aceptado: el
+   remito de despacho (DespachoImprimible.vue) también pasa a landscape —
+   ya no es un problema porque en la misma corrección se le sacó el
+   desglose de cargas que lo hacía desbordar a varias hojas (ver ese
+   componente), así que entra cómodo de sobra en 1 sola hoja apaisada
+   también.
+
+   `margin: 0` en el @page (tal como lo pidió Federico) más `padding: 5mm`
+   en `.imprimible` (en vez de en el @page) — el margen de impresión real
+   de la mayoría de las impresoras hogareñas/de oficina no llega a 0mm
+   (hay un borde físico no imprimible), así que el padding en el propio
+   elemento evita que el contenido quede pegado al borde/cortado, sin
+   dejar de "aprovechar toda la hoja" a nivel de @page como se pidió.
+   `.imprimible` mide 297mm×210mm fijo (A4 landscape) con box-sizing
+   border-box para que ese padding no lo desborde — así el contenido
+   (grid de 2 columnas en ValeImprimible.vue) puede usar `h-full` y
+   estirarse a tamaño completo real, no solo "lo que ocupe el contenido".
+
+   Corrección de la misma noche sobre CANTIDAD de hojas: el vale imprime
+   sus 2 copias (Original/Duplicado) LADO A LADO en 1 sola hoja (grid de 2
+   columnas); el remito, en cambio, imprime cada copia en su PROPIA hoja
+   completa — 2 hojas separadas, con salto de página forzado
+   (`break-after-page` de Tailwind) entre la primera y la segunda. Pedido
+   explícito de Federico ("remito va en 2 hojas distintas, los vales van
+   los dos en 1 sola hoja") — ver ValeImprimible.vue, modo "remito". */
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 10mm;
+    size: A4 landscape;
+    margin: 0;
   }
 
   body * {
@@ -52,6 +74,9 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
+    width: 297mm;
+    height: 210mm;
+    box-sizing: border-box;
+    padding: 5mm;
   }
 }

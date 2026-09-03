@@ -5,6 +5,15 @@
 // diferencia del vale de báscula, que sí duplica planta/chofer — ver
 // ValeImprimible.vue), misma mecánica de impresión (.imprimible + @page en
 // src/assets/main.css, botón "Imprimir" -> window.print()).
+//
+// 2026-09-03 noche (corrección urgente de Federico): se sacó el desglose de
+// "Cargas" (una línea por camión, hasta 18+ líneas en despachos con muchos
+// viajes) — desbordaba a varias hojas al imprimir. Igual que el remito de
+// báscula (ValeImprimible.vue modo "remito"), ahora muestra solo el
+// ACUMULADO TOTAL + la fórmula/mezcla, sin desglose. El detalle camión por
+// camión sigue disponible en pantalla vía el botón "Detalle de cargas" de
+// DespachosView.vue (modal aparte, no impreso) — no se perdió el dato, solo
+// se sacó de este documento imprimible.
 
 import logoVialtec from '@/assets/img/logo-vialtec.png'
 
@@ -43,14 +52,6 @@ function unidad(tipo) {
       <p><span class="text-gray-500">Encargado:</span> {{ pedido.encargado || '—' }}</p>
       <p><span class="text-gray-500">Pedido:</span> {{ pedido.cantidad_solicitada }} {{ unidad(pedido.tipo) }}</p>
       <p><span class="text-gray-500">Real:</span> {{ pedido.cantidad_despachada }} {{ unidad(pedido.tipo) }}</p>
-    </div>
-
-    <div v-if="cargas.length" class="mt-4 border-t border-gray-300 pt-3">
-      <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Cargas</p>
-      <p v-for="(carga, i) in cargas" :key="carga.id" class="text-gray-700">
-        Carga {{ i + 1 }} — {{ carga.patente || 'sin patente' }} — {{ carga.cantidad }} {{ unidad(pedido.tipo) }}
-        <span class="text-gray-500">— {{ pedido.tipo === 'hormigon' ? 'Remito' : 'Vale' }}: {{ carga.numeroRemitoOVale || '—' }}</span>
-      </p>
     </div>
 
     <div class="mt-4 border-t border-gray-300 pt-3">

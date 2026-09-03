@@ -3,23 +3,36 @@
 // El wrapper .imprimible (definido en src/assets/main.css) es lo que hace que
 // solo esto se vea al imprimir, ocultando el resto de la página/modal.
 //
-// Modo "vale" (rediseñado 2026-09-03, pedido de Federico — antes salía en
-// 7 hojas): formato A4 PORTRAIT, DOS copias apiladas en una sola página
-// (planta arriba, chofer abajo, separadas por una línea de corte punteada)
-// — ya no landscape lado a lado (Logica sis. plantas v1.rtf §2.4 pedía esa
-// orientación, pero en la práctica el contenido de cada copia no entraba en
-// la altura acotada de una página apaisada y el navegador seguía
-// paginando). Layout compacto (campos agrupados de a 3-4 por fila) para que
-// las dos copias entren cómodas en los ~277mm de alto disponibles. @page
-// va en src/assets/main.css.
+// Modo "vale": formato A4 LANDSCAPE (@page único, margin:0, en
+// src/assets/main.css — corregido 2026-09-03 noche: la versión de la tarde
+// usaba una "named page" por componente que el diálogo de impresión de
+// Chrome no terminó respetando en la práctica, ver el comentario en
+// main.css), las 2 copias (Original / Duplicado) LADO A LADO en una sola
+// hoja, separadas por una línea de corte VERTICAL punteada al medio del
+// ancho — al cortar quedan 2 vales verticales independientes (Logica sis.
+// plantas v1.rtf §2.4 pedía esta misma disposición). `h-full` en el grid y
+// en cada copia (`flex flex-col` + `mt-auto` en la firma) para que ocupen
+// TODO el alto real de la hoja (≈200mm útiles con el padding de
+// `.imprimible`), no solo lo que ocupe el contenido — pedido explícito de
+// Federico: "aprovechá toda la hoja".
 //
 // Modo "remito" (rediseñado 2026-09-01 contra una foto real de un remito de
-// VialTec S.A. que compartió Federico): reproduce el remito fiscal en papel
-// — membrete con datos impositivos, N° de remito, Desde/Destino, tabla
-// Cantidad/Detalle con el rango de vales de báscula correlativos que
-// respaldan el acumulado del día, Transporte/Patente/Transportista/Lugar de
-// entrega, y las dos firmas (Despacho / Recibe conforme). Una sola copia
-// (la spec no pide duplicado ahí, a diferencia del vale).
+// VialTec S.A. que compartió Federico; layout de página corregido 2026-09-03
+// noche): reproduce el remito fiscal en papel — membrete con datos
+// impositivos, N° de remito, Desde/Destino, tabla Cantidad/Detalle con SOLO
+// el acumulado total + la fórmula/mezcla (nunca tuvo desglose de cargas
+// individuales, a propósito), Transporte/Patente/Transportista/Lugar de
+// entrega, y las dos firmas (Despacho / Recibe conforme).
+//
+// A DIFERENCIA del vale: acá Original y Duplicado van en 2 HOJAS
+// SEPARADAS (`break-after-page` en la primera copia), cada una ocupando la
+// hoja COMPLETA — no lado a lado como el vale. Pedido explícito de
+// Federico ("remito va en 2 hojas distintas, los vales van los dos en 1
+// sola hoja") sobre el primer intento de esta misma noche, que ponía las
+// 2 copias del remito lado a lado igual que el vale (ese layout a mitad de
+// ancho de hoja, con más contenido/campos que el vale, terminaba
+// desbordando a varias páginas en la impresora real — con hoja completa
+// por copia sobra espacio de sobra).
 //
 // Los datos impositivos/dirección de EMPRESA son fijos (mismo domicilio y
 // CUIT en cualquier remito) — si alguna vez cambian, se actualizan acá, no
@@ -58,11 +71,14 @@ const EMPRESA = {
   deposito: 'Parque Industrial Ruta N°6',
 }
 
-// Certificado de calibración de la balanza (2026-09-03, pedido de
-// Federico) — dato fijo del instrumento, igual que los datos impositivos
-// de EMPRESA de arriba: si algún día se recalibra con otro N°, se
-// actualiza acá, no hay tabla para esto (no es un dato operativo por vale).
-const BALANZA_CERT_CALIBRACION = 'Balanza cert. calibración N° 260409-272'
+// Datos del instrumento de pesaje (2026-09-03, pedido textual de Federico:
+// "Bascula Casilda 80 tn, modelo Fah 21301, balanza cert calibracion
+// n°260409-272") — dato fijo del instrumento, igual que los datos
+// impositivos de EMPRESA de arriba: si algún día se recalibra o se cambia
+// de báscula, se actualiza acá, no hay tabla para esto (no es un dato
+// operativo por vale).
+const BALANZA_CERT_CALIBRACION =
+  'Báscula Casilda 80 tn, modelo FAH 21301 — balanza cert. calibración N° 260409-272'
 
 function formatFecha(iso) {
   const d = new Date(iso)
@@ -73,11 +89,13 @@ function formatFecha(iso) {
 }
 
 // Cada copia del vale lleva UNA sola firma, distinta según a quién le queda
-// esa copia (ajuste pedido por Federico, 2026-08-28) — no las dos firmas
+// esa copia (ajuste pedido por Federico, 2026-08-28; texto de las firmas
+// ajustado 2026-09-03 tarde a pedido textual de Federico: "Firma del
+// responsable en balanza" / "Firma del chofer") — no las dos firmas
 // genéricas de antes repetidas en ambas copias.
 const copiasVale = [
-  { titulo: 'Copia planta', firma: 'Firma del Balancero Responsable' },
-  { titulo: 'Copia chofer', firma: 'Firma del Chofer que Retira' },
+  { titulo: 'Original', firma: 'Firma del responsable en balanza' },
+  { titulo: 'Duplicado', firma: 'Firma del chofer' },
 ]
 
 // Transporte propio/tercero (columna "Transporte" del remito real): se
@@ -94,161 +112,169 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
 
 <template>
   <!-- ============================== MODO VALE ============================== -->
-  <!-- Siempre 1 columna (ya no print:grid-cols-2 — landscape lado a lado):
-       las 2 copias se apilan, separadas por una línea de corte punteada. -->
-  <div v-if="modo === 'vale'" class="grid grid-cols-1">
-    <div
-      v-for="(copia, i) in copiasVale"
-      :key="copia.titulo"
-      class="border border-gray-300 p-4 text-xs text-gray-800"
-      :class="i > 0 ? 'mt-0 border-t-0 border-dashed pt-4' : ''"
-    >
-      <!-- Línea de corte entre copias (2026-09-03): visual de "cortar acá",
-           mismo criterio que un talonario físico con duplicado. -->
-      <div v-if="i > 0" class="relative -mt-4 mb-4 flex items-center gap-2 text-gray-300">
-        <span class="text-[10px]">✂</span>
-        <div class="flex-1 border-t border-dashed border-gray-300"></div>
-      </div>
+  <!-- Landscape, 2 columnas lado a lado (Original / Duplicado) — línea de
+       corte VERTICAL al medio del ancho de la hoja (2026-09-03 tarde). -->
+  <div v-if="modo === 'vale'" class="relative grid h-full grid-cols-2 gap-6">
+    <!-- Línea de corte entre copias: visual de "cortar acá" en el medio del
+         ancho, mismo criterio que un talonario físico con duplicado, ahora
+         vertical en vez de horizontal. -->
+    <div class="pointer-events-none absolute inset-y-0 left-1/2 flex -translate-x-1/2 flex-col items-center text-gray-300">
+      <span class="text-[10px] leading-none">✂</span>
+      <div class="mt-1 w-0 flex-1 border-l border-dashed border-gray-300"></div>
+    </div>
 
-      <div class="mb-2 flex items-start justify-between border-b border-gray-300 pb-2">
-        <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-9 w-auto" />
+    <div
+      v-for="copia in copiasVale"
+      :key="copia.titulo"
+      class="flex h-full flex-col border border-gray-300 p-6 text-base text-gray-800"
+    >
+      <div class="mb-4 flex items-start justify-between border-b border-gray-300 pb-3">
+        <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-14 w-auto" />
         <div class="text-right">
-          <p class="text-base font-bold">Vale de pesaje N° {{ formatearNumeroVale(vale.numero_vale) }}</p>
-          <p class="text-[10px] text-gray-400">{{ BALANZA_CERT_CALIBRACION }}</p>
-          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ copia.titulo }}</p>
+          <p class="text-2xl font-bold">Vale de pesaje N° {{ formatearNumeroVale(vale.numero_vale) }}</p>
+          <p class="text-sm font-semibold uppercase tracking-wide text-gray-400">{{ copia.titulo }}</p>
+          <p class="text-[11px] leading-tight text-gray-400">{{ BALANZA_CERT_CALIBRACION }}</p>
         </div>
       </div>
 
-      <div class="grid grid-cols-3 gap-x-4 gap-y-1">
+      <div class="grid grid-cols-2 gap-x-6 gap-y-3">
         <p><span class="text-gray-500">Fecha:</span> {{ formatFecha(vale.fecha_pesada).fecha }}</p>
         <p><span class="text-gray-500">Hora:</span> {{ formatFecha(vale.fecha_pesada).hora }}</p>
-        <p class="col-span-1"><span class="text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
-        <p class="col-span-2"><span class="text-gray-500">Obra:</span> {{ obraNombre || '—' }}</p>
+        <p><span class="text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
         <p><span class="text-gray-500">Chofer:</span> {{ vale.chofer || '—' }}</p>
-        <p class="col-span-3"><span class="text-gray-500">Mezcla:</span> {{ mezclaNombre || '—' }}</p>
+        <p class="col-span-2"><span class="text-gray-500">Obra:</span> {{ obraNombre || '—' }}</p>
+        <p class="col-span-2"><span class="text-gray-500">Mezcla:</span> {{ mezclaNombre || '—' }}</p>
         <p><span class="text-gray-500">Bruto:</span> {{ vale.peso_bruto }} {{ vale.unidad }}</p>
         <p><span class="text-gray-500">Tara:</span> {{ vale.tara }} {{ vale.unidad }}</p>
         <p><span class="text-gray-500">Neto:</span> {{ vale.peso_neto }} {{ vale.unidad }}</p>
         <p v-if="vale.temperatura != null"><span class="text-gray-500">Temp.:</span> {{ vale.temperatura }} °C</p>
       </div>
 
-      <div class="mt-2 border-t border-gray-300 pt-1.5">
-        <p class="text-sm font-semibold">Acumulado: {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn</p>
+      <div class="mt-6 border-t border-gray-300 pt-3">
+        <p class="text-xl font-bold">Acumulado: {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn</p>
       </div>
 
-      <div class="mt-4 text-[10px] text-gray-500">
-        <p>{{ copia.firma }}: ______________________</p>
+      <div class="mt-auto pt-8 text-sm text-gray-500">
+        <p>{{ copia.firma }}: ________________________________</p>
       </div>
     </div>
   </div>
 
   <!-- ============================= MODO REMITO ============================= -->
-  <!-- Réplica del remito físico de VialTec S.A. (foto real, 2026-09-01): se
-       imprime cuando termina el acumulado del pedido/obra del día — el
-       balancero corta este remito como respaldo de todos los vales de
-       báscula correlativos que se pesaron para llegar a ese acumulado.
+  <!-- Réplica del remito físico de VialTec S.A. (foto real, 2026-09-01,
+       formato de campos re-confirmado contra la misma foto 2026-09-03
+       noche): se imprime cuando termina el acumulado del pedido/obra del
+       día — el balancero corta este remito como respaldo de todos los
+       vales de báscula correlativos que se pesaron para llegar a ese
+       acumulado.
 
-       2 copias idénticas apiladas en 1 sola hoja (2026-09-03, pedido de
-       Federico — "remito, 2 hojas iguales, hoy se imprimen 6"): mismo
-       problema que ya se había corregido en el vale, layout compactado
-       para que las 2 entren cómodas en una A4 portrait (antes 1 copia
-       sola ya desbordaba a varias páginas por el espaciado generoso). A
-       diferencia del vale (que reparte una firma distinta por copia), acá
-       las 2 copias son iguales de verdad — mismo criterio que un
-       talonario de remito físico con original + duplicado en papel
-       carbónico. -->
-  <div v-if="modo === 'remito'" class="grid grid-cols-1">
+       2 HOJAS SEPARADAS (Original / Duplicado), cada una a hoja completa
+       — `break-after-page` (Tailwind) en la primera copia fuerza el salto
+       de página antes de la segunda. NO es un grid de 2 columnas como el
+       vale (ver comentario arriba: pedido explícito de Federico). -->
+  <div v-if="modo === 'remito'">
     <div
       v-for="(_, i) in [0, 1]"
       :key="i"
-      class="border border-gray-400 p-3 text-xs text-gray-800"
-      :class="i > 0 ? 'mt-0 border-t-0 border-dashed pt-3' : ''"
+      class="flex h-full w-full flex-col p-8"
+      :class="i === 0 ? 'break-after-page' : ''"
     >
-      <div v-if="i > 0" class="relative -mt-3 mb-3 flex items-center gap-2 text-gray-300">
-        <span class="text-[10px]">✂</span>
-        <div class="flex-1 border-t border-dashed border-gray-300"></div>
-      </div>
-
-      <div class="mb-2 flex items-start justify-between border-b-2 border-gray-800 pb-2">
-        <div>
-          <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-8 w-auto" />
-          <div class="mt-1 space-y-0 text-[9px] leading-tight text-gray-600">
-            <p>{{ EMPRESA.direccion1 }} — {{ EMPRESA.direccion3 }}</p>
-            <p>Tel.: {{ EMPRESA.telefono }} — {{ EMPRESA.condicionIva }}</p>
+      <div class="mx-auto flex h-full w-full max-w-3xl flex-col border border-gray-400 p-8 text-base text-gray-800">
+        <div class="mb-5 flex items-start justify-between border-b-2 border-gray-800 pb-4">
+          <div>
+            <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-14 w-auto" />
+            <div class="mt-1.5 space-y-0 text-xs leading-tight text-gray-600">
+              <p>{{ EMPRESA.direccion1 }} — {{ EMPRESA.direccion3 }}</p>
+              <p>Tel.: {{ EMPRESA.telefono }} — {{ EMPRESA.condicionIva }}</p>
+            </div>
+          </div>
+          <div class="text-right">
+            <p class="text-2xl font-bold uppercase tracking-wide">Remito {{ i === 0 ? 'original' : 'duplicado' }}</p>
+            <div class="mt-1 text-xs leading-tight text-gray-600">
+              <p>C.U.I.T.: {{ EMPRESA.cuit }} — I.E.R.I.C.: {{ EMPRESA.ieric }}</p>
+              <p>II.BB.CM: {{ EMPRESA.iibb }} — Inicio act.: {{ EMPRESA.inicioActividad }}</p>
+            </div>
           </div>
         </div>
-        <div class="text-right">
-          <p class="text-sm font-bold uppercase tracking-wide">Remito {{ i === 0 ? 'original' : 'duplicado' }}</p>
-          <div class="mt-0.5 text-[9px] leading-tight text-gray-600">
-            <p>C.U.I.T.: {{ EMPRESA.cuit }} — I.E.R.I.C.: {{ EMPRESA.ieric }} — II.BB.CM: {{ EMPRESA.iibb }}</p>
+
+        <div class="mb-3 grid grid-cols-2 gap-4">
+          <div class="rounded border border-gray-400 px-4 py-2">
+            <span class="text-[11px] font-semibold uppercase text-gray-500">Remito N°:</span>
+            <span class="ml-1 font-semibold">{{ pedido?.nro_remito_global || '—' }}</span>
+          </div>
+          <div class="rounded border border-gray-400 px-4 py-2">
+            <span class="text-[11px] font-semibold uppercase text-gray-500">Fecha:</span>
+            <span class="ml-1 font-semibold">{{ formatFecha(vale.fecha_pesada).fecha }}</span>
           </div>
         </div>
-      </div>
-
-      <div class="mb-2 grid grid-cols-4 gap-2">
-        <div class="col-span-1 rounded border border-gray-300 px-2 py-1">
-          <p class="text-[8px] uppercase text-gray-400">Remito N°</p>
-          <p class="font-semibold">{{ pedido?.nro_remito_global || '—' }}</p>
+        <div class="mb-3 rounded border border-gray-400 px-4 py-2">
+          <span class="text-[11px] font-semibold uppercase text-gray-500">Desde:</span>
+          <span class="ml-1 font-semibold">{{ EMPRESA.deposito }}</span>
         </div>
-        <div class="col-span-1 rounded border border-gray-300 px-2 py-1">
-          <p class="text-[8px] uppercase text-gray-400">Fecha</p>
-          <p class="font-semibold">{{ formatFecha(vale.fecha_pesada).fecha }}</p>
+        <div class="mb-4 rounded border border-gray-400 px-4 py-2">
+          <span class="text-[11px] font-semibold uppercase text-gray-500">Destino:</span>
+          <span class="ml-1 font-semibold">{{ obraNombre || '—' }}</span>
         </div>
-        <div class="col-span-2 rounded border border-gray-300 px-2 py-1">
-          <p class="text-[8px] uppercase text-gray-400">Destino</p>
-          <p class="truncate font-semibold">{{ obraNombre || '—' }}</p>
+
+        <!-- Solo acumulado total + fórmula (nunca desglose de cargas
+             individuales — confirmado de nuevo 2026-09-03 noche contra la
+             foto real del remito físico que compartió Federico). -->
+        <table class="w-full table-fixed border border-gray-400 text-left">
+          <thead>
+            <tr class="border-b border-gray-400 bg-gray-50">
+              <th class="w-32 border-r border-gray-400 px-4 py-2 text-xs uppercase tracking-wide text-gray-500">Cantidad</th>
+              <th class="px-4 py-2 text-xs uppercase tracking-wide text-gray-500">Detalle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="border-r border-gray-400 px-4 py-4 align-top text-xl font-bold">
+                {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn
+              </td>
+              <td class="px-4 py-4 align-top">
+                <p class="font-semibold">{{ detalleMezcla }}</p>
+                <p v-if="rangoVales?.valeDesde != null" class="mt-1 text-xs text-gray-600">
+                  S/Vale de báscula N° {{ formatearNumeroVale(rangoVales.valeDesde) }}
+                  <template v-if="rangoVales.valeHasta !== rangoVales.valeDesde">
+                    al {{ formatearNumeroVale(rangoVales.valeHasta) }}
+                  </template>
+                  (correlativos{{ rangoVales.cantidadVales ? ` — ${rangoVales.cantidadVales} pesada${rangoVales.cantidadVales === 1 ? '' : 's'}` : '' }})
+                </p>
+              </td>
+            </tr>
+            <!-- Filas en blanco (como el papel real): deja lugar para anotaciones
+                 a mano, mismo criterio que la foto de referencia de Federico. -->
+            <tr v-for="n in 4" :key="n">
+              <td class="border-r border-t border-gray-300 px-4 py-3">&nbsp;</td>
+              <td class="border-t border-gray-300 px-4 py-3">&nbsp;</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="mt-4 space-y-1 text-sm">
+          <p>
+            <span class="font-semibold text-gray-500">Transporte:</span>
+            {{ esTransportePropio == null ? '—' : esTransportePropio ? 'Propio' : 'Tercero' }}
+          </p>
+          <p><span class="font-semibold text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
+          <p><span class="font-semibold text-gray-500">Transportista:</span> {{ vale.chofer || '—' }}</p>
+          <p><span class="font-semibold text-gray-500">Lugar de entrega:</span> {{ pedido?.ubicacion || '—' }}</p>
         </div>
-      </div>
 
-      <table class="w-full table-fixed border border-gray-400 text-left">
-        <thead>
-          <tr class="border-b border-gray-400 bg-gray-50">
-            <th class="w-28 border-r border-gray-400 px-2 py-1 text-[9px] uppercase tracking-wide text-gray-500">Cantidad</th>
-            <th class="px-2 py-1 text-[9px] uppercase tracking-wide text-gray-500">Detalle</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="border-r border-gray-400 px-2 py-1.5 align-top font-semibold">
-              {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn
-            </td>
-            <td class="px-2 py-1.5 align-top">
-              <p>{{ detalleMezcla }}</p>
-              <p v-if="rangoVales?.valeDesde != null" class="mt-1 text-[9px] text-gray-600">
-                S/Vale de báscula N° {{ formatearNumeroVale(rangoVales.valeDesde) }}
-                <template v-if="rangoVales.valeHasta !== rangoVales.valeDesde">
-                  al {{ formatearNumeroVale(rangoVales.valeHasta) }}
-                </template>
-                (correlativos{{ rangoVales.cantidadVales ? ` — ${rangoVales.cantidadVales} pesada${rangoVales.cantidadVales === 1 ? '' : 's'}` : '' }})
-              </p>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5">
-        <p>
-          <span class="font-semibold text-gray-500">Transporte:</span>
-          {{ esTransportePropio == null ? '—' : esTransportePropio ? 'Propio' : 'Tercero' }}
-        </p>
-        <p><span class="font-semibold text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
-        <p><span class="font-semibold text-gray-500">Transportista:</span> {{ vale.chofer || '—' }}</p>
-        <p><span class="font-semibold text-gray-500">Lugar de entrega:</span> {{ pedido?.ubicacion || '—' }}</p>
-      </div>
-
-      <div class="mt-3 grid grid-cols-2 gap-4 text-[9px] text-gray-600">
-        <div>
-          <p>Despacho: ______________________</p>
-          <p class="mt-0.5 text-gray-400">{{ EMPRESA.nombre }} — Responsable de planta</p>
+        <div class="mt-auto grid grid-cols-2 gap-8 pt-8 text-sm text-gray-600">
+          <div>
+            <p>Despacho: ________________________________</p>
+            <p class="mt-1 text-gray-400">{{ EMPRESA.nombre }} — Responsable de planta</p>
+          </div>
+          <div>
+            <p>Recibe conforme: ________________________________</p>
+            <p class="mt-1 text-gray-400">Aclaración: ________________________________</p>
+          </div>
         </div>
-        <div>
-          <p>Recibe conforme: ______________________</p>
-          <p class="mt-0.5 text-gray-400">Aclaración: ______________________</p>
-        </div>
-      </div>
 
-      <div class="mt-2 border-t border-gray-300 pt-1 text-[9px] text-gray-500">
-        <span class="font-semibold">Depósito:</span> {{ EMPRESA.deposito }}
+        <div class="mt-4 border-t border-gray-300 pt-2 text-xs text-gray-500">
+          <span class="font-semibold">Depósito:</span> {{ EMPRESA.deposito }}
+        </div>
       </div>
     </div>
   </div>
