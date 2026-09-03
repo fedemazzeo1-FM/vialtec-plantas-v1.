@@ -85,13 +85,30 @@ lados, no llegué a hacer esa reconciliación fina esta noche.
    cómo proceder (memory/procedimientos.md, cambio de datos en
    producción).
 
+### Buena noticia parcial: Despachos SÍ coincide exacto
+
+Comparado en vivo (Despachos → totales acumulados): legado **"Total
+asfalto acumulado" 13.435,2 tn / "Total hormigón acumulado" 1.093,6 m³ /
+160 resultados** — **exactamente los mismos 3 números** que ya tenía
+nuestro sistema (verificado esta misma sesión, sin necesidad de re-abrir).
+Esto acota el problema: **el módulo de Despachos/Pedidos está sincronizado
+correctamente**, la desactualización es específica de **ingresos/egresos
+de báscula de áridos (Stock)** — probablemente porque el balancero sigue
+pesando ingresos de proveedores en el sistema viejo, mientras que los
+despachos de producción (que son lo que más importa para facturación) sí
+se están cargando/reflejando bien en el nuevo.
+
 ### Pendiente para completar la auditoría (no llegué esta noche)
 
-- Comparar Despachos/Pedidos recientes (no solo Stock) contra el legado.
 - Desglosar el conteo de "Historial de ingresos" del legado por tipo
   (ingreso vs. egreso) para comparar exacto contra
   `plantas_stock_movimientos`.
 - Revisar Analítica de proveedores del legado vs. la nuestra.
+- Confirmar si el balancero sigue pesando ingresos de áridos en el
+  sistema viejo (produccion.vialtec.app) en vez del nuevo (Báscula →
+  "Ingreso Áridos") — si es así, es un tema de capacitación/adopción, no
+  de código: hay que confirmar que efectivamente esté usando la puerta
+  de Báscula del sistema nuevo para que el stock deje de desincronizarse.
 
 ## Plan Semanal — corrección de datos 2026-09-03 (flota_obras + pedido faltante)
 
