@@ -12,6 +12,7 @@ import VTable from '@/components/shared/VTable.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
+import VSemaforo from '@/components/shared/VSemaforo.vue'
 import {
   fetchResumenGeneral,
   fetchAnaliticaProveedores,
@@ -19,6 +20,7 @@ import {
 } from '@/modules/analytics/services/analytics.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+import { useAlertaStockSemana } from '@/modules/dashboard/composables/useAlertaStockSemana'
 
 const error = ref(null)
 
@@ -141,10 +143,17 @@ function limpiarFiltrosDespachos() {
   cargarDespachos()
 }
 
+// ---------------------------------------------------------------------------
+// Alerta de stock proyectado (semana en curso) — banner 🔴/🟡, sin bloqueo
+// duro (memory/business-rules.md, memory/modules-status.md fila #1).
+// ---------------------------------------------------------------------------
+const { cargando: cargandoAlertaStock, alertas: alertasStock, cargar: cargarAlertaStock } = useAlertaStockSemana()
+
 cargarBase()
 cargarResumen()
 cargarProveedores()
 cargarDespachos()
+cargarAlertaStock()
 </script>
 
 <template>
@@ -152,6 +161,31 @@ cargarDespachos()
     <VSection title="Home">
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
+      </div>
+
+      <!-- Alerta de stock proyectado (semana en curso) — solo se muestra si
+           hay algo en amarillo/rojo, no agrega ruido si está todo verde
+           (memory/business-rules.md: alerta sin bloqueo duro). -->
+      <div
+        v-if="!cargandoAlertaStock && alertasStock.length"
+        class="mb-4 rounded-lg border border-warning/30 bg-warning-light px-4 py-3"
+      >
+        <p class="mb-2 text-sm font-semibold text-text-strong">
+          ⚠️ Stock proyectado ajustado para los pedidos confirmados de esta semana
+        </p>
+        <ul class="space-y-1">
+          <li v-for="a in alertasStock" :key="a.nombre" class="flex items-center gap-2 text-sm text-text-mid">
+            <VSemaforo :estado="a.estadoProyectado" />
+            <span class="font-medium">{{ a.nombre }}</span>
+            <span class="text-text-soft">
+              — actual {{ a.stockActualTn.toFixed(1) }} tn, consumo comprometido
+              {{ a.consumoSemanaTn.toFixed(1) }} tn → proyectado
+              <span :class="a.estadoProyectado === 'rojo' ? 'font-semibold text-danger' : 'font-semibold text-warning'">
+                {{ a.stockProyectadoTn.toFixed(1) }} tn
+              </span>
+            </span>
+          </li>
+        </ul>
       </div>
 
       <!-- KPIs del mes -->
