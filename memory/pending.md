@@ -145,12 +145,26 @@ Falta que Federico confirme el dato real antes de corregirlo a mano
 para no inflar el bundle de ninguna vista que no lo use — queda en su
 propio chunk de red (~430kB) que solo se baja al exportar.
 
-**Deliberadamente fuera de esta tanda** (no tocado, no pedido esta vez):
-Maestros/Fórmulas/Dashboard/Simulador/Plan Semanal en mobile a fondo
-(quedan con el modo cards heredado de `VTable`, sin revisión fila por fila
-de sus grids de filtro/formulario); el modal de despacho multi-carga de
-Pedidos (`grid-cols-[1fr_1fr_1fr_auto]`) sigue sin apilarse en mobile —
-señalado en el diagnóstico de abajo, no se llegó a esta tanda.
+**Segunda tanda — completada en autónomo (2026-09-02, Federico ausente)**:
+Federico dejó 2 tareas en cola antes de ausentarse por un rato, con
+instrucción explícita de avanzar 100% autónomo:
+1. Modal de despacho multi-carga (`grid-cols-[1fr_1fr_1fr_auto]`, Pedidos)
+   apilado en mobile — `grid-cols-1` por debajo de 768px, botón "Quitar
+   carga" con texto (antes ✕ suelto). Verificado en vivo.
+2. Revisión responsive de Maestros/Fórmulas/Dashboard — **bug real
+   encontrado**: la barra de tabs de Maestros (6 tabs) quedaba recortada
+   por el `overflow-x-hidden` de `MobileLayout.vue` sin scroll ni wrap
+   visible — la tab "Materiales" quedaba **inalcanzable** desde el
+   celular. Mismo patrón en Stock (3 tabs) y Pedidos (2 tabs). Fix:
+   `overflow-x-auto` + `shrink-0 whitespace-nowrap` en las 3 barras —
+   patrón estándar de tabs scrolleables. Fórmulas (tabla de insumos
+   anidada en el modal "Editar fórmula") y Dashboard (KPIs, analítica de
+   proveedores, despachos por camión) ya funcionaban bien, sin cambios.
+
+**Deliberadamente fuera de esta tanda** (no tocado, no pedido): Simulador/
+Plan Semanal en mobile a fondo; revisión fila por fila de cada grid de
+filtro/formulario del resto de las vistas (se revisaron los casos con
+grids fijas conocidas, no una auditoría exhaustiva de cada modal).
 
 ### Diagnóstico rápido — estado inicial antes de esta tanda (2026-09-02, ver progreso arriba)
 
