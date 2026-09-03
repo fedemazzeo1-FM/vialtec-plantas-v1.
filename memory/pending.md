@@ -1,5 +1,60 @@
 # pending.md — Pendientes
 
+## Informe mensual de producción (Despachos → Resumen por obra) — implementado 2026-09-02, 1 pregunta pendiente para Federico
+
+Pedido nuevo de Federico en medio de la sesión de roadmap Mobile:
+automatizar el informe mensual que armaba a mano (compartió
+`Informe Plantas prod. JULIO 2026.xlsx` de referencia + una captura del
+cuerpo de mail deseado). Implementado y commiteado
+(`feat(despachos): informe mensual de producción exportable a Excel + macro
+de mail`): botón "📧 Exportar informe mensual" en Despachos → Resumen por
+obra, arma un `.xlsx` 100% dinámico (Resumen mensual + Resumen anual + una
+hoja por obra/cliente, mismo diseño violeta/verde del Excel de referencia)
+vía `exceljs` — ver `src/modules/despachos/services/informe-mensual.service.js`
+y `excel-informe-mensual.js`.
+
+**Auditado (Excel de julio)**: no tenía macros, fórmulas ni gráficos
+nativos — todo tipeado a mano. Se replicó solo la estética (colores/layout
+leídos de sus estilos reales, no a ojo), el contenido/estructura se diseñó
+de cero 100% dinámico.
+
+**Pregunta que quedó sin responder (Federico se ausentó antes de contestar
+la 1ª de las 2 preguntas que le hice)**: ¿qué cliente de mail usás en la
+computadora donde vas a abrir el informe y clickear el botón de mail
+(Outlook de escritorio / Apple Mail / Gmail-webmail)? Es la única variable
+que cambia el código del lado de la macro.
+
+**Decisión técnica tomada de forma autónoma para no bloquear el resto del
+trabajo** (avisar a Federico, confirmar o ajustar cuando vuelva):
+- Ninguna librería JS (ni `xlsx`, ni `exceljs`, ni ninguna otra) puede
+  escribir un `vbaProject.bin` válido sin Excel real instalado — es un
+  límite duro del formato, no una limitación de esta sesión. Por eso el
+  botón de mail no puede venir "ya embebido" en el .xlsx que genera la
+  app.
+- Se entregó separado en `docs/informe-mensual-macro/`:
+  `EnviarInformeMensual.bas` (macro real, con **detección automática de
+  SO** — Outlook COM en Windows, AppleScript a Mail.app en Mac, ninguna
+  cifra hardcodeada, todo buscado por texto en las celdas del informe
+  abierto) + `INSTRUCCIONES.md` (instalación única de ~2 minutos en el
+  Libro de macros personal — después de esa vez, funciona con cualquier
+  informe que la app genere, no hay que reinstalar cada mes).
+- Si la respuesta real es "uso Gmail/webmail en el navegador", ese caso
+  **no puede adjuntar el archivo automáticamente** desde VBA (limitación
+  real de cualquier webmail, no sorteable) — la macro tendría que armar
+  solo el texto para copiar/pegar, y el adjunto se agrega a mano. Está
+  documentado en el INSTRUCCIONES.md, pero si es el caso real hay que
+  avisar para simplificar el flujo (hoy la macro asume Outlook/Mail.app).
+
+**Sin poder verificar visualmente en el navegador** (la extensión de Chrome
+se desconectó en medio de la sesión, justo cuando Federico se ausentó) —
+se verificó igual con un test standalone vía Node + `openpyxl` (bundle con
+esbuild, datos simulados) que confirma: las 6+ hojas se crean con los
+nombres correctos, los colores/merges/fills coinciden exacto con el Excel
+de referencia, y las fechas salen en `DD/MM/YYYY` (no ISO). **Pendiente
+para la próxima sesión con Federico presente**: probar el flujo real de
+punta a punta en el navegador (con datos reales de producción) y abrir el
+`.xlsx` descargado en Excel de verdad.
+
 ## Roadmap: adaptación Mobile / Responsive — EN CURSO (registrado 2026-09-02, primera tanda implementada el mismo día)
 
 Pedido explícito de Federico: adaptar la app a mobile/smartphone, **no un
