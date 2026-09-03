@@ -1,5 +1,98 @@
 # pending.md — Pendientes
 
+## 🔴 AUDITORÍA CRÍTICA 2026-09-03 (madrugada) — Stock nuevo desactualizado vs. el legado en vivo
+
+Pedido explícito de Federico antes de irse a dormir: "audita el sistema
+viejo y el nuevo, los datos deben coincidir todos, stock, historiales
+etc." — se abrió `produccion.vialtec.app` (sesión ya logueada de
+Federico) en paralelo y se comparó Stock actual, material por material,
+en vivo. **Hallazgo importante, necesita decisión de Federico antes de
+tocar nada** (memory/procedimientos.md).
+
+### La causa raíz: el legado sigue LIVE y en uso real, después de la migración
+
+Ya estaba documentado que esto pasaba DURANTE la migración (2026-09-01),
+pero ahora se confirma que **sigue pasando 2 días después**: en
+`produccion.vialtec.app` → Stock → Historial de ingresos hay movimientos
+reales con fecha **"Mar 1 de septiembre"** y **"Mié 2 de septiembre"**
+(posteriores al commit de la migración) — ej. Fuel Oil +25,9 t (Avanzar
+S.A, remito 715927, Diego Sanchez, 2/9), Arena 0/6 +33,81 t (Cantera
+Pompeya S.A, remito 250171, 2/9), Asfalto AM3 (Autovia) +26,44 t (Avanzar
+S.A, remito 132228, Diego Sanchez, 1/9). **Estos movimientos NO están
+reflejados en el Stock actual de nuestro sistema nuevo** — el legado
+sigue siendo, en la práctica, el sistema que se usa día a día en planta
+para cargar ingresos de báscula, no el nuevo.
+
+### Comparación Stock actual — legado (en vivo, 2026-09-03) vs. nuestro sistema
+
+| Material | Legado (ahora) | Nuestro sistema | Diferencia |
+|---|---|---|---|
+| ASFALTO AM3 (AUTOVIA) | **21,26 t** | 47,47 t | **−26,21 t** |
+| ARENA 0/6 | **2.649,98 t** | 2.911,61 t | **−261,63 t** |
+| PIEDRA 6/20 | **2.136,86 t** | 2.398,86 t | **−262,00 t** |
+| FUEL OIL | **49,6 t** | 23,7 t | **+25,90 t** (al revés — nuestro está MÁS BAJO acá) |
+| ADD PLAS | 10,01 t | 10,02 t | ≈ igual (redondeo) |
+| ARENA 0/3 | 66,38 t | 66,38 t | ✅ igual |
+| ARENA SILICIA | 1.011,52 t | 1.011,52 t | ✅ igual |
+| ASFALTO CA30 | 0 t | 0 t | ✅ igual |
+| CEMENTO CPC 40 | 70,98 t | 70,98 t | ✅ igual |
+| FILLER | 25,42 t | 25,42 t | ✅ igual |
+| PIEDRA 10/30 | 571,74 t | 571,74 t | ✅ igual |
+| PIEDRA 12/20 | 530,42 t | 530,42 t | ✅ igual |
+| PIEDRA 6/12 | 503,19 t | 503,19 t | ✅ igual |
+
+**11 de 13 materiales coinciden exacto** (la mayoría de los áridos "chicos"
+no tuvieron movimiento en estos 2 días) — los que NO coinciden son
+justamente los que SÍ tuvieron ingresos/egresos reales recientes según el
+Historial de ingresos del legado. Nota curiosa: la diferencia de Piedra
+6/20 (262,00 t) es **prácticamente idéntica** al ajuste de conciliación
+que se aplicó el 2026-09-01 (261.996,85 kg) — a confirmar si es
+coincidencia (consumo real similar en magnitud) o si hay algo más ahí,
+no alcancé a indagar más a fondo.
+
+**Fuel Oil es el caso raro**: ahí nuestro sistema está MÁS BAJO que el
+legado (23,7 vs 49,6 t), al revés que los demás — un ingreso real de
+Fuel Oil (+25,9 t, remito 715927, 2/9) está en el legado y no en el
+nuestro, lo que cuadra con la diferencia casi exacta.
+
+### Historial de ingresos — conteo
+
+Legado: **612 registros** (ingresos + salidas, sin filtrar, "Historial de
+ingresos" del legado mezcla ambos tipos según el relevamiento previo).
+Nuestro `plantas_stock_movimientos` tiene **642** filas de tipo
+`ingreso_proveedor` sola (no comparé egresos ni otros tipos todavía) — los
+conteos no son directamente comparables sin desglosar por tipo en ambos
+lados, no llegué a hacer esa reconciliación fina esta noche.
+
+### Qué implica esto — necesito que decidas cómo seguir
+
+1. **El stock de nuestro sistema quedó desactualizado** apenas 2 días
+   después de la migración, porque el flujo operativo real de báscula
+   sigue pasando por el sistema viejo, no por el nuestro. Esto **no es un
+   bug de código** — es un tema de proceso/adopción: mientras se sigan
+   cargando ingresos/egresos reales en `produccion.vialtec.app` en vez de
+   en la app nueva, el stock de acá se va a seguir desincronizando cada
+   día que pasa.
+2. Antes de corregir el stock actual (mismo mecanismo ya usado el
+   2026-09-01 — Relevamiento mensual, RPC auditada, no un UPDATE directo),
+   necesito que confirmes: ¿ya se empezó a usar el sistema nuevo para las
+   pesadas reales de báscula, o seguimos en paralelo con el viejo? Si
+   seguimos en paralelo, cualquier corrección que haga hoy se vuelve a
+   desactualizar en un par de días — antes de re-conciliar convendría
+   definir la fecha de corte real en la que el sistema nuevo pasa a ser
+   el único que se usa en planta.
+3. **No toqué el stock ni hice ningún ajuste** — solo until confirmés
+   cómo proceder (memory/procedimientos.md, cambio de datos en
+   producción).
+
+### Pendiente para completar la auditoría (no llegué esta noche)
+
+- Comparar Despachos/Pedidos recientes (no solo Stock) contra el legado.
+- Desglosar el conteo de "Historial de ingresos" del legado por tipo
+  (ingreso vs. egreso) para comparar exacto contra
+  `plantas_stock_movimientos`.
+- Revisar Analítica de proveedores del legado vs. la nuestra.
+
 ## Plan Semanal — corrección de datos 2026-09-03 (flota_obras + pedido faltante)
 
 Federico reportó en vivo (miércoles 2026-09-03, viendo Plan Semanal): el

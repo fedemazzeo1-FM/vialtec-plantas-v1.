@@ -146,100 +146,110 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
   <!-- Réplica del remito físico de VialTec S.A. (foto real, 2026-09-01): se
        imprime cuando termina el acumulado del pedido/obra del día — el
        balancero corta este remito como respaldo de todos los vales de
-       báscula correlativos que se pesaron para llegar a ese acumulado. -->
-  <div v-else class="border border-gray-400 p-6 text-sm text-gray-800">
-    <div class="mb-4 flex items-start justify-between border-b-2 border-gray-800 pb-3">
-      <div>
-        <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-14 w-auto" />
-        <div class="mt-2 space-y-0.5 text-[11px] leading-tight text-gray-600">
-          <p>{{ EMPRESA.direccion1 }}</p>
-          <p>{{ EMPRESA.direccion2 }}</p>
-          <p>{{ EMPRESA.direccion3 }}</p>
-          <p>Tel.: {{ EMPRESA.telefono }}</p>
-          <p>{{ EMPRESA.condicionIva }}</p>
+       báscula correlativos que se pesaron para llegar a ese acumulado.
+
+       2 copias idénticas apiladas en 1 sola hoja (2026-09-03, pedido de
+       Federico — "remito, 2 hojas iguales, hoy se imprimen 6"): mismo
+       problema que ya se había corregido en el vale, layout compactado
+       para que las 2 entren cómodas en una A4 portrait (antes 1 copia
+       sola ya desbordaba a varias páginas por el espaciado generoso). A
+       diferencia del vale (que reparte una firma distinta por copia), acá
+       las 2 copias son iguales de verdad — mismo criterio que un
+       talonario de remito físico con original + duplicado en papel
+       carbónico. -->
+  <div v-if="modo === 'remito'" class="grid grid-cols-1">
+    <div
+      v-for="(_, i) in [0, 1]"
+      :key="i"
+      class="border border-gray-400 p-3 text-xs text-gray-800"
+      :class="i > 0 ? 'mt-0 border-t-0 border-dashed pt-3' : ''"
+    >
+      <div v-if="i > 0" class="relative -mt-3 mb-3 flex items-center gap-2 text-gray-300">
+        <span class="text-[10px]">✂</span>
+        <div class="flex-1 border-t border-dashed border-gray-300"></div>
+      </div>
+
+      <div class="mb-2 flex items-start justify-between border-b-2 border-gray-800 pb-2">
+        <div>
+          <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-8 w-auto" />
+          <div class="mt-1 space-y-0 text-[9px] leading-tight text-gray-600">
+            <p>{{ EMPRESA.direccion1 }} — {{ EMPRESA.direccion3 }}</p>
+            <p>Tel.: {{ EMPRESA.telefono }} — {{ EMPRESA.condicionIva }}</p>
+          </div>
+        </div>
+        <div class="text-right">
+          <p class="text-sm font-bold uppercase tracking-wide">Remito {{ i === 0 ? 'original' : 'duplicado' }}</p>
+          <div class="mt-0.5 text-[9px] leading-tight text-gray-600">
+            <p>C.U.I.T.: {{ EMPRESA.cuit }} — I.E.R.I.C.: {{ EMPRESA.ieric }} — II.BB.CM: {{ EMPRESA.iibb }}</p>
+          </div>
         </div>
       </div>
-      <div class="text-right">
-        <p class="text-base font-bold uppercase tracking-wide">Remito</p>
-        <div class="mt-1 text-[11px] leading-relaxed text-gray-600">
-          <p>C.U.I.T.: {{ EMPRESA.cuit }}</p>
-          <p>I.E.R.I.C.: {{ EMPRESA.ieric }}</p>
-          <p>II.BB.CM: {{ EMPRESA.iibb }}</p>
-          <p>Inicio Act.: {{ EMPRESA.inicioActividad }}</p>
+
+      <div class="mb-2 grid grid-cols-4 gap-2">
+        <div class="col-span-1 rounded border border-gray-300 px-2 py-1">
+          <p class="text-[8px] uppercase text-gray-400">Remito N°</p>
+          <p class="font-semibold">{{ pedido?.nro_remito_global || '—' }}</p>
+        </div>
+        <div class="col-span-1 rounded border border-gray-300 px-2 py-1">
+          <p class="text-[8px] uppercase text-gray-400">Fecha</p>
+          <p class="font-semibold">{{ formatFecha(vale.fecha_pesada).fecha }}</p>
+        </div>
+        <div class="col-span-2 rounded border border-gray-300 px-2 py-1">
+          <p class="text-[8px] uppercase text-gray-400">Destino</p>
+          <p class="truncate font-semibold">{{ obraNombre || '—' }}</p>
         </div>
       </div>
-    </div>
 
-    <div class="mb-3 grid grid-cols-2 gap-4">
-      <div class="rounded border border-gray-300 px-3 py-1.5">
-        <p class="text-[10px] uppercase text-gray-400">Remito N°</p>
-        <p class="font-semibold">{{ pedido?.nro_remito_global || '—' }}</p>
+      <table class="w-full table-fixed border border-gray-400 text-left">
+        <thead>
+          <tr class="border-b border-gray-400 bg-gray-50">
+            <th class="w-28 border-r border-gray-400 px-2 py-1 text-[9px] uppercase tracking-wide text-gray-500">Cantidad</th>
+            <th class="px-2 py-1 text-[9px] uppercase tracking-wide text-gray-500">Detalle</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="border-r border-gray-400 px-2 py-1.5 align-top font-semibold">
+              {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn
+            </td>
+            <td class="px-2 py-1.5 align-top">
+              <p>{{ detalleMezcla }}</p>
+              <p v-if="rangoVales?.valeDesde != null" class="mt-1 text-[9px] text-gray-600">
+                S/Vale de báscula N° {{ formatearNumeroVale(rangoVales.valeDesde) }}
+                <template v-if="rangoVales.valeHasta !== rangoVales.valeDesde">
+                  al {{ formatearNumeroVale(rangoVales.valeHasta) }}
+                </template>
+                (correlativos{{ rangoVales.cantidadVales ? ` — ${rangoVales.cantidadVales} pesada${rangoVales.cantidadVales === 1 ? '' : 's'}` : '' }})
+              </p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5">
+        <p>
+          <span class="font-semibold text-gray-500">Transporte:</span>
+          {{ esTransportePropio == null ? '—' : esTransportePropio ? 'Propio' : 'Tercero' }}
+        </p>
+        <p><span class="font-semibold text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
+        <p><span class="font-semibold text-gray-500">Transportista:</span> {{ vale.chofer || '—' }}</p>
+        <p><span class="font-semibold text-gray-500">Lugar de entrega:</span> {{ pedido?.ubicacion || '—' }}</p>
       </div>
-      <div class="rounded border border-gray-300 px-3 py-1.5">
-        <p class="text-[10px] uppercase text-gray-400">Fecha</p>
-        <p class="font-semibold">{{ formatFecha(vale.fecha_pesada).fecha }}</p>
+
+      <div class="mt-3 grid grid-cols-2 gap-4 text-[9px] text-gray-600">
+        <div>
+          <p>Despacho: ______________________</p>
+          <p class="mt-0.5 text-gray-400">{{ EMPRESA.nombre }} — Responsable de planta</p>
+        </div>
+        <div>
+          <p>Recibe conforme: ______________________</p>
+          <p class="mt-0.5 text-gray-400">Aclaración: ______________________</p>
+        </div>
       </div>
-    </div>
 
-    <div class="mb-3 space-y-0.5">
-      <p><span class="font-semibold text-gray-500">Desde:</span> {{ EMPRESA.deposito }}</p>
-      <p><span class="font-semibold text-gray-500">Destino:</span> {{ obraNombre || '—' }}</p>
-    </div>
-
-    <table class="w-full table-fixed border border-gray-400 text-left">
-      <thead>
-        <tr class="border-b border-gray-400 bg-gray-50">
-          <th class="w-32 border-r border-gray-400 px-2 py-1 text-xs uppercase tracking-wide text-gray-500">Cantidad</th>
-          <th class="px-2 py-1 text-xs uppercase tracking-wide text-gray-500">Detalle</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr class="border-b border-gray-300">
-          <td class="border-r border-gray-400 px-2 py-2 align-top font-semibold">
-            {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn
-          </td>
-          <td class="px-2 py-2 align-top">
-            <p>{{ detalleMezcla }}</p>
-            <p v-if="rangoVales?.valeDesde != null" class="mt-2 text-xs text-gray-600">
-              S/Vale de báscula N° {{ formatearNumeroVale(rangoVales.valeDesde) }}
-              <template v-if="rangoVales.valeHasta !== rangoVales.valeDesde">
-                al {{ formatearNumeroVale(rangoVales.valeHasta) }}
-              </template>
-              (correlativos{{ rangoVales.cantidadVales ? ` — ${rangoVales.cantidadVales} pesada${rangoVales.cantidadVales === 1 ? '' : 's'}` : '' }})
-            </p>
-          </td>
-        </tr>
-        <!-- filas vacías, calzan con el formato físico del remito en papel -->
-        <tr v-for="n in 3" :key="n" class="border-b border-gray-200">
-          <td class="border-r border-gray-400 px-2 py-3">&nbsp;</td>
-          <td class="px-2 py-3">&nbsp;</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="mt-3 space-y-0.5">
-      <p>
-        <span class="font-semibold text-gray-500">Transporte:</span>
-        {{ esTransportePropio == null ? '—' : esTransportePropio ? 'Propio' : 'Tercero' }}
-      </p>
-      <p><span class="font-semibold text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
-      <p><span class="font-semibold text-gray-500">Transportista:</span> {{ vale.chofer || '—' }}</p>
-      <p><span class="font-semibold text-gray-500">Lugar de entrega:</span> {{ pedido?.ubicacion || '—' }}</p>
-    </div>
-
-    <div class="mt-8 grid grid-cols-2 gap-8 text-xs text-gray-600">
-      <div>
-        <p>Despacho: ______________________</p>
-        <p class="mt-1 text-gray-400">{{ EMPRESA.nombre }} — Responsable de planta</p>
+      <div class="mt-2 border-t border-gray-300 pt-1 text-[9px] text-gray-500">
+        <span class="font-semibold">Depósito:</span> {{ EMPRESA.deposito }}
       </div>
-      <div>
-        <p>Recibe conforme: ______________________</p>
-        <p class="mt-2 text-gray-400">Aclaración: ______________________</p>
-      </div>
-    </div>
-
-    <div class="mt-4 border-t border-gray-300 pt-2 text-xs text-gray-500">
-      <span class="font-semibold">Depósito:</span> {{ EMPRESA.deposito }}
     </div>
   </div>
 </template>
