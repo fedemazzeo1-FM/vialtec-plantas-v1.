@@ -592,7 +592,7 @@ iniciar()
           <div
             v-for="(carga, idx) in despacho.cargas"
             :key="idx"
-            class="grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2 rounded-lg border border-border p-2"
+            class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_1fr_1fr_auto]"
           >
             <label class="text-xs text-text-mid">
               Cantidad (tn) *
@@ -626,7 +626,7 @@ iniciar()
               :disabled="despacho.cargas.length <= 1"
               @click="despacho.quitarCarga(idx)"
             >
-              ✕
+              ✕ Quitar carga
             </VButton>
           </div>
           <VButton type="button" variant="secondary" size="sm" @click="despacho.agregarCarga">+ Agregar carga</VButton>
@@ -692,7 +692,7 @@ iniciar()
           <div
             v-for="(carga, idx) in cargaHormigon.cargas"
             :key="idx"
-            class="grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2 rounded-lg border border-border p-2"
+            class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_1fr_1fr_auto]"
           >
             <label class="text-xs text-text-mid">
               Cantidad (m³) *
@@ -726,7 +726,7 @@ iniciar()
               :disabled="cargaHormigon.cargas.length <= 1"
               @click="cargaHormigon.quitarCarga(idx)"
             >
-              ✕
+              ✕ Quitar carga
             </VButton>
           </div>
           <VButton type="button" variant="secondary" size="sm" @click="cargaHormigon.agregarCarga">+ Agregar carga</VButton>
