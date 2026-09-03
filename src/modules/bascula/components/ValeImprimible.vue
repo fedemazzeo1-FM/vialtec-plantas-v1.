@@ -3,9 +3,15 @@
 // El wrapper .imprimible (definido en src/assets/main.css) es lo que hace que
 // solo esto se vea al imprimir, ocultando el resto de la página/modal.
 //
-// Modo "vale": formato A4 landscape, DOS copias por página (planta + chofer)
-// — Logica sis. plantas v1.rtf §2.4: "formato A4 landscape, dos copias por
-// página (planta y chofer)". @page va en src/assets/main.css.
+// Modo "vale" (rediseñado 2026-09-03, pedido de Federico — antes salía en
+// 7 hojas): formato A4 PORTRAIT, DOS copias apiladas en una sola página
+// (planta arriba, chofer abajo, separadas por una línea de corte punteada)
+// — ya no landscape lado a lado (Logica sis. plantas v1.rtf §2.4 pedía esa
+// orientación, pero en la práctica el contenido de cada copia no entraba en
+// la altura acotada de una página apaisada y el navegador seguía
+// paginando). Layout compacto (campos agrupados de a 3-4 por fila) para que
+// las dos copias entren cómodas en los ~277mm de alto disponibles. @page
+// va en src/assets/main.css.
 //
 // Modo "remito" (rediseñado 2026-09-01 contra una foto real de un remito de
 // VialTec S.A. que compartió Federico): reproduce el remito fiscal en papel
@@ -52,6 +58,12 @@ const EMPRESA = {
   deposito: 'Parque Industrial Ruta N°6',
 }
 
+// Certificado de calibración de la balanza (2026-09-03, pedido de
+// Federico) — dato fijo del instrumento, igual que los datos impositivos
+// de EMPRESA de arriba: si algún día se recalibra con otro N°, se
+// actualiza acá, no hay tabla para esto (no es un dato operativo por vale).
+const BALANZA_CERT_CALIBRACION = 'Balanza cert. calibración N° 260409-272'
+
 function formatFecha(iso) {
   const d = new Date(iso)
   return {
@@ -82,35 +94,49 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
 
 <template>
   <!-- ============================== MODO VALE ============================== -->
-  <div v-if="modo === 'vale'" class="grid grid-cols-1 gap-4 print:grid-cols-2">
-    <div v-for="copia in copiasVale" :key="copia.titulo" class="border border-gray-300 p-6 text-sm text-gray-800">
-      <div class="mb-4 flex items-start justify-between border-b border-gray-300 pb-3">
-        <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-12 w-auto" />
+  <!-- Siempre 1 columna (ya no print:grid-cols-2 — landscape lado a lado):
+       las 2 copias se apilan, separadas por una línea de corte punteada. -->
+  <div v-if="modo === 'vale'" class="grid grid-cols-1">
+    <div
+      v-for="(copia, i) in copiasVale"
+      :key="copia.titulo"
+      class="border border-gray-300 p-4 text-xs text-gray-800"
+      :class="i > 0 ? 'mt-0 border-t-0 border-dashed pt-4' : ''"
+    >
+      <!-- Línea de corte entre copias (2026-09-03): visual de "cortar acá",
+           mismo criterio que un talonario físico con duplicado. -->
+      <div v-if="i > 0" class="relative -mt-4 mb-4 flex items-center gap-2 text-gray-300">
+        <span class="text-[10px]">✂</span>
+        <div class="flex-1 border-t border-dashed border-gray-300"></div>
+      </div>
+
+      <div class="mb-2 flex items-start justify-between border-b border-gray-300 pb-2">
+        <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-9 w-auto" />
         <div class="text-right">
-          <p class="text-lg font-bold">Vale de pesaje</p>
-          <p class="text-gray-500">N° {{ formatearNumeroVale(vale.numero_vale) }}</p>
-          <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ copia.titulo }}</p>
+          <p class="text-base font-bold">Vale de pesaje N° {{ formatearNumeroVale(vale.numero_vale) }}</p>
+          <p class="text-[10px] text-gray-400">{{ BALANZA_CERT_CALIBRACION }}</p>
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ copia.titulo }}</p>
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-x-6 gap-y-2">
+      <div class="grid grid-cols-3 gap-x-4 gap-y-1">
         <p><span class="text-gray-500">Fecha:</span> {{ formatFecha(vale.fecha_pesada).fecha }}</p>
         <p><span class="text-gray-500">Hora:</span> {{ formatFecha(vale.fecha_pesada).hora }}</p>
-        <p><span class="text-gray-500">Obra:</span> {{ obraNombre || '—' }}</p>
-        <p><span class="text-gray-500">Mezcla:</span> {{ mezclaNombre || '—' }}</p>
-        <p><span class="text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
+        <p class="col-span-1"><span class="text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
+        <p class="col-span-2"><span class="text-gray-500">Obra:</span> {{ obraNombre || '—' }}</p>
         <p><span class="text-gray-500">Chofer:</span> {{ vale.chofer || '—' }}</p>
-        <p><span class="text-gray-500">Peso bruto:</span> {{ vale.peso_bruto }} {{ vale.unidad }}</p>
+        <p class="col-span-3"><span class="text-gray-500">Mezcla:</span> {{ mezclaNombre || '—' }}</p>
+        <p><span class="text-gray-500">Bruto:</span> {{ vale.peso_bruto }} {{ vale.unidad }}</p>
         <p><span class="text-gray-500">Tara:</span> {{ vale.tara }} {{ vale.unidad }}</p>
-        <p><span class="text-gray-500">Peso neto:</span> {{ vale.peso_neto }} {{ vale.unidad }}</p>
-        <p v-if="vale.temperatura != null"><span class="text-gray-500">Temperatura:</span> {{ vale.temperatura }} °C</p>
+        <p><span class="text-gray-500">Neto:</span> {{ vale.peso_neto }} {{ vale.unidad }}</p>
+        <p v-if="vale.temperatura != null"><span class="text-gray-500">Temp.:</span> {{ vale.temperatura }} °C</p>
       </div>
 
-      <div class="mt-4 border-t border-gray-300 pt-3">
-        <p class="text-base font-semibold">Acumulado: {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn</p>
+      <div class="mt-2 border-t border-gray-300 pt-1.5">
+        <p class="text-sm font-semibold">Acumulado: {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn</p>
       </div>
 
-      <div class="mt-10 text-xs text-gray-500">
+      <div class="mt-4 text-[10px] text-gray-500">
         <p>{{ copia.firma }}: ______________________</p>
       </div>
     </div>

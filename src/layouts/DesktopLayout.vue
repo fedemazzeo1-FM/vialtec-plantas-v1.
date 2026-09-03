@@ -37,9 +37,9 @@ const iniciales = computed(() =>
       class="flex flex-col border-r border-gray-200 bg-gray-50 text-gray-600 transition-all duration-200"
       :class="colapsado ? 'w-[52px]' : 'w-[216px]'"
     >
-      <div class="flex items-center justify-between px-3 py-4">
+      <div class="relative flex items-center justify-between px-3 py-4">
         <div v-if="!colapsado">
-          <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-7 w-auto" />
+          <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-9 w-auto" />
           <p class="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-soft">Plantas</p>
         </div>
         <span

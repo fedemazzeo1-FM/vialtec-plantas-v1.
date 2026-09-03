@@ -401,7 +401,7 @@ iniciar()
       :title="modoImpresion === 'remito' ? 'Remito de entrega' : 'Vale de pesaje'"
       @update:open="modalImpresionAbierto = $event"
     >
-      <div class="imprimible" :class="{ 'modo-remito': modoImpresion === 'remito' }">
+      <div class="imprimible">
         <ValeImprimible
           v-if="valeParaImprimir"
           :vale="valeParaImprimir"

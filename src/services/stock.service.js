@@ -100,7 +100,19 @@ async function enriquecerMovimientos(filas) {
   return filas.map((m) => ({
     ...m,
     materialNombre: m.plantas_materiales?.nombre ?? '—',
-    responsableNombre: m.responsable_email ? nombresPorEmail[m.responsable_email] ?? m.responsable_email : '—',
+    // Fix 2026-09-03 (Federico: "falta el campo Responsable" en el
+    // historial): los 642 movimientos ingreso_proveedor migrados del
+    // histórico legado (memory/pending.md) nunca tuvieron responsable_email
+    // — no existía ese dato en el legado, solo un nombre de operador en
+    // texto libre (`datos_legados.operador`, ej. "Diego Sanchez"). Antes
+    // esos 642 quedaban con "—" aunque el dato SÍ estuviera disponible; se
+    // usa como fallback, marcado "(histórico)" para no confundirlo con un
+    // responsable real logueado.
+    responsableNombre: m.responsable_email
+      ? nombresPorEmail[m.responsable_email] ?? m.responsable_email
+      : m.datos_legados?.operador
+        ? `${m.datos_legados.operador} (histórico)`
+        : '—',
     esIngreso: TIPOS_INGRESO.includes(m.tipo) || m.cantidad_kg > 0,
   }))
 }

@@ -22,23 +22,21 @@
    el resto de la página (sidebar, modal, botones) se oculta. Reutilizable por
    cualquier módulo que necesite imprimir un comprobante.
 
-   @page en A4 landscape por default: el vale de báscula se imprime en dos
-   copias (planta + chofer) lado a lado (Logica sis. plantas v1.rtf §2.4) —
-   solo entra en una hoja apaisada.
-
-   Fix 2026-09-01 (contra una foto real de un remito de VialTec S.A.): el
-   REMITO es un documento A4 vertical (portrait), no apaisado — es la réplica
-   de un formulario preimpreso en papel carta/A4 común. Se resuelve con una
-   "named page" de CSS (`@page remito`) + la propiedad `page` en el elemento
-   `.imprimible.modo-remito` — el vale sigue usando el `@page` por default
-   (landscape), el remito pisa la orientación solo para sí mismo. */
+   @page en A4 PORTRAIT (2026-09-03, pedido de Federico: "orientación
+   vertical, debe entrar en 1 sola hoja con su duplicado"). Antes el vale
+   imprimía en A4 landscape con las 2 copias lado a lado — Federico reportó
+   que en la práctica eso le estaba saliendo en 7 hojas (el contenido de
+   cada copia no entraba en la altura acotada de una página apaisada, así
+   que el navegador seguía paginando). En portrait, con las 2 copias
+   apiladas verticalmente en vez de lado a lado, cada una tiene más alto
+   disponible por copia (≈140mm) y bastante menos ancho — layout de
+   ValeImprimible.vue rediseñado para ese espacio (menos campos por fila,
+   fuente más chica, sin perder ningún dato). El remito ya era portrait
+   desde el 2026-09-01 — con el vale ahora también portrait, un solo @page
+   alcanza para los dos, se elimina la "named page" que existía para
+   distinguirlos. */
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 10mm;
-  }
-
-  @page remito {
     size: A4 portrait;
     margin: 10mm;
   }
@@ -55,8 +53,5 @@
     top: 0;
     left: 0;
     width: 100%;
-  }
-  .imprimible.modo-remito {
-    page: remito;
   }
 }
