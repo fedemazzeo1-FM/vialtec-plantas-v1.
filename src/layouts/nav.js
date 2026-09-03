@@ -7,14 +7,20 @@
 
 export const SECCIONES = [
   {
+    // "Home" (2026-09-03, pedido de Federico — antes "Dashboard"): Plan
+    // semanal y Pedidos suben acá junto al inicio, son las 3 pantallas de
+    // uso diario más frecuente — quedan afuera de "Operación" (que se queda
+    // con lo más puntual/operativo del día a día de planta).
     titulo: 'General',
-    links: [{ to: '/dashboard', label: 'Dashboard', tab: 'dashboard', icon: 'grid' }],
+    links: [
+      { to: '/dashboard', label: 'Home', tab: 'dashboard', icon: 'grid' },
+      { to: '/plan-semanal', label: 'Plan semanal', tab: 'plan-semanal', icon: 'calendario' },
+      { to: '/pedidos', label: 'Pedidos', tab: 'pedidos', icon: 'clipboard' },
+    ],
   },
   {
     titulo: 'Operación',
     links: [
-      { to: '/plan-semanal', label: 'Plan semanal', tab: 'plan-semanal', icon: 'calendario' },
-      { to: '/pedidos', label: 'Pedidos', tab: 'pedidos', icon: 'clipboard' },
       { to: '/despachos', label: 'Despachos', tab: 'despachos', icon: 'camion' },
       { to: '/bascula', label: 'Báscula', tab: 'bascula', icon: 'balanza' },
       { to: '/stock', label: 'Stock', tab: 'stock', icon: 'caja' },

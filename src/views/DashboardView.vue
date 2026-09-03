@@ -149,7 +149,7 @@ cargarDespachos()
 
 <template>
   <div>
-    <VSection title="Dashboard">
+    <VSection title="Home">
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
