@@ -875,6 +875,73 @@ calcar `green/red/amber/blue` como en Flota) antes de aplicar el config.
 Un valor (`amber-light`) quedó sin confirmar, marcado explícitamente en el
 documento.
 
+## 🔴 Confirmación pendiente — Migración 21: Usuarios y Permisos por rol (2026-09-03)
+
+Pedido explícito de Federico: *"MÓDULO DE USUARIOS Y PERMISOS POR ROL: Incluir
+la pestaña/tab 'Usuarios' dentro del Módulo de Permisos por Rol para unificar
+ahí toda la administración de cuentas y asignación de roles. Restringir el
+acceso a este módulo y sus configuraciones exclusivamente a usuarios con rol
+Admin."*
+
+**Ya hecho** (sin tocar la base de datos): `/usuarios` — nueva pantalla con 2
+tabs (`UsuariosPermisosView.vue`), servicio (`usuarios.service.js`) y
+composable (`useUsuariosRoles.js`). Visible/accesible SOLO para rol admin (el
+link de nav se filtra solo — admin es el único rol con `tabs: 'todas'` en
+`PERMISOS_POR_ROL` — y el router bloquea el acceso directo por URL con el
+mismo guard genérico de siempre). Tab "Permisos por rol" ya funciona 100% (es
+de solo lectura, muestra la matriz que ya vive en `auth.store.js`, no toca la
+DB). Build verificado.
+
+**Falta tu confirmación para la tab "Usuarios"** (alta/edición de cuentas):
+hoy la RLS de `plantas_usuarios_roles` (migración 07) solo deja a cada
+usuario leer SU PROPIA fila, y no existe ninguna vía de escritura desde el
+cliente — a propósito, según el comentario de esa misma migración ("hasta
+que exista la pantalla ABM de Roles"), que es exactamente esto. Dejé armada
+la migración 21 como **borrador, sin aplicar**, en
+`supabase/migrations/21_admin_gestion_usuarios_roles.sql`:
+- Agrega una policy de SELECT: admin puede leer todas las filas (la policy
+  de "cada uno lee la suya" sigue intacta).
+- Agrega una función `admin_upsert_usuario_rol(...)` (SECURITY DEFINER) que
+  valida server-side que quien llama sea admin — única vía de escritura,
+  mismo patrón que ya usan Pedidos/Báscula.
+- 100% aditivo, no toca datos existentes. Reversible con 2 `drop` (detallado
+  al final del archivo).
+
+Por favor revisá el archivo y confirmame para aplicarla (`mcp supabase
+apply_migration` o el flujo que prefieras) — recién ahí la tab "Usuarios"
+queda 100% operativa. Mientras tanto la pantalla ya avisa esto mismo en un
+cartel visible arriba de la tabla, no falla en silencio.
+
+## ⚠️ Ambigüedad sin resolver — orientación de vale/remito (2026-09-03)
+
+Tu mensaje: *"los vale y remitos imprimibles, los vales la hoja debe estar
+horizontal y los vales verticales, aprovechar toda la hoja. remito, 2 hojas
+iguales, hoy se imprimen 6"* — el mensaje se contradice a sí mismo ("los
+vales... horizontal" y en la misma frase "los vales verticales"), así que
+no reinterpreté el rediseño ya confirmado antes en la sesión (ítem 1 de tu
+lista de requerimientos: *"orientación VERTICAL"* para vale y remito, que sí
+implementé y vos no corregiste en ningún mensaje posterior — al contrario,
+más tarde dijiste "la firmas de los vales ya estan bien, no las toques",
+dando por bueno ese rediseño).
+
+**Lo que hice**: dejé el vale en vertical (como ya estaba confirmado) y
+SOLO tomé como accionable la parte no ambigua — "remito, 2 hojas iguales,
+hoy se imprimen 6" — rehaciendo el remito para que sean 2 copias idénticas
+apiladas en una sola hoja (mismo patrón que el vale: "Remito original" /
+"Remito duplicado" con línea de corte punteada), buscando resolver el "hoy
+se imprimen 6" (que entiendo como demasiadas hojas por remito hoy).
+
+**Falta confirmar**:
+1. ¿El vale queda en vertical (como ya está) o querías decir que el **remito**
+   fuera horizontal y el vale vertical? Con el mensaje tal cual está escrito
+   no puedo saber si "los vales" (2ª mención) fue un error de tipeo por
+   "los remitos".
+2. El remito rediseñado (2 copias apiladas, compactado a texto muy chico
+   para entrar en 1 hoja) **no se verificó visualmente en el navegador**
+   todavía (a diferencia del vale, que sí se vio y confirmaste) — antes de
+   darlo por bueno conviene que lo mires impreso/print-preview una vez que
+   estés de vuelta, capaz hace falta ajustar tamaños de fuente.
+
 ## Otros pendientes
 
 - Definir el mapeo de los 7 roles del sistema anterior (`admin`, `plantista`,

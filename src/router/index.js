@@ -73,8 +73,13 @@ const routes = [
     component: () => import('@/views/SimuladorView.vue'),
     meta: { tab: 'simulador' },
   },
-  // TODO: /usuarios, /roles, /backup — a medida que se implemente cada
-  // módulo (ver memory/modules-status.md).
+  {
+    path: '/usuarios',
+    name: 'usuarios',
+    component: () => import('@/views/UsuariosPermisosView.vue'),
+    meta: { tab: 'usuarios' },
+  },
+  // TODO: /backup — a medida que se implemente (ver memory/modules-status.md).
 ]
 
 export const router = createRouter({

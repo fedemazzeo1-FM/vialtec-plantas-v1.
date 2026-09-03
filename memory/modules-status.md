@@ -13,8 +13,8 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 | 6 | Báscula / Balanza | Puertas de pesaje, vales de asfalto, ingreso/egreso de áridos | EN CURSO — **fidelidad funcional con el legado cerrada (2026-08-28, Fase 1+2 sobre el relevamiento Etapa 3)**: ver detalle abajo. **Descuento/ingreso de stock ya resuelto (migraciones 13/14)**: ingreso/egreso de áridos mueve `plantas_stock` directo desde `registrar_pesada_bascula`; el pesaje de asfalto YA NO toca `plantas_pedidos` (ver "Stock e Inventarios" abajo, migración 14) — el cierre del pedido y su descuento de stock son exclusivos de Pedidos |
 | 7 | Fórmulas | Composición de mezclas (asfalto/hormigón), conversión a kg | EN CURSO — service + `FormulasView` con edición inline de insumos listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_formulas` (pendiente de confirmación). `calcularConsumoKg()`/`calcularConsumoTotalKg()` tienen gemela SQL (`plantas_calcular_consumo_kg`, migración 13) usada por el descuento de stock — si se cambia una, cambiar la otra. |
 | 8 | Maestros | Obras, encargados, proveedores, patentes, choferes, materiales | EN CURSO — service + `MaestrosView` (tabs) listos. **Tab "Materiales" agregada 2026-08-31**. **2026-09-01: separación Vehículos Propios/Externos** (2 tabs en vez de 1 con columna "Origen") + auditoría completa de `vt_maestros9` — `clientes` (7) sin migrar (falta tabla, requiere autorización) y `choferes` sin poblar (no hay catálogo 1:1 en el legado, texto libre con inconsistencias — ver `pending.md`). |
-| 9 | Usuarios | ABM de usuarios, mapeo con Supabase Auth y roles | PENDIENTE |
-| 10 | Roles | Configuración de permisos por rol (override sobre defaults) | PENDIENTE |
+| 9 | Usuarios | ABM de usuarios, mapeo con Supabase Auth y roles | UI LISTA — espera migración 21 (ver pending.md) |
+| 10 | Roles | Configuración de permisos por rol (override sobre defaults) | Vista de solo-lectura de la matriz lista; edición vía DB queda para más adelante |
 | 11 | Backup | Backups automáticos/manuales y restauración | PENDIENTE |
 | 12 | Resumen mensual / Reportes | Excel mensual de producción por obra e insumos | PENDIENTE |
 | 13 | Migración de historial | Migrar datos del sistema anterior a `plantas_*` | **COMPLETADA — 2026-09-01**: 184 pedidos, 885 vales, 780 movimientos de stock, 19 fórmulas, 114 cargas de hormigón, 18 materiales, 8 proveedores, 51 patentes. Ver `pending.md` para el detalle e integridad verificada. |
@@ -494,9 +494,14 @@ Build verificado (`npm run build` limpio).
 Próximos en la metodología (relevamiento en vivo → gap report → aprobación
 → implementación → build → prueba real → commit aislado).
 
-- **Usuarios y Permisos por rol** — restricciones reales (RLS fina, hoy
-  `using (true)` en las 9 tablas) y visibilidad de pedidos por obra
-  asignada — es la etapa de seguridad pospuesta durante Pedidos Fase 1.
+- **Usuarios y Permisos por rol** — RLS fina de negocio (hoy `using (true)`
+  en catálogos) y visibilidad de pedidos por obra asignada siguen
+  pospuestas. La pantalla de administración de cuentas en sí (`/usuarios`,
+  pedido explícito de Federico 2026-09-03) ya está armada
+  (`UsuariosPermisosView.vue` + `usuarios.service.js`, solo visible/accesible
+  para rol admin) pero queda inactiva hasta que se confirme y aplique la
+  migración 21 (`supabase/migrations/21_admin_gestion_usuarios_roles.sql`,
+  BORRADOR — ver memory/pending.md).
 - **Auditoría** — panel para ver quién ejecutó cada acción y su
   trazabilidad (además del historial de pedidos, que ya existe).
 

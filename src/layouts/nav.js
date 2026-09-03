@@ -32,6 +32,13 @@ export const SECCIONES = [
     links: [
       { to: '/formulas', label: 'Fórmulas', tab: 'formulas', icon: 'matraz' },
       { to: '/maestros', label: 'Maestros', tab: 'maestros', icon: 'base-datos' },
+      // Solo aparece para admin: PERMISOS_POR_ROL['admin'].tabs === 'todas'
+      // es el único rol que matchea 'usuarios' (memory/business-rules.md,
+      // auth.store.js#puedeVerTab) — el resto de los roles no tiene
+      // 'usuarios' en su array de tabs, así que el link se filtra solo acá
+      // y el router bloquea el acceso directo por URL igual (mismo guard
+      // genérico de siempre, sin código especial para este módulo).
+      { to: '/usuarios', label: 'Usuarios y Permisos', tab: 'usuarios', icon: 'usuarios' },
     ],
   },
 ]
@@ -57,6 +64,8 @@ export const ICONOS = {
   matraz: '<path d="M9 3h6M10 3v5.5L5.5 17a2 2 0 0 0 1.8 3h9.4a2 2 0 0 0 1.8-3L14 8.5V3"/>',
   'base-datos':
     '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+  usuarios:
+    '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="8" r="2.5"/><path d="M15.5 12.5a5 5 0 0 1 5.8 4.9"/>',
   salir: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
   cerrar: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
