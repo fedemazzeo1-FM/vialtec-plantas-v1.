@@ -283,12 +283,12 @@ iniciar()
              SOLO su material, el rango de semana/filtros de arriba les
              aplica a las dos por igual (comparten los mismos `filtros`,
              solo cambia `tabTipo`). -->
-        <div class="flex gap-1 border-b border-border">
+        <div class="flex gap-1 overflow-x-auto border-b border-border">
           <button
             v-for="tab in TABS_TIPO"
             :key="tab.valor"
             type="button"
-            class="border-b-2 px-3 py-2 text-sm font-semibold transition-colors duration-150"
+            class="shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition-colors duration-150"
             :class="
               tab.valor === tabTipo
                 ? 'border-vialtec text-vialtec'
