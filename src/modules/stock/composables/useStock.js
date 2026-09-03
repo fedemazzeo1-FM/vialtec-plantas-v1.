@@ -12,7 +12,10 @@ import {
 } from '@/services/stock.service'
 import { materialesService } from '@/modules/maestros/services/maestros.service'
 import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
-import { exportarExcel, nombreArchivoConFecha } from '@/services/excel-export'
+// Excel con formato corporativo (2026-09-03, pedido de Federico: "Fecha de
+// exportación" + logo + estilo de colores + pie institucional) — reemplaza
+// a src/services/excel-export.js (SheetJS, no soporta escribir estilos).
+import { exportarPlanillaCorporativa, nombreArchivoConFecha } from '@/services/excel-corporativo'
 
 const TAMANO_PAGINA_HISTORIAL = 30
 
@@ -274,9 +277,10 @@ export function useStock() {
   async function exportarStockActualExcel() {
     exportando.value = true
     try {
-      await exportarExcel(nombreArchivoConFecha('stock-actual'), [
+      await exportarPlanillaCorporativa(nombreArchivoConFecha('stock-actual'), [
         {
           nombre: 'Stock actual',
+          titulo: 'Stock actual',
           filas: materiales.value,
           columnas: [
             { key: 'nombre', label: 'Material' },
@@ -304,9 +308,10 @@ export function useStock() {
         desde: filtrosHistorial.desde || undefined,
         hasta: filtrosHistorial.hasta || undefined,
       })
-      await exportarExcel(nombreArchivoConFecha('stock-historial-ingresos'), [
+      await exportarPlanillaCorporativa(nombreArchivoConFecha('stock-historial-ingresos'), [
         {
           nombre: 'Historial',
+          titulo: 'Historial de ingresos',
           filas,
           columnas: [
             { key: 'fecha_movimiento', label: 'Fecha', format: (v) => new Date(v).toLocaleString('es-AR') },
@@ -336,9 +341,10 @@ export function useStock() {
       const filas = analiticaProveedores.value.flatMap((p) =>
         p.insumos.map((i) => ({ proveedor: p.proveedor, ...i }))
       )
-      await exportarExcel(nombreArchivoConFecha('stock-analitica-proveedores'), [
+      await exportarPlanillaCorporativa(nombreArchivoConFecha('stock-analitica-proveedores'), [
         {
           nombre: 'Proveedores',
+          titulo: 'Analítica de proveedores',
           filas,
           columnas: [
             { key: 'proveedor', label: 'Proveedor' },

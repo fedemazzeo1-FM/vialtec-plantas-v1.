@@ -6,12 +6,14 @@
 // a la izquierda) pero 100% dinámico: recibe los datos ya armados por
 // informe-mensual.service.js, ningún valor hardcodeado.
 //
-// Librería: `exceljs` (no `xlsx`/SheetJS que ya usa el resto de la app) —
-// la Community Edition de SheetJS no soporta ESCRIBIR estilos (fills/fonts/
-// merges), solo leerlos; para un informe con este nivel de diseño hacía
-// falta una librería que sí lo soporte del lado del cliente. `xlsx` sigue
-// siendo la elegida para los exports lisos de Báscula/Stock (no lo
-// justifica ahí, evita cargar 2 librerías pesadas para lo mismo).
+// Librería: `exceljs`, import DINÁMICO (no estático arriba — pesa ~945kB
+// minificado, infla el chunk de Despachos si se importa al tope del
+// archivo; ver excel-corporativo.js para el mismo criterio).
+//
+// Paleta/estilos (2026-09-03: extraídos a src/services/excel-corporativo.js
+// como estándar para TODOS los Excel de la app, no solo este informe —
+// antes vivían duplicados acá, memory/conventions.md) + pie institucional +
+// "Fecha de exportación" en el encabezado.
 //
 // No incluye macros/VBA — ninguna librería JS puede escribir un
 // vbaProject.bin válido (requiere Excel real para compilarlo). El botón de
@@ -19,47 +21,22 @@
 // (ver memory/pending.md — "Informe mensual: macro de mail" para el detalle
 // y las instrucciones de instalación).
 
-import ExcelJS from 'exceljs'
 import logoVialtec from '@/assets/img/logo-vialtec.png'
-
-// Paleta calcada del Excel de referencia (getComputedStyle-equivalente:
-// leído directo de los estilos del .xlsx de julio, no a ojo).
-const VIOLETA = 'FF7C3AED'
-const VIOLETA_CLARO = 'FFDDD6FE'
-const VERDE_BANDA = 'FF92D050'
-const VERDE_TOTAL = 'FF00B050'
-const GRIS_TEXTO = 'FF374151'
-const GRIS_SUAVE = 'FF9CA3AF'
-const BLANCO = 'FFFFFFFF'
-
-function aplicarFill(cell, argb) {
-  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } }
-}
-
-function estiloHeaderTabla(cell) {
-  aplicarFill(cell, VIOLETA)
-  cell.font = { bold: true, color: { argb: BLANCO }, size: 11 }
-  cell.alignment = { horizontal: 'center', vertical: 'middle' }
-}
-
-function estiloSubtotal(cell) {
-  aplicarFill(cell, VIOLETA_CLARO)
-  cell.font = { bold: true, color: { argb: VIOLETA }, size: 10 }
-}
-
-function estiloTotalGeneral(cell, size = 10) {
-  aplicarFill(cell, VERDE_TOTAL)
-  cell.font = { bold: true, color: { argb: BLANCO }, size }
-}
-
-function estiloBandaExterna(cell) {
-  aplicarFill(cell, VERDE_BANDA)
-  cell.font = { bold: true, color: { argb: BLANCO }, size: 11 }
-}
-
-function estiloCuerpo(cell) {
-  cell.font = { color: { argb: GRIS_TEXTO }, size: 10 }
-}
+import {
+  VIOLETA,
+  VIOLETA_CLARO,
+  VERDE_BANDA,
+  VERDE_TOTAL,
+  GRIS_TEXTO,
+  GRIS_SUAVE,
+  BLANCO,
+  estiloHeaderTabla,
+  estiloSubtotal,
+  estiloTotalGeneral,
+  estiloBandaExterna,
+  estiloCuerpo,
+  agregarPieInstitucional,
+} from '@/services/excel-corporativo'
 
 const TN = (v) => (v ? `${Number(v).toFixed(2)} tn` : '—')
 const M3 = (v) => (v ? `${Number(v).toFixed(1)} m³` : '—')
@@ -91,6 +68,12 @@ function armarHojaResumenMensual(workbook, datos) {
   ws.getCell('A2').value = `Informe mensual de producción — ${datos.mesLabel}`
   ws.getCell('A2').font = { bold: true, size: 14, color: { argb: GRIS_TEXTO } }
   ws.getRow(2).height = 24
+
+  // Fecha de exportación (2026-09-03, pedido de Federico, extendido a todos
+  // los Excel — ver excel-corporativo.js).
+  ws.mergeCells('A3:E3')
+  ws.getCell('A3').value = `Fecha de exportación: ${new Date().toLocaleString('es-AR')}`
+  ws.getCell('A3').font = { italic: true, size: 9, color: { argb: GRIS_SUAVE } }
 
   let fila = 4
   ws.mergeCells(`A${fila}:E${fila}`)
@@ -182,6 +165,8 @@ function armarHojaResumenMensual(workbook, datos) {
   totalInsumos.getCell(3).value = TN(datos.consumoInsumos.totalTn)
   ;[1, 2, 3].forEach((c) => estiloSubtotal(totalInsumos.getCell(c)))
 
+  agregarPieInstitucional(ws, fila, 5)
+
   return ws
 }
 
@@ -211,6 +196,56 @@ function armarHojaResumenAnual(workbook, datos) {
   const total = ws.getRow(fila)
   total.values = ['TOTAL ACUMULADO', M3(datos.resumenAnual.totalAcumulado.hormigonM3), TN(datos.resumenAnual.totalAcumulado.asfaltoTn)]
   total.eachCell((cell) => estiloHeaderTabla(cell))
+
+  return ws
+}
+
+/**
+ * Hoja "Analítica de Proveedores" (2026-09-03, pedido de Federico — sumarla
+ * al informe mensual). Formato tabular plano (proveedor+insumo por fila,
+ * no las cards agrupadas de la UI de Stock) — más útil para filtrar/
+ * pivotear en Excel, mismo criterio que ya usa exportarProveedoresExcel()
+ * en useStock.js.
+ */
+function armarHojaProveedores(workbook, datos) {
+  const ws = workbook.addWorksheet('Analítica de Proveedores')
+  ws.columns = [{ width: 30 }, { width: 24 }, { width: 10 }, { width: 14 }]
+
+  ws.mergeCells('A1:D1')
+  ws.getCell('A1').value = `Analítica de proveedores — ${datos.mesLabel}`
+  ws.getCell('A1').font = { bold: true, size: 13, color: { argb: GRIS_TEXTO } }
+
+  const header = ws.getRow(2)
+  header.values = ['Proveedor', 'Insumo', 'Viajes', 'Toneladas']
+  header.eachCell((cell) => estiloHeaderTabla(cell))
+
+  let fila = 3
+  let totalViajes = 0
+  let totalTn = 0
+  datos.analiticaProveedores.forEach((p) => {
+    p.insumos.forEach((i) => {
+      const row = ws.getRow(fila)
+      row.values = [p.proveedor, i.material, i.viajes, Number(i.toneladas.toFixed(2))]
+      row.eachCell((cell) => estiloCuerpo(cell))
+      totalViajes += i.viajes
+      totalTn += i.toneladas
+      fila++
+    })
+  })
+
+  if (!datos.analiticaProveedores.length) {
+    ws.mergeCells(`A${fila}:D${fila}`)
+    ws.getCell(`A${fila}`).value = 'Sin ingresos de proveedores registrados en el mes.'
+    ws.getCell(`A${fila}`).font = { italic: true, size: 10, color: { argb: GRIS_SUAVE } }
+    fila++
+  } else {
+    const total = ws.getRow(fila)
+    total.values = ['TOTAL', '', totalViajes, Number(totalTn.toFixed(2))]
+    total.eachCell((cell) => estiloSubtotal(cell))
+    fila++
+  }
+
+  agregarPieInstitucional(ws, fila - 1, 4)
 
   return ws
 }
@@ -266,7 +301,8 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasDetalle) {
  * @param {Awaited<ReturnType<import('./informe-mensual.service').fetchDatosInformeMensual>>} datos
  * @param {ArrayBuffer} logoBuffer bytes del logo (PNG) ya leídos
  */
-export function construirWorkbookInformeMensual(datos, logoBuffer) {
+export async function construirWorkbookInformeMensual(datos, logoBuffer) {
+  const { default: ExcelJS } = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'VialTec Plantas'
   workbook.created = new Date()
@@ -274,6 +310,7 @@ export function construirWorkbookInformeMensual(datos, logoBuffer) {
   const hojaResumen = armarHojaResumenMensual(workbook, datos)
   agregarLogo(workbook, hojaResumen, logoBuffer)
   armarHojaResumenAnual(workbook, datos)
+  armarHojaProveedores(workbook, datos)
 
   for (const destino of datos.hojasInternas) {
     const filas = destino.detalle.map((d) => ({ ...d, mezcla: d.mezcla ?? '—' }))
@@ -331,7 +368,7 @@ export function construirWorkbookInformeMensual(datos, logoBuffer) {
 export async function generarInformeMensualExcel(datos) {
   const resp = await fetch(logoVialtec)
   const logoBuffer = await resp.arrayBuffer()
-  const workbook = construirWorkbookInformeMensual(datos, logoBuffer)
+  const workbook = await construirWorkbookInformeMensual(datos, logoBuffer)
 
   const buffer = await workbook.xlsx.writeBuffer()
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })

@@ -33,7 +33,10 @@ import { fetchObras, fetchNombresPorEmail } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { patentesService, proveedoresService } from '@/modules/maestros/services/maestros.service'
 import { hoyISO } from '@/services/fecha'
-import { exportarExcel, nombreArchivoConFecha } from '@/services/excel-export'
+// Excel con formato corporativo (2026-09-03, pedido de Federico: logo +
+// estilo de colores + pie institucional en todos los exports) — reemplaza
+// a src/services/excel-export.js (SheetJS, no soporta escribir estilos).
+import { exportarPlanillaCorporativa, nombreArchivoConFecha } from '@/services/excel-corporativo'
 
 export const ETIQUETA_TIPO_VALE = {
   asfalto: 'Salida asfalto',
@@ -444,9 +447,10 @@ export function useBascula() {
       const mapaNombres = emails.length ? await fetchNombresPorEmail(emails) : {}
       const filas = filasCrudas.map((v) => enriquecerVale(v, mapaNombres))
 
-      await exportarExcel(nombreArchivoConFecha('bascula-movimientos'), [
+      await exportarPlanillaCorporativa(nombreArchivoConFecha('bascula-movimientos'), [
         {
           nombre: 'Movimientos',
+          titulo: 'Báscula — Movimientos del día',
           filas,
           columnas: [
             { key: 'horaLabel', label: 'Hora' },

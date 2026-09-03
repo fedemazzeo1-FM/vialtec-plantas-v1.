@@ -15,6 +15,10 @@ import { fetchResumenPorObra, fetchTotalesMes, fetchDespachos, rangoDelMes } fro
 import { fetchTodosLosMovimientos } from '@/services/stock.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+// Analítica de proveedores del mes (2026-09-03, pedido de Federico: sumarla
+// al informe mensual) — reusa la misma función que ya usa Stock → Analítica
+// de proveedores (memory/conventions.md, no duplicar la query/agregación).
+import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
 
 /**
  * Despachos por obra del mes, separados interno (obra real, tipo_pedido
@@ -160,12 +164,14 @@ export async function fetchDetalleDestinoDelMes(destino, mes, formulasPorId) {
  * @param {string} mes 'YYYY-MM'
  */
 export async function fetchDatosInformeMensual(mes) {
-  const [obras, formulas, despachosPorObra, consumoInsumos, resumenAnual] = await Promise.all([
+  const { desde, hasta } = rangoDelMes(mes)
+  const [obras, formulas, despachosPorObra, consumoInsumos, resumenAnual, analiticaProveedores] = await Promise.all([
     fetchObras(),
     fetchFormulas({ soloActivas: false }),
     fetchDespachosPorObraDelMes(mes),
     fetchConsumoInsumosDelMes(mes),
     fetchResumenAnual(mes),
+    fetchAnaliticaProveedoresDetalle({ desde, hasta }),
   ])
   const obrasPorId = Object.fromEntries(obras.map((o) => [o.id, o]))
   const formulasPorId = Object.fromEntries(formulas.map((f) => [f.id, f]))
@@ -192,6 +198,7 @@ export async function fetchDatosInformeMensual(mes) {
     despachosPorObra,
     consumoInsumos,
     resumenAnual,
+    analiticaProveedores,
     hojasInternas: destinosInternos.map((d, i) => ({ ...d, detalle: detalleInternos[i] })),
     hojaVentasExternas: {
       destinos: destinosExternos.map((d, i) => ({ ...d, detalle: detalleExternos[i] })),
