@@ -98,12 +98,57 @@ pesando ingresos de proveedores en el sistema viejo, mientras que los
 despachos de producción (que son lo que más importa para facturación) sí
 se están cargando/reflejando bien en el nuevo.
 
-### Pendiente para completar la auditoría (no llegué esta noche)
+### Desglose de `plantas_stock_movimientos` por tipo (2026-09-03, madrugada)
 
-- Desglosar el conteo de "Historial de ingresos" del legado por tipo
-  (ingreso vs. egreso) para comparar exacto contra
-  `plantas_stock_movimientos`.
+| Tipo | Cantidad |
+|---|---|
+| `ingreso_proveedor` | 642 |
+| `ajuste` | 128 |
+| `egreso_arido` | 10 |
+| `egreso_manual` | 4 |
+| `ingreso_manual` | 0 |
+| `recalculo_despacho` | 0 |
+| `egreso_despacho` | 0 |
+
+**Nota sobre `egreso_despacho` = 0** (a primera vista parece raro, con 160
+despachos ya cerrados — investigado, **no es un bug**): los 160 pedidos
+`estado='despachado'` tienen TODOS `datos_legados` no nulo (son 100%
+migración histórica del sistema viejo, `fecha_programada` hasta el
+2026-08-31 nomás) — ninguno pasó todavía por el flujo real
+`finalizar_despacho()`/`corregir_despacho()` de la app nueva (que es el
+único lugar donde se genera `egreso_despacho`, migración 13). Confirmado
+además en vivo en el legado: Despachos → Resumen por obra de septiembre
+2026 dice **"Sin despachos en septiembre 2026"** — es decir, tampoco hubo
+despachos nuevos en el sistema VIEJO desde el corte. Conclusión: todavía
+nadie despachó nada (en ningún sistema) desde el 31/08 — es simple falta
+de actividad, no una falla del descuento automático de stock. Sí implica
+que la hoja "Consumo de insumos del mes" del Informe Mensual va a salir
+vacía hasta que haya al menos un despacho cerrado por la app nueva — es
+esperable, no hace falta tocar nada.
+
+### Pendiente para completar la auditoría — interrumpido por pérdida de sesión del legado
+
+Intenté desglosar "Historial de ingresos" del legado por tipo
+(ingreso/egreso) para comparar contra la tabla de arriba, pero al navegar
+la pestaña del legado (`produccion.vialtec.app`) a una URL distinta perdí
+la sesión que ya estaba logueada (quedó pidiendo email/contraseña de
+nuevo) — **no tengo tus credenciales y no las voy a ingresar** (regla de
+seguridad de la extensión de navegador: nunca completar contraseñas).
+Quedó sin hacer:
+- Desglosar "Historial de ingresos" del legado por tipo para comparar
+  exacto contra la tabla de arriba.
 - Revisar Analítica de proveedores del legado vs. la nuestra.
+
+Para retomar esto hace falta que abras sesión de nuevo en
+`produccion.vialtec.app` (o me digas que lo dejemos así, ya que la causa
+raíz — sistema viejo en uso paralelo — ya quedó bien documentada arriba
+con evidencia concreta de Stock).
+
+**Ya confirmado sin necesitar el legado**: nadie despachó nada (ni acá ni
+allá) desde el 31/08 — ver nota de `egreso_despacho` arriba — así que el
+próximo despacho real que se cierre en la app nueva es, en los hechos, la
+primera prueba en vivo de todo el flujo Pedidos → Stock. Vale la pena que
+lo mires de cerca cuando pase.
 - Confirmar si el balancero sigue pesando ingresos de áridos en el
   sistema viejo (produccion.vialtec.app) en vez del nuevo (Báscula →
   "Ingreso Áridos") — si es así, es un tema de capacitación/adopción, no
