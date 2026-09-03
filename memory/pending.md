@@ -912,6 +912,11 @@ apply_migration` o el flujo que prefieras) — recién ahí la tab "Usuarios"
 queda 100% operativa. Mientras tanto la pantalla ya avisa esto mismo en un
 cartel visible arriba de la tabla, no falla en silencio.
 
+**Verificado en vivo** (2026-09-03 de madrugada, logueado como admin): las 2
+tabs cargan sin errores — "Permisos por rol" muestra la matriz completa de
+los 7 roles correctamente; "Usuarios" muestra el cartel de aviso + tu propia
+fila (único resultado posible hoy bajo la RLS actual, como se esperaba).
+
 ## ⚠️ Ambigüedad sin resolver — orientación de vale/remito (2026-09-03)
 
 Tu mensaje: *"los vale y remitos imprimibles, los vales la hoja debe estar
@@ -936,11 +941,15 @@ se imprimen 6" (que entiendo como demasiadas hojas por remito hoy).
    fuera horizontal y el vale vertical? Con el mensaje tal cual está escrito
    no puedo saber si "los vales" (2ª mención) fue un error de tipeo por
    "los remitos".
-2. El remito rediseñado (2 copias apiladas, compactado a texto muy chico
-   para entrar en 1 hoja) **no se verificó visualmente en el navegador**
-   todavía (a diferencia del vale, que sí se vio y confirmaste) — antes de
-   darlo por bueno conviene que lo mires impreso/print-preview una vez que
-   estés de vuelta, capaz hace falta ajustar tamaños de fuente.
+2. ~~El remito rediseñado no se verificó visualmente~~ — **verificado
+   2026-09-03 de madrugada**: abrí Báscula → Historial, filtré un remito
+   real (Nº 1242, AUTOVIA MERCOSUR, 557.44 tn) y revisé el modal "Remito de
+   entrega" — las 2 copias (Original/Duplicado) entran completas y legibles
+   sin scroll, con la línea de corte punteada entre ambas, igual que el
+   vale. Se ve prolijo. No llegué a mandarlo a impresión real (el print
+   nativo del navegador abre un diálogo modal que bloquea la extensión de
+   Chrome, así que no lo disparé) — si al imprimirlo en papel algo no entra
+   bien en la hoja, avisame y lo ajusto.
 
 ## Otros pendientes
 
