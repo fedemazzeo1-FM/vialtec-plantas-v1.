@@ -44,6 +44,29 @@ const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) =
 // separados (para el header de la columna) y un flag `esHoy` para resaltar
 // la columna del día actual, mismo criterio que un calendario semanal
 // estándar.
+// Nombre a mostrar por destino — venta externa vs. obra propia vs. dato
+// huérfano (fix 2026-09-03, bug real reportado por Federico: "Obra #null").
+// La vista asumía que TODO pedido tiene obra_id, pero una venta externa
+// (tipo_pedido='venta') nunca la tiene por diseño — mismo criterio que
+// `destinoDe()` ya usa PedidosView/DespachosView, replicado acá (no existía
+// un helper compartido para esto, son 3 formas ligeramente distintas de
+// nombrar según qué objeto trae cada vista — no vale la pena forzar un solo
+// helper transversal por 3 líneas de lógica).
+function nombreDestinoPedido(p) {
+  if (p.tipo_pedido === 'venta') return p.cliente_externo || 'Venta externa'
+  if (p.obra_id) return obrasPorId.value[p.obra_id]?.nombre ?? `Obra #${p.obra_id}`
+  // obra_id null y NO es venta -> dato huérfano real de la migración del
+  // histórico legado (memory/pending.md, "Municipalidad Exaltación de la
+  // Cruz" sin equivalente en flota_obras) — fallback legible en vez de
+  // "Obra #null" literal, pero sigue señalando que falta resolverlo.
+  return 'Obra sin asignar'
+}
+
+function nombreDestinoTotal(t) {
+  if (t.obraId) return obrasPorId.value[t.obraId]?.nombre ?? `Obra #${t.obraId}`
+  return t.clienteExterno || 'Obra sin asignar'
+}
+
 const diasSemana = computed(() => {
   const { lunes } = obtenerRangoSemana(fechaRef.value)
   const hoy = hoyISO()
@@ -51,6 +74,21 @@ const diasSemana = computed(() => {
     const fecha = new Date(lunes)
     fecha.setDate(lunes.getDate() + i)
     const iso = fecha.toISOString().slice(0, 10)
+    const pedidosDia = pedidos.value.filter((p) => p.fecha_programada === iso)
+
+    // Tilde + cantidades cuando el día cerró 100% despachado (2026-09-03,
+    // réplica del legado pedida por Federico: "como tiene el sistema
+    // viejo, abajo de la fecha"). asfaltoTn/hormigonM3 usan cantidad_despachada
+    // (cantidadReal) — mismo criterio de "fuente de verdad" que el resto de
+    // la app (memory/business-rules.md), no cantidad_solicitada.
+    const todosDespachados = pedidosDia.length > 0 && pedidosDia.every((p) => p.estado === 'despachado')
+    const asfaltoTnDia = pedidosDia
+      .filter((p) => p.tipo !== 'hormigon' && p.estado === 'despachado')
+      .reduce((acc, p) => acc + (Number(p.cantidad_despachada) || 0), 0)
+    const hormigonM3Dia = pedidosDia
+      .filter((p) => p.tipo === 'hormigon' && p.estado === 'despachado')
+      .reduce((acc, p) => acc + (Number(p.cantidad_despachada) || 0), 0)
+
     return {
       etiqueta: NOMBRES_DIA[i],
       etiquetaCorta: NOMBRES_DIA[i].slice(0, 3),
@@ -59,7 +97,10 @@ const diasSemana = computed(() => {
       iso,
       esHoy: iso === hoy,
       esFinDeSemana: i >= 5,
-      pedidos: pedidos.value.filter((p) => p.fecha_programada === iso),
+      pedidos: pedidosDia,
+      todosDespachados,
+      asfaltoTnDia,
+      hormigonM3Dia,
     }
   })
 })
@@ -67,10 +108,6 @@ const diasSemana = computed(() => {
 const rangoLabel = computed(() =>
   diasSemana.value.length ? `${diasSemana.value[0].iso} — ${diasSemana.value[6].iso}` : ''
 )
-
-function nombreObra(obraId) {
-  return obrasPorId.value[obraId]?.nombre ?? `Obra #${obraId}`
-}
 
 async function cargarSemana() {
   cargando.value = true
@@ -144,8 +181,8 @@ cargarSemana()
 
       <!-- Totales por obra: mismas dos métricas en paralelo -->
       <div v-if="totales.porObra.length" class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <VCard v-for="t in totales.porObra" :key="t.obraId">
-          <p class="mb-2 text-sm font-semibold text-text-soft">{{ nombreObra(t.obraId) }}</p>
+        <VCard v-for="t in totales.porObra" :key="t.obraId ?? t.clienteExterno">
+          <p class="mb-2 text-sm font-semibold text-text-soft">{{ nombreDestinoTotal(t) }}</p>
           <div class="grid grid-cols-2 gap-3">
             <VKpiCard label="Asfalto" :value="t.asfaltoTn.toFixed(1)" unidad="tn" />
             <VKpiCard label="Hormigón" :value="t.hormigonM3.toFixed(1)" unidad="m³" />
@@ -189,6 +226,19 @@ cargarSemana()
               </p>
             </div>
 
+            <!-- Tilde + cantidades cuando el día cerró 100% despachado
+                 (2026-09-03, réplica exacta del legado pedida por Federico —
+                 pill violeta debajo de la fecha, "N peds ✓ X tn · Y m³"). -->
+            <div v-if="dia.todosDespachados" class="px-2 pt-2">
+              <p class="rounded-full bg-vialtec/10 px-2.5 py-1 text-center text-[11px] font-semibold text-vialtec">
+                {{ dia.pedidos.length }} {{ dia.pedidos.length === 1 ? 'ped.' : 'peds' }}
+                ✓
+                <template v-if="dia.asfaltoTnDia > 0">{{ dia.asfaltoTnDia.toFixed(1) }} tn</template>
+                <template v-if="dia.asfaltoTnDia > 0 && dia.hormigonM3Dia > 0"> · </template>
+                <template v-if="dia.hormigonM3Dia > 0">{{ dia.hormigonM3Dia.toFixed(1) }} m³</template>
+              </p>
+            </div>
+
             <div class="min-h-[88px] flex-1 space-y-2 p-2">
               <p v-if="!dia.pedidos.length" class="px-1 py-2 text-center text-xs text-text-soft/70">Sin pedidos</p>
               <div
@@ -196,7 +246,7 @@ cargarSemana()
                 :key="p.id"
                 class="rounded-lg border border-border bg-white p-2 text-xs shadow-sm transition-shadow duration-150 hover:shadow"
               >
-                <p class="truncate font-semibold text-text" :title="nombreObra(p.obra_id)">{{ nombreObra(p.obra_id) }}</p>
+                <p class="truncate font-semibold text-text" :title="nombreDestinoPedido(p)">{{ nombreDestinoPedido(p) }}</p>
                 <p class="truncate text-text-soft">
                   {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
                   {{ p.cantidad_solicitada }} {{ p.tipo === 'hormigon' ? 'm³' : 'tn' }}

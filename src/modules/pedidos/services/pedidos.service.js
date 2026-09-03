@@ -203,13 +203,22 @@ export async function fetchPedidosSemana(fechaReferencia = new Date()) {
  * regla que las alertas de stock del dashboard, ver memory/business-rules.md).
  * Para un pedido despachado usa cantidad_despachada; si no está informada
  * (no debería pasar) cae a cantidad_solicitada.
+ *
+ * Fix 2026-09-03 (bug real reportado por Federico en Plan Semanal, "Obra
+ * #null"): agrupaba únicamente por `obra_id`, así que TODAS las ventas
+ * externas (obra_id siempre null por diseño) quedaban mezcladas en un solo
+ * grupo, sin nombre de cliente para mostrar. Mismo fix que ya tiene
+ * fetchResumenPorObra() en despachos.service.js — agrupa por
+ * `obra_id ?? 'venta:' + cliente_externo`, cada grupo devuelve `obraId`
+ * (null para ventas) + `clienteExterno` para que la UI resuelva el nombre
+ * correcto en los dos casos.
  */
 export async function fetchTotalesSemana(fechaReferencia = new Date()) {
   const { lunes, domingo } = obtenerRangoSemana(fechaReferencia)
 
   const { data, error } = await supabase
     .from(TABLA)
-    .select('obra_id, tipo, estado, cantidad_solicitada, cantidad_despachada')
+    .select('obra_id, tipo, estado, cantidad_solicitada, cantidad_despachada, tipo_pedido, cliente_externo')
     .in('estado', ESTADOS_COMPROMETIDOS)
     .gte('fecha_programada', aFechaISO(lunes))
     .lte('fecha_programada', aFechaISO(domingo))
@@ -224,10 +233,23 @@ export async function fetchTotalesSemana(fechaReferencia = new Date()) {
       pedido.estado === 'despachado' ? pedido.cantidad_despachada ?? pedido.cantidad_solicitada : pedido.cantidad_solicitada
     )
 
-    if (!porObra.has(pedido.obra_id)) {
-      porObra.set(pedido.obra_id, { obraId: pedido.obra_id, asfaltoTn: 0, hormigonM3: 0 })
+    // 3 casos, no 2: obra real / venta externa (tipo_pedido='venta',
+    // agrupada por cliente_externo) / dato huérfano real de la migración
+    // (obra_id null pero NO es venta — memory/pending.md, "Municipalidad
+    // Exaltación de la Cruz" sin equivalente en flota_obras). Antes el
+    // huérfano cae en el mismo bucket que las ventas ("Venta externa"),
+    // etiqueta incorrecta para un caso que no es una venta.
+    const esVenta = pedido.obra_id == null && pedido.tipo_pedido === 'venta'
+    const clave = pedido.obra_id ?? (esVenta ? `venta:${pedido.cliente_externo || 'Venta externa'}` : 'sin-asignar')
+    if (!porObra.has(clave)) {
+      porObra.set(clave, {
+        obraId: pedido.obra_id,
+        clienteExterno: esVenta ? pedido.cliente_externo || 'Venta externa' : null,
+        asfaltoTn: 0,
+        hormigonM3: 0,
+      })
     }
-    const acumObra = porObra.get(pedido.obra_id)
+    const acumObra = porObra.get(clave)
 
     if (pedido.tipo === 'hormigon') {
       acumObra.hormigonM3 += cantidad
