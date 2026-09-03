@@ -1,6 +1,6 @@
 # pending.md — Pendientes
 
-## Informe mensual de producción (Despachos → Resumen por obra) — implementado 2026-09-02, 1 pregunta pendiente para Federico
+## Informe mensual de producción (Despachos → Resumen por obra) — implementado 2026-09-02, pregunta de mail RESUELTA
 
 Pedido nuevo de Federico en medio de la sesión de roadmap Mobile:
 automatizar el informe mensual que armaba a mano (compartió
@@ -18,11 +18,14 @@ nativos — todo tipeado a mano. Se replicó solo la estética (colores/layout
 leídos de sus estilos reales, no a ojo), el contenido/estructura se diseñó
 de cero 100% dinámico.
 
-**Pregunta que quedó sin responder (Federico se ausentó antes de contestar
-la 1ª de las 2 preguntas que le hice)**: ¿qué cliente de mail usás en la
-computadora donde vas a abrir el informe y clickear el botón de mail
-(Outlook de escritorio / Apple Mail / Gmail-webmail)? Es la única variable
-que cambia el código del lado de la macro.
+**Respondida (2026-09-02, al volver)**: Federico confirmó **Outlook de
+escritorio** — la rama Windows/Outlook COM de la macro es la que va a usar
+en la práctica, ya escrita y lista, no hace falta tocar nada de esa parte.
+Comentó que **potencialmente** más adelante quiere el envío 100%
+automático (sin pasar por el borrador manual) — explícitamente **no
+ahora**: "por ahora nos vamos a manejar con esto" (el flujo de borrador +
+envío manual). Queda anotado como idea a futuro, no un pedido activo — no
+se toca hasta que lo pida.
 
 **Decisión técnica tomada de forma autónoma para no bloquear el resto del
 trabajo** (avisar a Federico, confirmar o ajustar cuando vuelva):
