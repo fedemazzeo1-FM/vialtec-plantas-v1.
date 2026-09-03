@@ -28,6 +28,7 @@ import { patentesService } from '@/modules/maestros/services/maestros.service'
 // entre módulos) — el acumulado dinámico del día y el formato de N° de vale
 // son exactamente los mismos que usa ValeImprimible.vue desde BasculaView.
 import { obtenerAcumuladoHastaFecha, formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
+import { fetchDatosInformeMensual } from '@/modules/despachos/services/informe-mensual.service'
 
 const TAMANO_PAGINA = 20
 
@@ -178,6 +179,34 @@ export function useDespachos() {
       error.value = e.message
     } finally {
       cargandoResumen.value = false
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // "Exportar informe mensual" (2026-09-02, pedido de Federico — botón
+  // EXPORTAR INFORME MENSUAL en Resumen por obra): arma el .xlsx completo
+  // (Resumen mensual + Resumen anual + una hoja por obra/cliente) para el
+  // mismo `mesResumen` que ya está seleccionado en esta sección — el
+  // informe sigue al selector de mes que ya existía, no uno nuevo.
+  // Import dinámico de exceljs (misma razón que xlsx en Báscula/Stock: no
+  // inflar el chunk de Despachos con una librería pesada que no todos usan).
+  // -------------------------------------------------------------------------
+
+  const exportandoInforme = ref(false)
+
+  async function exportarInformeMensual() {
+    exportandoInforme.value = true
+    error.value = null
+    try {
+      const [datos, { generarInformeMensualExcel }] = await Promise.all([
+        fetchDatosInformeMensual(mesResumen.value),
+        import('@/modules/despachos/services/excel-informe-mensual'),
+      ])
+      await generarInformeMensualExcel(datos)
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      exportandoInforme.value = false
     }
   }
 
@@ -384,6 +413,8 @@ export function useDespachos() {
     resumenObras,
     cargandoResumen,
     cargarResumenPorObra,
+    exportandoInforme,
+    exportarInformeMensual,
     modalDetalleAbierto,
     pedidoDetalle,
     cargasDetalle,

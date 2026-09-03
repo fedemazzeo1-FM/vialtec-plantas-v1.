@@ -76,7 +76,8 @@ export async function fetchAcumuladoHistorico() {
   return { asfaltoTn, hormigonM3 }
 }
 
-function rangoDelMes(mes) {
+/** 'YYYY-MM' -> { desde, hasta } 'YYYY-MM-DD'. Exportada (2026-09-02, informe mensual): reusada por informe-mensual.service.js, no duplicada. */
+export function rangoDelMes(mes) {
   // `mes` en formato 'YYYY-MM' (valor crudo de <input type="month">).
   const [anio, mesNum] = mes.split('-').map(Number)
   const inicio = new Date(anio, mesNum - 1, 1)

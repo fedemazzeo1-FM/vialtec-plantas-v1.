@@ -50,6 +50,8 @@ const {
   resumenObras,
   cargandoResumen,
   cargarResumenPorObra,
+  exportandoInforme,
+  exportarInformeMensual,
   modalDetalleAbierto,
   pedidoDetalle,
   cargasDetalle,
@@ -150,17 +152,26 @@ function unidadDe(tipo) {
 
       <!-- Resumen por obra -->
       <VCard class="mb-4">
-        <div class="mb-3 flex items-center justify-between">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm font-bold text-text">Resumen por obra</p>
-          <label class="text-sm text-text-mid">
-            Mes
-            <input
-              v-model="mesResumen"
-              type="month"
-              class="ml-2 rounded-lg border border-border px-2 py-1 text-sm focus:border-vialtec focus:outline-none"
-              @change="cargarResumenPorObra"
-            />
-          </label>
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="text-sm text-text-mid">
+              Mes
+              <input
+                v-model="mesResumen"
+                type="month"
+                class="ml-2 rounded-lg border border-border px-2 py-1 text-sm focus:border-vialtec focus:outline-none"
+                @change="cargarResumenPorObra"
+              />
+            </label>
+            <!-- Informe mensual (2026-09-02, pedido de Federico): arma el
+                 .xlsx completo del mes elegido arriba — Resumen mensual +
+                 Resumen anual + una hoja por obra/cliente, mismo formato
+                 que el Excel de referencia que compartió. -->
+            <VButton size="sm" :disabled="exportandoInforme" @click="exportarInformeMensual">
+              {{ exportandoInforme ? 'Generando…' : '📧 Exportar informe mensual' }}
+            </VButton>
+          </div>
         </div>
         <p v-if="cargandoResumen" class="text-sm text-text-soft">Cargando…</p>
         <div v-else-if="resumenObras.length" class="grid grid-cols-2 gap-3 md:grid-cols-4">
