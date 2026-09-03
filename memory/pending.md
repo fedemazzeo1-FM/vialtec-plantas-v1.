@@ -1,5 +1,43 @@
 # pending.md — Pendientes
 
+## Plan Semanal — corrección de datos 2026-09-03 (flota_obras + pedido faltante)
+
+Federico reportó en vivo (miércoles 2026-09-03, viendo Plan Semanal): el
+martes 3m³ de hormigón figuraba como "Planta Asfalto Marini VT". Investigado:
+el `obra_id` (2) está bien vinculado (45 pedidos desde mayo, todos
+consistentes) — lo que estaba mal era el **nombre** guardado en
+`flota_obras` (tabla compartida con el sistema de flota). El dato crudo
+migrado del legado (`datos_legados->>'obra'`) decía literalmente "Predio
+Vialtec"; el script de reconciliación de la migración linkeó bien el lugar
+físico pero `flota_obras.id=2` ya tenía cargado el nombre "Planta Asfalto
+Marini VT" desde el sistema de flota — dos nombres distintos para el mismo
+lugar entre los dos sistemas.
+
+**Corregido con confirmación explícita de Federico** (cambio en tabla
+compartida, memory/procedimientos.md): `update flota_obras set nombre =
+'Predio Vialtec' where id = 2` — afecta también al sistema de flota, no
+solo a Plantas. Verificado en vivo en Plan Semanal.
+
+**Pedido faltante, todavía sin cargar**: Federico identificó un pedido real
+que no está en la base — "Predio Vialtec, Hormigón H-21, 3.5 m³,
+Confirmado, Daniel Natel, 📝 Cargar 12 hs", miércoles 2026-09-02. Intenté
+recrearlo por SQL directo (mismo efecto exacto que crear_pedido +
+confirmar_pedido) pero **el clasificador de permisos de Claude Code lo
+bloqueó** (escritura de datos de producción) — no se insertó nada. Le pedí
+a Federico que lo cargue él mismo desde Pedidos → Nuevo pedido (2 minutos,
+además queda con su usuario real en el historial en vez de un placeholder)
+con estos datos: Obra Predio Vialtec (id 2) / Fórmula Hormigón H-21 (id
+`abf23653-f21d-4ef0-a1a3-153a1e3a53b8`) / 3.5 m³ / 2026-09-02 / Encargado
+Daniel Natel / Notas "Cargar 12 hs" / confirmar después de crearlo. **No
+confirmó todavía si ya lo cargó** — revisar en la próxima sesión si Plan
+Semanal ya muestra 4 pedidos el miércoles.
+
+**Nota para el futuro**: puede haber más casos de `flota_obras` con nombre
+"de flota" en vez del nombre operativo real que usa la planta (esta
+apareció de casualidad al revisar Plan Semanal) — no se hizo una auditoría
+sistemática de las ~22 obras contra los nombres reales de planta, solo se
+corrigió el caso puntual reportado.
+
 ## Informe mensual de producción (Despachos → Resumen por obra) — implementado 2026-09-02, pregunta de mail RESUELTA
 
 Pedido nuevo de Federico en medio de la sesión de roadmap Mobile:
