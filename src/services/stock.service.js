@@ -14,6 +14,7 @@
 import { supabase } from '@/config/supabase'
 import { fetchPagina, fetchPaginado } from '@/services/fetch-paginado'
 import { fetchNombresPorEmail } from '@/services/flota.service'
+import { limiteInicioDiaLocal, limiteFinDiaLocalExclusivo } from '@/services/fecha'
 
 /**
  * Semáforo 3 colores contra stock_minimo_kg/stock_maximo_kg del material.
@@ -70,6 +71,14 @@ export async function fetchStockActual() {
 
 const TIPOS_INGRESO = ['ingreso_proveedor', 'ingreso_manual']
 
+// Vista puente (2026-09-04, memory/pending.md): UNION de plantas_stock_movimientos
+// real + lo que el legado sigue cargando en paralelo en kv_store (todavía sin
+// fila real acá). Solo el HISTORIAL lee de acá — las RPC de escritura
+// (registrar_movimiento_manual, registrar_relevamiento_stock, etc.) siguen
+// contra la tabla real, sin cambios. NO cubre movimientos tipo 'relevamiento'
+// del legado (ver supabase/scripts/vistas_puente_legado_bascula_stock.sql).
+const VISTA_STOCK_MOVIMIENTOS_VIVA = 'plantas_v_stock_movimientos_viva'
+
 /**
  * Query base compartida entre fetchMovimientos() (paginada, UI) y
  * fetchTodosLosMovimientos() (sin paginar, export a Excel — memory/
@@ -77,14 +86,19 @@ const TIPOS_INGRESO = ['ingreso_proveedor', 'ingreso_manual']
  */
 function queryMovimientos(filtros) {
   let query = supabase
-    .from('plantas_stock_movimientos')
-    .select('*, plantas_materiales(nombre)', { count: 'exact' })
+    .from(VISTA_STOCK_MOVIMIENTOS_VIVA)
+    .select('*', { count: 'exact' })
     .order('fecha_movimiento', { ascending: false })
 
   if (filtros.materialId) query = query.eq('material_id', filtros.materialId)
   if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
-  if (filtros.desde) query = query.gte('fecha_movimiento', filtros.desde)
-  if (filtros.hasta) query = query.lte('fecha_movimiento', `${filtros.hasta}T23:59:59`)
+  // Fix 2026-09-04 (mismo bug de Báscula, memory/pending.md): fecha_movimiento
+  // es timestamptz — la fecha "pelada"/`T23:59:59` sin offset se casteaba
+  // contra UTC en vez de hora local (Argentina, UTC-3), perdiendo en
+  // silencio los movimientos cargados entre las 21:00 y las 23:59 locales
+  // del día `hasta`. Ver src/services/fecha.js.
+  if (filtros.desde) query = query.gte('fecha_movimiento', limiteInicioDiaLocal(filtros.desde))
+  if (filtros.hasta) query = query.lt('fecha_movimiento', limiteFinDiaLocalExclusivo(filtros.hasta))
 
   return query
 }
@@ -99,19 +113,19 @@ async function enriquecerMovimientos(filas) {
   const nombresPorEmail = await fetchNombresPorEmail(filas.map((m) => m.responsable_email))
   return filas.map((m) => ({
     ...m,
-    materialNombre: m.plantas_materiales?.nombre ?? '—',
+    // 2026-09-04: material_nombre ya viene aplanado por VISTA_STOCK_MOVIMIENTOS_VIVA
+    // (antes embed `plantas_materiales(nombre)`, que no funciona sobre una vista).
+    materialNombre: m.material_nombre ?? '—',
     // Fix 2026-09-03 (Federico: "falta el campo Responsable" en el
-    // historial): los 642 movimientos ingreso_proveedor migrados del
-    // histórico legado (memory/pending.md) nunca tuvieron responsable_email
-    // — no existía ese dato en el legado, solo un nombre de operador en
-    // texto libre (`datos_legados.operador`, ej. "Diego Sanchez"). Antes
-    // esos 642 quedaban con "—" aunque el dato SÍ estuviera disponible; se
-    // usa como fallback, marcado "(histórico)" para no confundirlo con un
-    // responsable real logueado.
+    // historial): los movimientos migrados del histórico legado (memory/
+    // pending.md) nunca tuvieron responsable_email — no existía ese dato en
+    // el legado, solo un nombre de operador en texto libre. La vista ya
+    // resuelve ese fallback en `responsable_texto_legado` (tanto para filas
+    // migradas como para las que todavía solo viven en el legado).
     responsableNombre: m.responsable_email
       ? nombresPorEmail[m.responsable_email] ?? m.responsable_email
-      : m.datos_legados?.operador
-        ? `${m.datos_legados.operador} (histórico)`
+      : m.responsable_texto_legado
+        ? `${m.responsable_texto_legado} (histórico)`
         : '—',
     esIngreso: TIPOS_INGRESO.includes(m.tipo) || m.cantidad_kg > 0,
   }))

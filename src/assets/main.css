@@ -57,18 +57,77 @@
    (`break-after-page` de Tailwind) entre la primera y la segunda. Pedido
    explícito de Federico ("remito va en 2 hojas distintas, los vales van
    los dos en 1 sola hoja") — ver ValeImprimible.vue, modo "remito". */
+/* Fix 2026-09-04 (memory/pending.md — bug real reportado por Federico: el
+   diálogo de impresión mostraba 6 páginas para un vale que debía ser 1 sola).
+   Causa real: `body * { visibility: hidden }` NO saca del flujo a los
+   elementos que oculta — `visibility:hidden` sigue ocupando su alto de
+   layout normal, a diferencia de `display:none`. Con la SPA entera debajo
+   del modal (sidebar, filtros, la tabla de historial con potencialmente
+   cientos de filas cargadas) invisible pero todavía "midiendo" su alto real,
+   el motor de impresión de Chrome paginaba ese alto acumulado completo —
+   de ahí las páginas extra, todas en blanco salvo la primera (donde
+   `.imprimible`, con `position:absolute`, se dibuja encima).
+
+   Fix: en vez de esconder con `visibility` a nivel de toda la página, se
+   oculta `#app` (la SPA completa) con `display:none` — eso SÍ la saca del
+   flujo, alto cero, cero páginas extra. El modal de impresión (Vale/Remito
+   de Báscula y Despachos) se movió a `<Teleport to="body">` en su vista
+   (BasculaView.vue/DespachosView.vue) para vivir FUERA de `#app` y no
+   heredar ese `display:none`. Dentro de ese modal teleportado (chico, del
+   tamaño del viewport, no de toda la SPA scrolleada) sigue aplicando el
+   mismo criterio visibility de antes para mostrar únicamente `.imprimible`
+   (no el título/botones/fondo del modal) — acotado a un solo modal ya no
+   genera el problema de páginas en blanco que generaba sobre toda la SPA. */
 @media print {
   @page {
     size: A4 landscape;
     margin: 0;
   }
 
-  body * {
+  #app {
+    display: none !important;
+  }
+
+  /* Fix 2026-09-04, segunda vuelta (bug real: la paginación ya daba "1
+     página" bien, pero el diálogo de impresión de la computadora mostraba
+     esa página en blanco). Causa: VModal.vue envuelve todo en
+     `position: fixed` + un contenido interno con `max-h-[90vh]
+     overflow-y-auto` — unidades de viewport (`vh`) que el motor de
+     impresión de Chrome puede resolver de forma inconsistente (o en 0)
+     fuera de un contexto de pantalla real, recortando (clip) todo el
+     contenido a invisible aunque `.imprimible` adentro ya esté
+     correctamente posicionado y visible. Se anulan esos estilos de VModal
+     SOLO durante impresión, en su propia cadena de ancestros — .imprimible
+     ya se autoposiciona absoluto a tamaño de hoja fijo (297×210mm), no
+     necesita ningún contenedor con altura/scroll acotados por viewport. */
+  body > div:has(.imprimible) {
+    position: static !important;
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body > div:has(.imprimible) > div {
+    max-width: none !important;
+    max-height: none !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body > div:has(.imprimible) * {
     visibility: hidden;
   }
+  /* Fix 2026-09-04, tercera vuelta (bug real: la hoja salía en blanco).
+     `body > div:has(.imprimible) *` tiene MÁS especificidad CSS que
+     `.imprimible, .imprimible *` (2 selectores de elemento — body, div —
+     de más) — sin `!important` acá, esa regla de arriba termina ganando y
+     esconde TAMBIÉN a .imprimible, aunque aparezca después en el archivo
+     (la especificidad manda sobre el orden). `!important` la hace ganar
+     siempre, sin depender de la especificidad de ninguna de las dos. */
   .imprimible,
   .imprimible * {
-    visibility: visible;
+    visibility: visible !important;
   }
   .imprimible {
     position: absolute;

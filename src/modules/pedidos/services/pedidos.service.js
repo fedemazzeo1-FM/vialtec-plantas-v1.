@@ -58,29 +58,42 @@ export async function fetchHistorialPedido(pedidoId) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Query base compartida entre fetchPedidos() (paginada) y
+ * fetchTodosLosPedidos() (sin paginar, para la vista de cards agrupadas —
+ * memory/conventions.md: un solo lugar para armar el filtro).
  * @param {{ estado?: string, obraId?: number, tipo?: string, desde?: string, hasta?: string, incluirArchivados?: boolean }} filtros
  *   desde/hasta en formato 'YYYY-MM-DD', sobre fecha_programada. Por defecto
  *   excluye archivados (mismo criterio que el sistema legado: la vista
  *   normal no los muestra salvo que se active el toggle).
- * @param {{ pagina?: number, tamanoPagina?: number }} opciones
- * @returns {Promise<{ filas: any[], total: number, pagina: number, tamanoPagina: number }>}
  */
+function queryPedidos(filtros) {
+  let query = supabase.from(TABLA).select('*', { count: 'exact' }).order('fecha_programada', { ascending: false })
+
+  if (filtros.estado) query = query.eq('estado', filtros.estado)
+  if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
+  if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
+  if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
+  if (filtros.hasta) query = query.lte('fecha_programada', filtros.hasta)
+  if (!filtros.incluirArchivados) query = query.eq('archivado', false)
+
+  return query
+}
+
+/** @param {{ pagina?: number, tamanoPagina?: number }} opciones */
 export async function fetchPedidos(filtros = {}, { pagina = 1, tamanoPagina = 50 } = {}) {
-  return fetchPagina(
-    () => {
-      let query = supabase.from(TABLA).select('*', { count: 'exact' }).order('fecha_programada', { ascending: false })
+  return fetchPagina(() => queryPedidos(filtros), { pagina, tamanoPagina })
+}
 
-      if (filtros.estado) query = query.eq('estado', filtros.estado)
-      if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
-      if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
-      if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
-      if (filtros.hasta) query = query.lte('fecha_programada', filtros.hasta)
-      if (!filtros.incluirArchivados) query = query.eq('archivado', false)
-
-      return query
-    },
-    { pagina, tamanoPagina }
-  )
+/**
+ * Todos los pedidos que matchean el filtro, sin paginar (memory/architecture.md,
+ * regla de paginación: fetchPaginado() en vez de un .select() sin límite).
+ * Usada por la vista de Pedidos (2026-09-04, rediseño en cards agrupadas por
+ * tipo — Hormigón/Asfalto con contador — replica al legado, memory/pending.md):
+ * el legado no pagina Pedidos, muestra todo lo que matchea el filtro
+ * (semana en curso por default acota el volumen igual que antes).
+ */
+export async function fetchTodosLosPedidos(filtros = {}) {
+  return fetchPaginado(() => queryPedidos(filtros))
 }
 
 const ESTADOS_CONTEO = ['solicitado', 'confirmado', 'despachado', 'postergado', 'cancelado']

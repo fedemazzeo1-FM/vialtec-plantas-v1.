@@ -8,7 +8,7 @@
 
 import { computed, reactive, ref } from 'vue'
 import {
-  fetchPedidos,
+  fetchTodosLosPedidos,
   fetchResumenPeriodo,
   crearPedido as crearPedidoService,
   actualizarPedido as actualizarPedidoDirecto,
@@ -24,8 +24,6 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { patentesService, choferesService } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { toastCrearPedido, toastConfirmarPedido, toastConfirmarHormigonOperador } from '@/modules/pedidos/whatsapp'
-
-const TAMANO_PAGINA = 50
 
 function formularioPedidoVacio() {
   return {
@@ -109,23 +107,8 @@ export function usePedidos() {
   // -------------------------------------------------------------------------
 
   const pedidos = ref([])
-  const totalPedidos = ref(0)
-  const paginaActual = ref(1)
   const cargando = ref(false)
   const filtros = reactive({ estado: '', obraId: '', desde: '', hasta: '', incluirArchivados: false })
-
-  // Listado separado Asfalto/Hormigón (2026-09-01, pedido de Federico): ya
-  // no es un <select> "Todos/Asfalto/Hormigón" dentro de filtros — son 2
-  // tabs, cada una lista SOLO su material (por eso queda afuera de
-  // `filtros`, que ahora es todo lo que sigue combinando ambos materiales
-  // en el resumen de arriba). Default 'asfalto' (mismo criterio que "la
-  // pestaña que más rota" — no hay preferencia documentada del legado acá).
-  const tabTipo = ref('asfalto')
-
-  function cambiarTabTipo(tipo) {
-    tabTipo.value = tipo
-    aplicarFiltros()
-  }
 
   // -------------------------------------------------------------------------
   // Vista por semana (2026-09-01, pedido de Federico): con 184 pedidos
@@ -214,23 +197,35 @@ export function usePedidos() {
     }))
   )
 
+  // Agrupado por tipo con contador (2026-09-04, rediseño en cards — replica
+  // exacta del legado, memory/pending.md: "Hormigón"/"Asfalto" como títulos
+  // de sección, cada uno con "X pedidos"). Orden fijo Hormigón primero,
+  // Asfalto después — mismo orden confirmado en vivo contra produccion.vialtec.app.
+  // Ya no hay tab que filtre a un solo tipo: las dos secciones conviven
+  // siempre, mismos `filtros`/`vistaSemana` de arriba para las dos.
+  const pedidosPorTipo = computed(() => [
+    { tipo: 'hormigon', label: 'Hormigón', filas: filas.value.filter((p) => p.tipo === 'hormigon') },
+    { tipo: 'asfalto', label: 'Asfalto', filas: filas.value.filter((p) => p.tipo === 'asfalto') },
+  ])
+
   async function cargarPedidos() {
     cargando.value = true
     error.value = null
     try {
-      const resultado = await fetchPedidos(
-        {
-          estado: filtros.estado || undefined,
-          obraId: filtros.obraId || undefined,
-          tipo: tabTipo.value,
-          desde: filtros.desde || undefined,
-          hasta: filtros.hasta || undefined,
-          incluirArchivados: filtros.incluirArchivados,
-        },
-        { pagina: paginaActual.value, tamanoPagina: TAMANO_PAGINA }
-      )
-      pedidos.value = resultado.filas
-      totalPedidos.value = resultado.total
+      // fetchTodosLosPedidos() (fix 2026-09-04, rediseño en cards): antes
+      // paginaba server-side por tab de tipo — al
+      // unificar en una sola vista agrupada por sección no hay "página" que
+      // mostrar, el legado tampoco pagina Pedidos (se apoya en el filtro de
+      // semana/estado para acotar el volumen). Sigue respetando la regla de
+      // paginación (memory/architecture.md): fetchPaginado() por debajo, no
+      // un .select() sin límite.
+      pedidos.value = await fetchTodosLosPedidos({
+        estado: filtros.estado || undefined,
+        obraId: filtros.obraId || undefined,
+        desde: filtros.desde || undefined,
+        hasta: filtros.hasta || undefined,
+        incluirArchivados: filtros.incluirArchivados,
+      })
     } catch (e) {
       error.value = e.message
     } finally {
@@ -239,9 +234,7 @@ export function usePedidos() {
     cargarResumenPeriodo()
   }
 
-  /** Cualquier cambio de filtro vuelve a la página 1 (si no, se puede quedar en una página que ya no existe). */
   function aplicarFiltros() {
-    paginaActual.value = 1
     cargarPedidos()
   }
 
@@ -253,11 +246,6 @@ export function usePedidos() {
     filtros.incluirArchivados = false
     vistaSemana.value = false // "Limpiar" saca también el acotado por semana, no solo estado/obra
     aplicarFiltros()
-  }
-
-  function cambiarPagina(pagina) {
-    paginaActual.value = pagina
-    cargarPedidos()
   }
 
   // -------------------------------------------------------------------------
@@ -509,19 +497,14 @@ export function usePedidos() {
     obraNombreDe,
     pedidos,
     filas,
-    totalPedidos,
-    paginaActual,
+    pedidosPorTipo,
     cargando,
     filtros,
     conteoEstados,
     totalesPeriodo,
-    tabTipo,
-    cambiarTabTipo,
-    TAMANO_PAGINA,
     cargarPedidos,
     aplicarFiltros,
     limpiarFiltros,
-    cambiarPagina,
     vistaSemana,
     rangoSemanaLabel,
     irASemanaActual,

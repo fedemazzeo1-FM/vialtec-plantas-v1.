@@ -8,12 +8,12 @@ Todos arrancan en **PENDIENTE** hasta que se implementen sobre `plantas_*`.
 | 1 | Dashboard | KPIs del mes, analítica de proveedores, despacho por camión | EN CURSO — service + `DashboardView` listos (KPIs dobles tn/m³, comparativa de proveedores por período, detalle por camión con remito garantizado); falta aplicar migración SQL 05. **Banner de alerta de stock proyectado 🔴/🟡 construido 2026-09-03** (`useAlertaStockSemana.js` — consumo de los pedidos `confirmado` de la semana en curso, vía fórmula, contra `calcularEstadoSemaforo()` de Stock; solo se muestra si algo degrada a amarillo/rojo, sin bloqueo duro). Verificado en vivo: no rompe nada y no muestra nada falso-positivo con los 5 pedidos confirmados reales de esta semana (consumo bajo vs. stock actual sano). |
 | 2 | Pedidos | ABM de pedidos, ciclo solicitado→confirmado→despachado→postergado | EN CURSO — **Fase 1 de fidelidad funcional cerrada (2026-08-28)**: ver detalle abajo. **Vista por semana agregada 2026-09-01** (default semana en curso + histórico completo, ver `pending.md`). |
 | 3 | Plan semanal | Vista de pedidos confirmados/despachados agrupados por día | EN CURSO — service + `PlanSemanalView` (matriz lunes-domingo, KPIs tn/m³ por obra y total) listos; falta aplicar migración SQL |
-| 4 | Stock | Stock por material en kg, ingresos/salidas manuales, guardas | **COMPLETADO (MVP) — 2026-08-31**: ver detalle abajo. |
+| 4 | Stock | Stock por material en kg, ingresos/salidas manuales, guardas | **COMPLETADO (MVP) — 2026-08-31**: ver detalle abajo. **Historial de ingresos con vista puente al legado en vivo desde 2026-09-04** (`plantas_v_stock_movimientos_viva`, ver `pending.md`). |
 | 5 | Despachos | Historial de pedidos despachados, filtros, exportación Excel | EN CURSO — **fidelidad funcional cerrada (2026-08-31)**: ver detalle abajo. Falta exports Excel (fuera de alcance de esta tanda). |
-| 6 | Báscula / Balanza | Puertas de pesaje, vales de asfalto, ingreso/egreso de áridos | EN CURSO — **fidelidad funcional con el legado cerrada (2026-08-28, Fase 1+2 sobre el relevamiento Etapa 3)**: ver detalle abajo. **Descuento/ingreso de stock ya resuelto (migraciones 13/14)**: ingreso/egreso de áridos mueve `plantas_stock` directo desde `registrar_pesada_bascula`; el pesaje de asfalto YA NO toca `plantas_pedidos` (ver "Stock e Inventarios" abajo, migración 14) — el cierre del pedido y su descuento de stock son exclusivos de Pedidos |
+| 6 | Báscula / Balanza | Puertas de pesaje, vales de asfalto, ingreso/egreso de áridos | EN CURSO — **fidelidad funcional con el legado cerrada (2026-08-28, Fase 1+2 sobre el relevamiento Etapa 3)**: ver detalle abajo. **Descuento/ingreso de stock ya resuelto (migraciones 13/14)**: ingreso/egreso de áridos mueve `plantas_stock` directo desde `registrar_pesada_bascula`; el pesaje de asfalto YA NO toca `plantas_pedidos` (ver "Stock e Inventarios" abajo, migración 14) — el cierre del pedido y su descuento de stock son exclusivos de Pedidos. **Historial con vista puente al legado en vivo desde 2026-09-04** (`plantas_v_bascula_viva`, badge "Legado" + acciones deshabilitadas en filas no migradas — verificado en vivo: 24/24 movimientos 1-4 sept, ver `pending.md`). |
 | 7 | Fórmulas | Composición de mezclas (asfalto/hormigón), conversión a kg | EN CURSO — service + `FormulasView` con edición inline de insumos listos, scaffold Vite listo; falta `npm install` y aplicar la migración SQL de `plantas_formulas` (pendiente de confirmación). `calcularConsumoKg()`/`calcularConsumoTotalKg()` tienen gemela SQL (`plantas_calcular_consumo_kg`, migración 13) usada por el descuento de stock — si se cambia una, cambiar la otra. |
 | 8 | Maestros | Obras, encargados, proveedores, patentes, choferes, materiales | EN CURSO — service + `MaestrosView` (tabs) listos. **Tab "Materiales" agregada 2026-08-31**. **2026-09-01: separación Vehículos Propios/Externos** (2 tabs en vez de 1 con columna "Origen") + auditoría completa de `vt_maestros9` — `clientes` (7) sin migrar (falta tabla, requiere autorización) y `choferes` sin poblar (no hay catálogo 1:1 en el legado, texto libre con inconsistencias — ver `pending.md`). |
-| 9 | Usuarios | ABM de usuarios, mapeo con Supabase Auth y roles | UI LISTA — espera migración 21 (ver pending.md) |
+| 9 | Usuarios | ABM de usuarios, mapeo con Supabase Auth y roles | **Migración 21 aplicada 2026-09-03 noche** (policy admin lee todos + RPC `admin_upsert_usuario_rol`) — pestaña "Usuarios" ya operativa. Pendiente: 3 usuarios sin nombre para mostrar por faltarles fila en `flota_usuarios_email` (ver detalle arriba y `pending.md`) |
 | 10 | Roles | Configuración de permisos por rol (override sobre defaults) | Vista de solo-lectura de la matriz lista; edición vía DB queda para más adelante |
 | 11 | Backup | Backups automáticos/manuales y restauración | PENDIENTE |
 | 12 | Resumen mensual / Reportes | Excel mensual de producción por obra e insumos | **COMPLETADO — 2026-09-03**: Despachos → Resumen por obra, botón "Exportar informe mensual" (`informe-mensual.service.js` + `excel-informe-mensual.js`), 100% dinámico según el mes elegido — hoja Resumen General, una hoja por obra/cliente externo, Consumo de insumos, Resumen anual y Analítica de proveedores, con el formato corporativo unificado (`excel-corporativo.js`). Borrador de mail con adjunto vía macro VBA (`docs/informe-mensual-macro/`, manual — Federico pidió explícitamente NO auto-enviar). |
@@ -93,8 +93,22 @@ restricción fina por rol/obra queda para la tarea dedicada **P0.2** (todavía
 PENDIENTE).
 
 Falta antes de considerar esto terminado:
-1. Cargar `plantas_usuarios_roles` para cada usuario real más allá del admin
-   (Federico es el único con fila hoy).
+1. ~~Cargar `plantas_usuarios_roles` para cada usuario real más allá del
+   admin~~ — **corregido 2026-09-03 noche**: esto ya estaba resuelto desde
+   hace tiempo (no en el momento en que se escribió esta nota) y quedó sin
+   actualizar. Verificado en vivo: 22 usuarios reales cargados, con
+   `obra_ids` ya reconciliados contra `flota_obras` (IDs reales, no los
+   códigos del legado) para cada encargado/supervisor, y `activo`
+   correcto. Cruzado explícitamente contra `vt_usuarios9` (15 usuarios del
+   legado, kv_store) — los 15 están presentes + 7 nuevos agregados después.
+   Único gap real encontrado: `angel.moreira@vialtec.com.ar`,
+   `balanza@vialtec.com.ar` y `juan.heinrich@vialtec.com.ar` no tienen fila
+   en `flota_usuarios_email` (de ahí sale el nombre para mostrar) — les
+   aparece el email pelado en la UI. Pendiente de decisión de Federico
+   (ver `pending.md`): esa tabla es el directorio real del sistema de
+   flota (`rol` en su propio vocabulario, `es_admin`,
+   `puede_aprobar_obra/taller/stock`), no una tabla neutra de nombres —
+   no se debe insertar ahí sin que él confirme rol/flags.
 2. Tarea P0.2: RLS fina por rol/obra (reemplazar los `using (true)` de la
    migración 08).
 3. **Pregunta abierta sin resolver**: Federico mencionó que el sistema viejo

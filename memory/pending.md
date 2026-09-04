@@ -1,18 +1,553 @@
 # pending.md — Pendientes
 
+## 🎯 Plan de corte definitivo legado → nuevo (decisión de Federico, 2026-09-04)
+
+Al mostrar Federico una captura del "Cronograma Semanal" del legado con
+pedidos de esta semana (2, 3 y 4 de septiembre) que el Plan Semanal del
+sistema nuevo no tenía, se verificó que es el gap ya conocido y decidido
+(ver "Vistas puente Báscula/Stock" más abajo: "Pedidos NO tiene vista
+puente, decisión explícita de Federico, descartado el trigger también").
+Cuantificado hoy: `vt_p9` (legado) sigue actualizándose en vivo (última
+escritura 2026-09-04 19:30 UTC — el legado se sigue usando para cargar
+pedidos en paralelo), 4 pedidos de esta semana existen solo ahí (1 del
+2/9, 2 del 3/9, 1 del 4/9).
+
+Le propuse 3 opciones (vista puente para Pedidos / migrar estos 4 a mano /
+cortar ya el uso del legado) y **Federico eligió una 4ta, la definitiva**:
+
+> "la otra opcion es seguir asi, y seguir ajustando el sistema y cuando
+> vea q el sistema esta bien hacemos la migracion de todo lo que no esta,
+> al sistema nuevo le ponemos el dominio del sistema viejo y listo"
+
+O sea: **NO tocar Pedidos con una vista puente ni con inserts manuales
+puntuales por ahora** — el legado sigue siendo la fuente viva de Pedidos
+mientras Federico sigue probando/ajustando el sistema nuevo. Cuando él
+considere que el sistema nuevo está listo para producción real, el plan
+de corte es:
+
+1. Migración final de TODO lo que no esté migrado todavía (mismo criterio
+   que `migracion_historial_v2.sql` del 1/9, pero corriéndola de nuevo /
+   extendida para capturar el delta acumulado desde esa fecha — pedidos,
+   vales de báscula, movimientos de stock, lo que corresponda en ese
+   momento).
+2. Apuntar el dominio `produccion.vialtec.app` (hoy el legado) al sistema
+   nuevo — reemplazo de dominio, no migración de datos de usuarios finales
+   (ya comparten el mismo Supabase).
+3. Dar de baja el sistema legado como fuente de escritura.
+
+**Implicancia para sesiones futuras**: no proponer ni implementar una
+vista puente de solo lectura para Pedidos (`plantas_v_pedidos_viva` o
+similar) salvo que Federico lo pida explícitamente — es una decisión
+tomada dos veces ya (primero al armar las vistas de Báscula/Stock, ahora
+de nuevo acá). El Plan Semanal / Pedidos del sistema nuevo van a seguir
+mostrando "menos" que el legado hasta el corte definitivo, y **eso es
+esperado, no un bug** mientras no se decida lo contrario.
+
+**Antes del corte, pedido explícito de Federico (2026-09-04)**: cuando se
+esté por terminar la etapa de ajuste ("cuando estemos terminando, dentro
+de poco"), hacer (a) una prueba del **flujo TOTAL del sistema,
+absolutamente todo** (no módulos sueltos: Pedidos ciclo completo
+crear→confirmar→despachar con división→postergar→cancelar, Báscula 3
+puertas + impresión vale/remito + acumulado, Despachos, Stock, Maestros,
+Usuarios y Permisos/RLS por rol, Dashboard, exports a Excel) y (b) una
+**auditoría exhaustiva** (migración completa sin faltantes — extender
+`auditoria_historico_vs_legado.sql` —, RLS por rol, el hallazgo de
+seguridad pendiente de `kv_store` con policy abierta a `public`/`anon`
+—ver más abajo—, chequeo de paginación en toda vista nueva). Sin fecha de
+arranque fija todavía — a definir con Federico, probablemente el fin de
+semana antes del corte.
+
+**Fecha objetivo (dicha por Federico el mismo 2026-09-04, viernes):**
+este fin de semana (sáb. 5 / dom. 6 de septiembre 2026) se termina de
+ajustar/pulir el sistema, con el objetivo de tenerlo andando (= corte de
+dominio, ver plan arriba) **el lunes 7 u/o martes 8 de septiembre 2026**.
+Sigue siendo un objetivo, no una fecha 100% confirmada — no asumir que el
+corte ya pasó sin confirmarlo de nuevo con Federico al arrancar una sesión
+posterior a esa fecha.
+
+## ✅ Báscula: impresión round 3 + Vale para egreso de áridos — 2026-09-04 (madrugada), APLICADO y VERIFICADO
+
+Después del round 2 (más abajo), Federico sacó el filtro de fecha "hoy" por
+default, sacó el botón "Filtrar" (filtro en vivo con `@change`), pidió el
+acumulado en tabla/Excel (ya resuelto con `acumulado_dia_tn` de la vista) y
+reportó una FOTO: el diálogo de impresión de la compu ahora decía
+correctamente "1 página" pero la vista previa salía en BLANCO. 3 cosas
+resueltas en esta vuelta:
+
+1. **Hoja en blanco al imprimir — bug real, causado por el propio fix del
+   round 2**: el fix de "6 páginas → 1" agregó
+   `body > div:has(.imprimible) * { visibility: hidden }` en `main.css`, y
+   esa regla tiene MÁS especificidad CSS que la regla que sigue, la que
+   hace visible a `.imprimible` (`.imprimible, .imprimible * { visibility:
+   visible }`) — `:has()` cuenta como clase, más `body` y `div` como 2
+   selectores de elemento de más, ganan por especificidad aunque aparezcan
+   ANTES en el archivo (la especificidad manda sobre el orden de
+   declaración). Resultado: `.imprimible` quedaba también oculto por la
+   regla que se suponía debía ocultar todo LO DEMÁS. Fix: `!important` en
+   la regla que hace visible a `.imprimible` — gana siempre, sin depender
+   de la especificidad de la otra. Verificado con una simulación segura
+   (inyectar las mismas reglas SIN el wrapper `@media print`, para no
+   disparar el diálogo nativo de impresión que bloquea la automatización
+   del navegador): antes de este fix `.imprimible` computaba
+   `visibility: hidden`; después, `visibility: visible` con el contenido
+   real renderizado.
+
+2. **Vale de pesaje también para egreso de áridos ("Salida de áridos")** —
+   pedido explícito de Federico: antes solo asfalto tenía botón de
+   impresión (regla vieja, ver comentario removido en `useBascula.js`).
+   Ahora el historial de Báscula muestra un botón "Vale" también en filas
+   `egreso_arido` (sigue sin "Remito": ese formato es específico del flujo
+   pedido/obra de asfalto — acumulado por pedido, rango de vales
+   correlativos —, egreso de áridos no tiene pedido asociado). El
+   imprimible (`ValeImprimible.vue`, modo "vale") muestra "Material: X" en
+   vez de "Mezcla: X" cuando el vale no es de asfalto (usa `vale.material`,
+   ya resuelto por `plantas_v_bascula_viva`); Obra ya funcionaba genérico
+   (resuelve por `vale.obra_id`, no específico de asfalto). La línea
+   "Acumulado" queda en "—" para egreso: no hay un concepto de acumulado
+   del día definido para egreso todavía (`obtenerAcumuladoHastaFecha()`
+   solo consulta asfalto) — se evitó llamarla para egreso en vez de dejar
+   que devuelva 0 engañoso; mismo criterio "—" que ya usa la tabla/Excel
+   del historial para esas filas. Ingreso de áridos sigue sin impresión
+   (no lo pidió Federico). Verificado en vivo contra un vale real de
+   egreso (Fuel Oil, obra "Predio Vialtec"): Material y Obra correctos,
+   Acumulado en "—", sin errores.
+
+Archivos: `src/assets/main.css`, `src/views/BasculaView.vue`,
+`src/modules/bascula/composables/useBascula.js`,
+`src/modules/bascula/components/ValeImprimible.vue`.
+
+### Nota: "Patente" con texto raro en 2 vales históricos de egreso — NO es un bug, decisión de Federico
+
+Al verificar el punto 2 de arriba contra datos reales, aparecieron 2 vales
+(de solo 3 `egreso_arido` que existen en todo el sistema) con
+`plantas_vales.patente = 'CONSUMO JUL-24-AGOSTO 26'` / `'CONSUMO MAY-JUN 26'`
+— ambos de material Fuel Oil, sin vehículo real (consumo interno de
+combustible, no una entrega con camión). Parecía un bug pero es dato real
+cargado a propósito en su momento. Le pregunté a Federico qué hacer y
+confirmó: **dejar el campo tal cual** (no reescribir el dato histórico, no
+ocultar la fila) — el campo Patente ya es opcional para `egreso_arido`
+(`guardarPesada()` solo exige material + obra_id) y el imprimible ya cae a
+"—" cuando está vacío (`vale.patente || '—'`, `ValeImprimible.vue`). Sin
+cambio de código: el comportamiento pedido ya es el que había. Si un
+operador no carga patente en un egreso a futuro, sale "Patente: —".
+
+## ✅ Báscula: impresión round 2 — 2026-09-04 (noche), APLICADO y VERIFICADO
+
+Federico volvió a probar después del fix anterior y reportó 3 cosas más:
+timeout seguía sin confirmar del todo, vista previa "apiñada", el diálogo
+de impresión mostraba 6 páginas para un vale (debía ser 1), y — nueva —
+obra/mezcla vacías al imprimir. Las 4 investigadas y resueltas:
+
+1. **Timeout**: re-verificado con el mismo filtro amplio (ago-sept) que
+   antes tardaba/fallaba — ahora carga rápido, sin error. El fix de la
+   ronda anterior (`pp_visible materialized` + piso de fecha) sigue
+   funcionando.
+
+2. **"6 páginas" al imprimir un vale — bug real, CAUSA RAÍZ distinta a lo
+   que se pensaba**: `body * { visibility: hidden }` en `main.css` NO saca
+   los elementos del flujo del documento — `visibility:hidden` sigue
+   ocupando su alto de layout normal (a diferencia de `display:none`). Con
+   la SPA completa debajo del modal (sidebar, filtros, la tabla de
+   historial con decenas/cientos de filas) invisible pero todavía "midiendo"
+   su alto real, el motor de impresión de Chrome paginaba ese alto
+   acumulado completo — de ahí las páginas de más, todas en blanco salvo
+   la primera. Fix en `src/assets/main.css` + `BasculaView.vue` +
+   `DespachosView.vue`: `#app` (la SPA entera) pasa a `display: none` en
+   `@media print` (sí saca del flujo, alto cero); los 4 modales de
+   impresión existentes (Vale/Remito de Báscula, Remito/Vale de Despachos)
+   se movieron a `<Teleport to="body">` para vivir FUERA de `#app` y no
+   heredar ese `display:none` — dentro de ese modal teleportado (chico, del
+   tamaño del viewport) se mantiene el mismo criterio `visibility` de antes
+   pero acotado a él (`body > div:has(.imprimible) *`), ya no a toda la SPA.
+   Verificado en vivo: `.imprimible` confirmado fuera de `#app`
+   (`app.contains(imprimible) === false`), regla CSS compilada correcta.
+
+3. **Vista previa "apiñada" — bug real de UX**: `VModal.vue` tiene
+   `max-w-lg` (512px) fijo, pensado para formularios — el vale (grid de 2
+   columnas para una hoja A4 landscape de 297mm) quedaba apretado ahí.
+   `VModal.vue` suma un prop `size` opcional (`'md'` default = sin cambios
+   para el resto de la app, `'xl'` = `max-w-4xl`) — los 4 modales de
+   impresión de arriba pasan a `size="xl"`. Verificado en vivo: se ve
+   ancho y prolijo, sin apiñar.
+
+4. **Obra/mezcla vacías al imprimir — regresión real introducida en la
+   ronda anterior de esta misma sesión**: al cambiar
+   `fetchPedidosAsfaltoParaPesada()` a filtrar solo `estado='confirmado'`
+   (pedido explícito de Federico), la función de impresión
+   (`abrirImpresion()` en `useBascula.js`) seguía resolviendo obra/mezcla
+   contra esa MISMA lista acotada (`pedidosPorId`) — un vale de un pedido
+   YA despachado (la inmensa mayoría de los que se imprimen, son
+   históricos) dejó de encontrar su pedido ahí, mostrando "Obra: —" /
+   "Mezcla: —". Fix: si el pedido no está en esa lista acotada, se trae
+   puntual por id (`getPedido()`, ya existía en `pedidos.service.js`) — no
+   bloquea la impresión si falla. Verificado en vivo con el mismo vale que
+   antes daba vacío: ahora muestra "Obra: AUTOVIA MERCOSUR" / "Mezcla: CAC
+   D19 (AUTOVIA)" correctamente, en Vale y en Remito.
+
+Build limpio en cada paso, sin errores de consola.
+
+## ✅ Báscula: timeout + impresión — 2026-09-04 (noche), APLICADO y VERIFICADO
+
+Federico reportó 2 problemas reales usando Báscula después del paquete de la
+tarde: (1) "canceling statement due to statement timeout" filtrando por
+fecha, (2) varios vales de asfalto sin opción de imprimir, (3) al imprimir
+salen más copias/hojas de las esperadas (vale=1 hoja con 2 copias, remito=2
+hojas con 1 copia c/u).
+
+**1) Timeout — REPRODUCIDO y CORREGIDO.** Causa real: `plantas_pedidos`
+tiene RLS por fila (subplan correlado contra `plantas_usuarios_roles`) y el
+planner de Postgres, para ciertas combinaciones de filtro, elegía un plan
+que la reevaluaba una vez POR CADA fila externa en vez de una sola vez —
+reproducido en vivo con un filtro de fecha amplio (ago-sept): 1.13s medido
+en `EXPLAIN ANALYZE` como el rol `authenticated` real (mismo rol que usa la
+app vía PostgREST, que tiene `statement_timeout=8s` — confirmado con
+`select rolconfig from pg_roles`), contra ~13-58ms en pruebas anteriores
+"en caliente". Fix en `plantas_v_bascula_viva`:
+- `plantas_pedidos` se resuelve UNA sola vez vía un nuevo CTE `pp_visible
+  as materialized` (fuerza que Postgres nunca la reevalúe por fila, sin
+  importar qué plan elija después) — esto es lo que bajó 1.13s a 68ms.
+- Piso de fecha (`(v->>'fecha')::date >= '2026-09-01'`) en las 3 ramas
+  legado: antes de esa fecha está TODO migrado (0 faltantes, auditado el
+  mismo día), así que no tiene sentido escanear/procesar esos ítems del
+  legado — reduce drásticamente el volumen para cualquier filtro que
+  incluya histórico (el caso más común).
+- `plantas_vales` de paso pasa a leerse una sola vez (`pv_base as
+  materialized`, antes 3 lecturas separadas).
+- Re-verificado sin filtro de fecha (rango completo): 62ms. Vista de Stock
+  revisada también (`plantas_v_stock_movimientos_viva`, no tiene join
+  contra `plantas_pedidos`, sin el mismo riesgo — 35ms, sin cambios
+  necesarios). `ANALYZE` corrido sobre las tablas involucradas de paso.
+
+**2) Vales sin opción de imprimir — NO es un bug, es diseño intencional**
+(pedido explícito de Federico en la tanda anterior): esas filas tienen el
+badge "Legado" — todavía viven solo en el sistema legado, no tienen fila
+real en `plantas_vales` detrás, así que no hay nada que un RPC de
+"imprimir"/"corregir" pueda operar. Quedan de solo lectura hasta que
+lleguen a migrarse (fecha de corte pendiente, ver sección de abajo).
+
+**3) Copias/hojas de más al imprimir — bug real, CORREGIDO.** Medido con el
+mismo harness de sesiones anteriores (clonar `.imprimible` a un contenedor
+297×210mm real, sin arriesgar el diálogo nativo de impresión):
+- Modo "Vale": 794px de contenido contra 793.7px disponibles — correcto,
+  sin cambios (1 hoja, 2 copias lado a lado, como se diseñó).
+- Modo "Remito": **2027px de contenido total contra 793.7px disponibles**
+  — cada copia (~1013px) desbordaba largamente la única hoja que tenía
+  asignada (210mm), así que cada una se partía en 2 hojas físicas → 4
+  hojas en vez de las 2 esperadas. Causa: el remito se diseñó originalmente
+  pensando en una hoja A4 vertical (297mm de alto), pero la corrección del
+  2026-09-03 noche unificó `@page` a un solo landscape global (210mm de
+  alto) para toda la app — el remito nunca se reajustó a esa nueva altura
+  disponible. Fix en `ValeImprimible.vue` (modo remito): paddings/márgenes
+  reducidos, filas en blanco de la tabla bajadas de 4 a 2 — cada copia mide
+  ahora 726px, entra cómodo en los 793.7px de una sola hoja. Vale sigue
+  intacto.
+
+Build limpio, sin errores de consola, verificado en vivo (Báscula, filtro
+amplio + imprimir Vale/Remito de un vale real).
+
+## ✅ Paquete de correcciones 2026-09-04 (tarde): Báscula, Maestros, Pedidos, Home — APLICADO y VERIFICADO
+
+Pedido de Federico, 4 tareas en un mismo lote, todas verificadas en vivo en
+el navegador (sesión real de Federico) al cierre:
+
+1. **Báscula — selector "Vale Asfalto"**:
+   - `fetchPedidosAsfaltoParaPesada()` (`bascula.service.js`) ahora filtra
+     `estado = 'confirmado'` únicamente (antes `in (confirmado, despachado)`,
+     decisión del 2026-08-28 — **override explícito** de Federico esta
+     sesión, no un bug encontrado).
+   - Bug real corregido: "Obra #null" en la gran mayoría de las opciones —
+     causa real, una venta externa (`tipo_pedido='venta'`) nunca tiene
+     `obra_id` por diseño, el selector no tenía fallback a `cliente_externo`.
+     Nuevo helper `nombreDestinoPedido()` en `useBascula.js` (mismo patrón
+     ya usado en `PlanSemanalView.vue` desde el 2026-09-03). Verificado en
+     vivo: "MUNICIPALIDAD DE PILAR — 40 tn (confirmado)" en vez de "Obra
+     #null", y el caso huérfano real (sin `flota_obras` equivalente) muestra
+     "Obra sin asignar".
+2. **Maestros**:
+   - Pestaña "Choferes" poblada (antes vacía): 19 choferes únicos extraídos
+     de `plantas_patentes.chofer_habitual` (Camiones propios), dedupe
+     case-insensitive (1 caso real: "Jara Esteban"/"JARA ESTEBAN"),
+     normalizados a mayúsculas. Población única vía SQL (no es un sync
+     seguido — si se necesita en vivo hacia adelante, pedirlo aparte).
+   - Tabs renombradas: "Vehículos propios" → "Camiones propios", "Vehículos
+     externos" → "Camiones externos" (mismo catálogo/service, solo label).
+3. **Pedidos — rediseño en cards** (réplica exacta del legado, relevado en
+   vivo contra `produccion.vialtec.app` con Federico logueado — Etapa 1/3
+   del relevamiento ya tenían el detalle, se re-confirmó en vivo esta
+   sesión):
+   - Se sacaron los tabs Asfalto/Hormigón — vista única, agrupada por
+     sección con contador ("Hormigón — N pedidos" / "Asfalto — N pedidos",
+     ese orden). `usePedidos.js#pedidosPorTipo` nuevo.
+   - `fetchTodosLosPedidos()` nuevo en `pedidos.service.js` (reemplaza
+     `fetchPedidos()` paginado para esta vista) — el legado tampoco pagina
+     Pedidos, se apoya en semana-en-curso/filtros para acotar volumen; sigue
+     usando `fetchPaginado()` por debajo (regla de paginación intacta).
+   - `PedidoCard.vue` nuevo (`src/modules/pedidos/components/`): badge +
+     destino + fórmula/cantidad (+ "→ real: X" si despachado) + fila
+     📅fecha/👤encargado/🕐creación/"Ver historial" + caja 📝observaciones +
+     caja ⚠motivo (pueden convivir las dos, confirmado en vivo) + acciones
+     por estado (Confirmar / ↑Despachar / Editar / Postergar / ✕ / Archivar).
+   - `src/modules/pedidos/estados.js` nuevo: constantes de estado
+     compartidas entre `PedidosView.vue` y `PedidoCard.vue` (antes
+     duplicadas inline en la vista).
+4. **Home — "Panel de control"** (réplica del legado, relevado en vivo en la
+   misma sesión, pedido agregado por Federico a mitad de la tarea): 5 KPI
+   semanales (Pedidos activos/Confirmados/Despachos esta semana/Ajustados/
+   Críticos — franja de color por card), "Consumo de material" (selector +
+   últimas 8 semanas, kg reales despachados vía fórmula, nuevo
+   `dashboard.service.js#fetchConsumoSemanalPorMaterial()`), "Próximos
+   despachos" (confirmados ordenados por fecha, badge Vencido/Hoy),
+   "Stock actual de insumos" (grid, reusa `fetchStockActual()`). Reemplaza
+   el bloque "KPIs del mes" que tenía antes Home — las secciones "Analítica
+   de proveedores" y "Historial detallado de despachos por camión" (valor
+   agregado propio de v2, el legado no las tiene) se mantuvieron sin
+   cambios debajo, no se pidió sacarlas.
+   - `src/modules/dashboard/services/dashboard.service.js` +
+     `src/modules/dashboard/composables/useDashboardHome.js` nuevos.
+   - **Ajuste 2026-09-04 (mismo día, pedido de seguimiento)**: se sacaron
+     por completo "Analítica de proveedores" y "Historial detallado de
+     despachos por camión" de Home — quedaba pidiendo "estrictamente un
+     panel de resumen, sin tablas ni secciones analíticas extensas". No se
+     perdió funcionalidad real: la misma analítica de proveedores ya vive
+     en Stock → tab "Analítica de proveedores" (2026-09-02), y el detalle
+     de despachos por camión en Despachos → "🚛 Ver detalle de cargas" por
+     pedido. Bundle de Home bajó de 19.3kB a 13.5kB. Verificado en vivo:
+     la página termina justo después de "Stock actual de insumos", sin
+     rastro de las secciones sacadas, sin errores de consola.
+
+Build limpio en cada paso, sin errores de consola verificados en vivo en
+Báscula/Home/Maestros/Pedidos (histórico completo, ~67 pedidos hormigón
+renderizados sin problema).
+
+## ✅ Vistas puente Báscula/Stock (kv_store vivo + plantas_*) — 2026-09-04, APLICADO y VERIFICADO
+
+Pedido explícito de Federico tras el hallazgo de Báscula 1-4 sept (ver
+sección de abajo): que la UI nueva lea en vivo lo que el legado sigue
+cargando en paralelo, SIN trigger de sincronización (evaluado y descartado
+por el riesgo de romper la escritura del legado — ver conversación) y sin
+tocar ninguna tabla existente. Implementado como 2 **vistas SQL de solo
+lectura** (`plantas_v_bascula_viva`, `plantas_v_stock_movimientos_viva`),
+`UNION ALL` de la tabla real (`plantas_vales`/`plantas_stock_movimientos`)
+con lo que todavía solo vive en `kv_store` (anti-join, mismo criterio de
+idempotencia que `migracion_historial_v2.sql`) — código completo y
+documentado en `supabase/scripts/vistas_puente_legado_bascula_stock.sql`.
+
+**🔴 Hallazgo real descubierto al aplicar** (no un bug de la vista, preexistente
+de la migración del 1/9): los 500 `ingreso_arido` migrados recibieron
+`numero_vale` SINTÉTICO (`nextval`) en el rango **9994-10493** porque el
+legado no los numera. El asfalto real del legado seguía en 9993 al migrar,
+pero **siguió avanzando en paralelo** y ya entró en ese mismo rango (hoy va
+por 10013) — comparar "¿ya migrado?" por `numero_vale` (como hace
+`migracion_historial_v2.sql`) da falsos positivos ahí. Se resolvió
+comparando por el id nativo del legado (`datos_legados ->> 'id'`) en la
+vista. **Pendiente de decisión de Federico, no resuelto todavía**: el día
+que se quiera migrar de verdad ese asfalto real (9994 en adelante) con su
+`numero_vale` real, va a chocar contra el `UNIQUE` de `numero_vale` —
+hace falta decidir cómo renumerar antes de encarar esa migración. Visible
+también en la UI como un efecto colateral menor: hay 20 pares de filas que
+comparten el mismo "N° Vale" en pantalla (una real, una del legado) —
+aceptado, ambas están marcadas "Legado"/no, no genera confusión real.
+
+**Verificado end-to-end**: conteo 1-4 sept da **24/23** (igual que la
+auditoría manual), confirmado tanto por SQL directo como corriendo como el
+rol `authenticated` real de la app (importante: como `anon` sin login da un
+resultado distinto y roto — el RLS de `plantas_vales` bloquea a `anon`, así
+que el anti-join "ve" todo como no-migrado — no aplica a la app real, que
+siempre corre logueada, pero quedó documentado en el script). **Confirmado
+visualmente en el navegador** con la sesión real de Federico: Báscula →
+filtro 1 al 4/9 → "Mostrando 1–24 de 24", badge "Legado" y colores de fila
+(violeta/verde/naranja) correctos; Stock → Historial de ingresos → mismo
+badge, fallback de responsable histórico intacto. Sin errores de consola.
+
+**Código adaptado**: `bascula.service.js#queryHistorialVales()` y
+`stock.service.js#queryMovimientos()` leen de las vistas (`select('*')`
+simple, sin embeds de PostgREST — las filas legado no tienen fila real de
+`plantas_ingresos`/`plantas_pedidos`/`plantas_materiales` detrás para que el
+embed funcione, así que la vista aplana esas columnas directo).
+`useBascula.js#enriquecerVale()` actualizado a las columnas planas. UI:
+badge gris sutil "Legado" en la columna Tipo de ambas tablas
+(`pendiente_migracion`), acciones Imprimir Vale/Remito deshabilitadas para
+esas filas en Báscula (Stock no tiene acciones editables en el historial,
+append-only por diseño — no aplicaba "Corregir" ahí). Build limpio.
+
+**Alcance explícito, no cubierto por esta vista**: 'relevamiento' de Stock
+queda afuera (delta contra el anterior, mezclar cadenas migrada+legado en
+vivo era el mayor riesgo de bug sutil de todo esto — ver comentario en el
+script SQL). Pedidos NO tiene vista puente (decisión explícita de Federico,
+descartado el trigger también) — sigue mostrando solo lo migrado.
+
+**Sigue siendo un PUENTE temporal**, no la arquitectura definitiva — la
+fecha de corte real (cuándo el sistema nuevo pasa a ser el único que se usa
+en planta) sigue sin definir, ver sección de abajo.
+
+## ✅ Auditoría integral histórico legado vs. plantas_* (previo al 01/09) — 2026-09-04, LIMPIA
+
+Pedido explícito de Federico tras encontrar la discrepancia de Báscula 1-4
+sept (ver sección de abajo): auditar TODO lo migrado el 2026-09-01
+(`migracion_historial_v2.sql`) para descartar que haya más datos sin migrar
+o con totales mal calculados, no solo el caso puntual de Báscula. Script
+reutilizable en `supabase/scripts/auditoria_historico_vs_legado.sql` (solo
+lectura, no tocó nada). Resultado — **100% limpio, sin hallazgos nuevos**:
+
+- **Báscula** (`plantas_vales`): 884/884 migrados (382 asfalto + 499 ingreso
+  + 3 egreso), 0 faltantes, **totales en tn idénticos** (diferencia 0.0000
+  tn en los 3 tipos, no solo conteo de filas — se sumó `peso_neto` legado
+  vs. migrado).
+- **Pedidos** (`plantas_pedidos`): 178/179, único faltante `wmcde37` (mismo
+  caso documentado desde el primer dry-run: `cantidad="-1"`, cancelado, sin
+  valor real que migrar).
+- **Historial de pedidos** (`plantas_pedidos_historial`): 531/533, los 2
+  faltantes son los 2 eventos del mismo `wmcde37` (no puede migrar su
+  historial sin el pedido).
+- **Fórmulas** (`plantas_formulas`): 19/19, 0 faltantes.
+- **Stock — movimientos** (`plantas_stock_movimientos`, sin contar
+  relevamiento): 655/655, 0 faltantes en los 4 tipos legados
+  (ingreso_aridos/ingreso/egreso_aridos/salida).
+- **Stock — relevamiento** (snapshot mensual → delta): 23 relevamientos
+  reales pre-01/09 → 124 filas `ajuste` migradas correctamente (delta contra
+  el relevamiento anterior de cada material, primer relevamiento de cada uno
+  sin base para delta — comportamiento esperado del diseño, no un gap).
+- **Integridad general**: 0 `numero_vale` duplicado, 0 `id` de pedido legado
+  duplicado, 0 ingresos huérfanos, 0 vales `ingreso_arido` sin su fila en
+  `plantas_ingresos`.
+- **Hallazgo colateral, no accionable**: 22 "camiones" con `nroRemito`
+  dentro de pedidos de ASFALTO (no hormigón) parecían faltantes en
+  `plantas_cargas_hormigon` — investigado: es un falso positivo, esa tabla
+  es exclusiva de hormigón por diseño (el detalle de asfalto vive en
+  `plantas_vales`, ya verificado 100% arriba). Además se encontró que esos
+  22 `nroRemito` de camiones de asfalto **no coinciden con ningún
+  `numero_vale` real** de ese mismo pedido en `plantas_vales` — parece un
+  campo suelto/no confiable del legado para asfalto (no se usa en ningún
+  lado de la UI nueva, no requiere acción, solo queda documentado por si
+  reaparece la pregunta).
+
+**Conclusión clave**: la migración del 2026-09-01 en sí está impecable — el
+problema real (ver sección de abajo, Báscula 1-4 sept) es 100%
+posterior/operativo: el legado se sigue usando en paralelo después de la
+migración y no hay sync automático hacia `plantas_*`, no un bug de la
+migración ni de las queries del sistema nuevo. Confirmado también que la
+lógica de escritura actual (RPCs `registrar_pesada_bascula`,
+`finalizar_despacho`/`corregir_despacho`, `registrar_movimiento_manual`/
+`registrar_relevamiento_stock`) ya está correctamente enganchada a las
+tablas `plantas_*` correspondientes (ver migraciones 13/14, modules-status.md)
+— cualquier dato cargado HOY desde la app nueva sí impacta donde debe.
+
+## 🔴 Báscula 1-4 sept — discrepancia investigada (2026-09-04)
+
+Federico reportó que Báscula (filtro 1 al 4 de sept) mostraba muchos menos
+movimientos que el sistema viejo para el mismo rango. Investigado a fondo:
+
+1. **Bug real de zona horaria — corregido**: `bascula.service.js` (+ mismo
+   patrón en `stock.service.js` y `analytics.service.js`) filtraban columnas
+   `timestamptz` (`fecha_pesada`/`fecha_movimiento`/`fecha`) con fechas
+   "peladas" sin offset — Postgres las casteaba como medianoche UTC en vez
+   de medianoche LOCAL (Argentina, UTC-3), perdiendo en silencio los
+   movimientos cargados entre las 21:00 y las 23:59 locales del día
+   `hasta`. Fix: helpers nuevos `limiteInicioDiaLocal()`/
+   `limiteFinDiaLocalExclusivo()` en `src/services/fecha.js`, aplicados en
+   los 3 services. Build limpio.
+2. **Causa real de la discrepancia — NO es el bug de arriba**: confirmado
+   con SQL directo, el legado tiene **24 movimientos reales** entre el 1 y
+   el 4/9 (20 vales asfalto + 4 ingresos áridos, en `vt_vales9`/
+   `vt_ingaridos9` — mi primer conteo de "20" estaba incompleto, solo
+   miraba `vt_vales9`) vs. **1 solo migrado** en `plantas_vales` (el mismo
+   ingreso del 1/9 10:54). Los 23 restantes existen ÚNICAMENTE en
+   `kv_store` (legado) — nunca llegaron a `plantas_vales` porque no hay
+   sincronización en vivo entre el legado y el sistema nuevo, solo corrió
+   la migración histórica única del 2026-09-01. `vt_vales9` tiene una
+   escritura de HOY mismo (2026-09-04, minutos antes de esta auditoría) —
+   el balancero sigue cargando en el sistema viejo.
+3. **No se migraron ni tocaron esos 23 registros** — requiere la misma
+   decisión pendiente de Federico ya documentada abajo (AUDITORÍA CRÍTICA
+   2026-09-03): definir la fecha de corte real en que el sistema nuevo pasa
+   a ser el único que se usa en planta, antes de sincronizar nada (si se
+   sincroniza ahora y el uso paralelo sigue, se desactualiza de nuevo en
+   días).
+
+## 🎨 Colores de fila en Báscula — implementado (2026-09-04)
+
+Pedido de Federico: que la tabla "Movimientos del día" pinte cada fila según
+tipo (vale asfalto=violeta, ingreso=verde, egreso=naranja), igual que el
+legado. Se reusó el esquema de color ya confirmado contra el legado en
+2026-08-28 (`COLOR_PUERTA`, hoy usado en las cards de "puerta") en vez de
+inventar uno nuevo — nueva constante `COLOR_FILA_VALE` en `useBascula.js` +
+prop `rowClass` nuevo en `VTable.vue` (genérico, reutilizable por cualquier
+otra tabla que lo necesite a futuro, aplica tanto en modo desktop como
+mobile-card). Build limpio. **Pendiente de confirmación visual**: no se pudo
+verificar en el navegador en esta sesión — la extensión de Chrome no estaba
+conectada.
+
+## 📋 Resumen de la sesión 2026-09-03 (tarde/noche) — impresión + migración 21
+
+1. **Migración 21 — APLICADA** (con confirmación explícita de Federico):
+   policy "admin lee todos los usuarios" + RPC `admin_upsert_usuario_rol`
+   en `plantas_usuarios_roles`. La pestaña "Usuarios" queda operativa. Ver
+   fila #9 de `modules-status.md`.
+2. **Usuarios del legado (`vt_usuarios9`, kv_store) — auditados contra
+   `plantas_usuarios_roles`**: los 15 usuarios del legado ya estaban
+   migrados (+ 7 nuevos agregados después, 22 en total), con `obra_ids` ya
+   reconciliados a IDs reales de `flota_obras` y `telefono` completo — la
+   nota vieja de "Federico es el único con fila" en `modules-status.md`
+   estaba desactualizada, corregida.
+   - **Pendiente, necesita tu decisión** (no se tocó, es tabla `flota_*`):
+     `angel.moreira@vialtec.com.ar`, `balanza@vialtec.com.ar` y
+     `juan.heinrich@vialtec.com.ar` no tienen fila en
+     `flota_usuarios_email` → en la UI de Plantas les aparece el email en
+     vez del nombre. Esa tabla es el directorio real del sistema de flota
+     (columnas `rol` propio de flota tipo "Encargado de Obra"/"Gerencia",
+     `es_admin`, `puede_aprobar_obra/taller/stock`) — **no** es neutra,
+     insertarles una fila ahí potencialmente les da acceso/permisos en
+     flota. Antes de tocarla necesito que confirmes: ¿querés que existan
+     como usuarios de flota también (y con qué rol/flags), o preferís que
+     guarde el nombre de estos 3 solo del lado de Plantas (agregando una
+     columna `nombre` nullable a `plantas_usuarios_roles`, 100% aislado,
+     sin tocar flota)? Esta segunda opción es la más simple/segura si no
+     necesitan cuenta de flota.
+   - **Dato del legado sin equivalente hoy**: `felix.pereyra@vialtec.com.ar`
+     tenía un flag `gestionUsuarios: true` en `vt_usuarios9` (permiso de
+     gestionar usuarios sin ser admin). La migración 21 restringe el
+     módulo Usuarios exclusivamente a rol admin (así lo pediste
+     explícitamente el 2026-09-03 a la mañana) — asumo que es intencional
+     que Felix ya no tenga ese acceso especial, no se implementó ningún
+     equivalente. Avisame si querés preservarlo de otra forma.
+3. **Formato de impresión de Vales y Remitos — 2 rondas de correcciones**
+   (`ValeImprimible.vue` + `main.css`), pendiente que Federico pruebe
+   imprimiendo de verdad todavía (dijo "me parece que están mal" sin haber
+   probado la última versión):
+   - Vale: A4 landscape, Original y Duplicado LADO A LADO en 1 sola hoja
+     (`grid-cols-2`), línea de corte vertical.
+   - Remito: **corregido en la 2ª ronda** — ya NO va lado a lado como el
+     vale (esa fue la causa real de que saliera en varias hojas). Ahora
+     cada copia (Original/Duplicado) ocupa **su propia hoja completa**, con
+     salto de página forzado entre las dos (`break-after-page`). Aproveché
+     el ancho completo para acercarlo más a la foto real que compartió
+     Federico (agregado el campo "Desde" que faltaba, cajas con línea en
+     vez de mini-etiquetas, renglones en blanco en la tabla).
+   - Remito de despacho (`DespachoImprimible.vue`, "Ver remito" en
+     Despachos): se le sacó el desglose de cargas individuales (llegaba a
+     18 líneas, desbordaba solo) — ahora es un slip corto de Total +
+     Mezcla + firmas, sigue en 1 copia.
+   - Medido con un harness de JS que clona el contenido a un contenedor de
+     297×210mm real (mismas dimensiones que `@page`) para verificar que no
+     desborda, sin arriesgarme a abrir el diálogo nativo de impresión
+     (puede trabar la sesión de automatización) — da holgura de sobra en
+     ambos casos. **No es lo mismo que imprimir de verdad** — dev server
+     sigue corriendo en `localhost:5173` para que Federico lo pruebe.
+
 ## 📋 Resumen de la madrugada 2026-09-03 — para arrancar el día
 
 Trabajé sobre "hasta mañana, seguí trabajando con todo lo que puedas" — esto es
 lo que avancé, en orden de importancia. Todo commiteado localmente (nada
 deployado, nada escrito en producción salvo lo explícitamente confirmado).
 
-1. **🔴 Necesito tu confirmación**: migración 21 (Usuarios y Permisos por
-   rol — sección de abajo) y el ajuste ×1000 de 642 movimientos de stock
-   históricos (sección Báscula/Stock, más abajo) — ninguna de las dos se
-   ejecutó, ambas listas para correr en cuanto digas.
+1. **🔴 Necesito tu confirmación**: ~~migración 21~~ **APLICADA 2026-09-03
+   noche, ver resumen de sesión arriba** — y el ajuste ×1000 de 642
+   movimientos de stock históricos (sección Báscula/Stock, más abajo),
+   que sigue sin ejecutarse, lista para correr en cuanto digas.
 2. **Módulo Usuarios y Permisos por rol**: pantalla `/usuarios` completa
    (2 tabs), solo accesible para admin. Tab "Permisos por rol" ya
-   funciona; tab "Usuarios" espera la migración 21.
+   funciona; tab "Usuarios" **ya operativa** (migración 21 aplicada, ver
+   arriba) — queda pendiente el gap de 3 nombres sin resolver (ver arriba).
 3. **Remito rediseñado** (2 copias apiladas, como pediste): verificado
    visualmente en vivo, se ve bien.
 4. **Ambigüedad sin resolver** sobre la orientación de vale/remito — dejé

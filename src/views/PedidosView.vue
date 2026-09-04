@@ -11,7 +11,6 @@
 //                           patrón multi-carga, remito por mixer).
 
 import VCard from '@/components/shared/VCard.vue'
-import VTable from '@/components/shared/VTable.vue'
 import VModal from '@/components/shared/VModal.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
@@ -20,71 +19,21 @@ import VKpiCard from '@/components/shared/VKpiCard.vue'
 import { usePedidos } from '@/modules/pedidos/composables/usePedidos'
 import { useDespachoAsfalto } from '@/modules/pedidos/composables/useDespachoAsfalto'
 import { useCargaHormigon } from '@/modules/pedidos/composables/useCargaHormigon'
-
-const ESTADOS = ['solicitado', 'confirmado', 'despachado', 'postergado', 'cancelado']
-const VARIANTE_ESTADO = {
-  solicitado: 'default',
-  confirmado: 'info',
-  despachado: 'success',
-  postergado: 'postergado',
-  cancelado: 'danger',
-}
-// Colores de los 5 KPI de estado — confirmados contra el legado en vivo
-// (memory/relevamiento-sistema-viejo.md Etapa 3: getComputedStyle real, no
-// a ojo). postergado es violeta (mismo tono que la marca), no ámbar.
-const COLOR_KPI_ESTADO = {
-  solicitado: 'bg-warning',
-  confirmado: 'bg-info',
-  despachado: 'bg-success',
-  postergado: 'bg-vialtec',
-  cancelado: 'bg-danger',
-}
-const ESTADOS_ARCHIVABLES = ['despachado', 'cancelado']
-const ESTADOS_EDITABLES = ['solicitado', 'confirmado']
-// postergado -> confirmado es una transición válida del ciclo de vida
-// (memory/business-rules.md: "POSTERGADO → CONFIRMADO → DESPACHADO") — un
-// pedido postergado tiene que poder volver a confirmarse, postergarse de
-// nuevo, o cancelarse, igual que uno solicitado.
-const ESTADOS_CONFIRMABLES = ['solicitado', 'postergado']
-const ESTADOS_POSTERGABLES = ['solicitado', 'confirmado', 'postergado']
-const ESTADOS_CANCELABLES = ['solicitado', 'confirmado', 'postergado']
-
-// "Tipo" ya no es columna de la tabla (2026-09-01): cada tab Asfalto/
-// Hormigón lista solo su material, mostrarlo en cada fila sería redundante.
-const columnas = [
-  { key: 'destino', label: 'Obra / Cliente' },
-  { key: 'encargado', label: 'Encargado' },
-  { key: 'formulaNombre', label: 'Fórmula' },
-  { key: 'cantidad_solicitada', label: 'Solicitado' },
-  { key: 'cantidad_despachada', label: 'Despachado' },
-  { key: 'fecha_programada', label: 'Fecha' },
-  { key: 'estado', label: 'Estado' },
-  { key: 'acciones', label: '' },
-]
-
-const TABS_TIPO = [
-  { valor: 'asfalto', label: 'Asfalto' },
-  { valor: 'hormigon', label: 'Hormigón' },
-]
+import PedidoCard from '@/modules/pedidos/components/PedidoCard.vue'
+import { ESTADOS, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
 
 const {
   error,
   obras,
   formulas,
   patentes,
-  paginaActual,
   cargando,
   filtros,
   conteoEstados,
   totalesPeriodo,
-  tabTipo,
-  cambiarTabTipo,
-  TAMANO_PAGINA,
-  filas,
-  totalPedidos,
+  pedidosPorTipo,
   aplicarFiltros,
   limpiarFiltros,
-  cambiarPagina,
   cargarPedidos,
   vistaSemana,
   rangoSemanaLabel,
@@ -277,114 +226,42 @@ iniciar()
         </div>
       </VCard>
 
-      <div class="mb-3 flex items-center justify-between">
-        <!-- Listado separado por material (2026-09-01, pedido de Federico):
-             2 tabs en vez de un filtro "Tipo" combinado — cada una lista
-             SOLO su material, el rango de semana/filtros de arriba les
-             aplica a las dos por igual (comparten los mismos `filtros`,
-             solo cambia `tabTipo`). -->
-        <div class="flex gap-1 overflow-x-auto border-b border-border">
-          <button
-            v-for="tab in TABS_TIPO"
-            :key="tab.valor"
-            type="button"
-            class="shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition-colors duration-150"
-            :class="
-              tab.valor === tabTipo
-                ? 'border-vialtec text-vialtec'
-                : 'border-transparent text-text-soft hover:text-text-mid'
-            "
-            @click="cambiarTabTipo(tab.valor)"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
+      <!-- Vista unificada en cards agrupadas por tipo (2026-09-04, réplica
+           exacta del legado — relevado en vivo contra produccion.vialtec.app,
+           memory/pending.md): ya no hay tabs Asfalto/Hormigón, las dos
+           secciones conviven siempre con su propio contador ("N pedidos"),
+           mismo orden Hormigón → Asfalto confirmado en vivo. -->
+      <div class="mb-3 flex justify-end">
         <VButton size="sm" @click="abrirNuevo">+ Nuevo pedido</VButton>
       </div>
 
-      <VCard>
-        <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
-        <VTable
-          v-else
-          :columns="columnas"
-          :rows="filas"
-          :page="paginaActual"
-          :page-size="TAMANO_PAGINA"
-          :total="totalPedidos"
-          @update:page="cambiarPagina"
-        >
-          <template #cell-cantidad_solicitada="{ row }">
-            {{ row.cantidad_solicitada }} {{ row.tipo === 'hormigon' ? 'm³' : 'tn' }}
-          </template>
-          <template #cell-cantidad_despachada="{ row }">
-            <span v-if="row.cantidad_despachada != null">
-              {{ row.cantidad_despachada }} {{ row.tipo === 'hormigon' ? 'm³' : 'tn' }}
-            </span>
-            <span v-else class="text-gray-300">—</span>
-          </template>
-          <template #cell-estado="{ row }">
-            <VBadge :variant="VARIANTE_ESTADO[row.estado]">{{ row.estado }}</VBadge>
-            <span v-if="row.archivado" class="ml-1 text-xs text-text-soft">(archivado)</span>
-          </template>
-          <template #cell-acciones="{ row }">
-            <div class="flex flex-wrap gap-1.5">
-              <VButton v-if="ESTADOS_CONFIRMABLES.includes(row.estado)" size="sm" @click="confirmar(row)">Confirmar</VButton>
-              <VButton
-                v-if="row.estado === 'confirmado' && row.tipo === 'asfalto'"
-                variant="success"
-                size="sm"
-                @click="despacho.abrir(row)"
-              >
-                Despachar
-              </VButton>
-              <VButton
-                v-if="row.estado === 'confirmado' && row.tipo === 'hormigon'"
-                variant="success"
-                size="sm"
-                @click="cargaHormigon.abrir(row)"
-              >
-                Registrar carga
-              </VButton>
-              <VButton
-                v-if="ESTADOS_EDITABLES.includes(row.estado)"
-                variant="secondary"
-                size="sm"
-                @click="abrirEdicion(row)"
-              >
-                Editar
-              </VButton>
-              <VButton
-                v-if="ESTADOS_POSTERGABLES.includes(row.estado)"
-                variant="secondary"
-                size="sm"
-                @click="abrirPostergacion(row)"
-              >
-                Postergar
-              </VButton>
-              <VButton
-                v-if="ESTADOS_CANCELABLES.includes(row.estado)"
-                variant="danger"
-                size="sm"
-                @click="abrirCancelacion(row)"
-              >
-                Cancelar
-              </VButton>
-              <VButton
-                v-if="ESTADOS_ARCHIVABLES.includes(row.estado) && !row.archivado"
-                variant="secondary"
-                size="sm"
-                @click="archivar(row)"
-              >
-                Archivar
-              </VButton>
-              <VButton variant="ghost" size="sm" @click="abrirHistorial(row)">Ver historial</VButton>
-            </div>
-          </template>
-        </VTable>
-        <p v-if="!cargando && !filas.length" class="py-4 text-center text-sm text-text-soft">
-          No hay pedidos que coincidan con el filtro.
-        </p>
-      </VCard>
+      <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
+      <template v-else>
+        <div v-for="grupo in pedidosPorTipo" :key="grupo.tipo" class="mb-6">
+          <div class="mb-3 flex items-baseline justify-between">
+            <h3 class="text-lg font-bold text-text">{{ grupo.label }}</h3>
+            <span class="text-sm text-text-soft">{{ grupo.filas.length }} pedido{{ grupo.filas.length === 1 ? '' : 's' }}</span>
+          </div>
+          <div class="space-y-3">
+            <PedidoCard
+              v-for="pedido in grupo.filas"
+              :key="pedido.id"
+              :pedido="pedido"
+              @confirmar="confirmar"
+              @despachar="despacho.abrir"
+              @registrar-carga="cargaHormigon.abrir"
+              @editar="abrirEdicion"
+              @postergar="abrirPostergacion"
+              @cancelar="abrirCancelacion"
+              @archivar="archivar"
+              @ver-historial="abrirHistorial"
+            />
+            <p v-if="!grupo.filas.length" class="rounded-xl border border-dashed border-border py-4 text-center text-sm text-text-soft">
+              No hay pedidos de {{ grupo.label.toLowerCase() }} que coincidan con el filtro.
+            </p>
+          </div>
+        </div>
+      </template>
     </VSection>
 
     <!-- Alta de pedido -->

@@ -1,147 +1,44 @@
 <script setup>
-// Dashboard gerencial: KPIs del mes, analítica de proveedores (con
-// comparativa de período) y detalle de despachos por camión (con remito
-// siempre presente, asfalto y hormigón). Toda la persistencia pasa por
-// analytics.service.js — este componente no llama a Supabase directamente
-// (memory/conventions.md).
+// Home/Dashboard: "Panel de control" puro (réplica del legado, ver
+// useDashboardHome.js) — KPIs rápidos y estado global, sin tablas ni
+// secciones analíticas extensas (pedido explícito de Federico, 2026-09-04:
+// se sacaron "Analítica de proveedores" y "Historial detallado de despachos
+// por camión", que vivían acá como valor agregado propio de v2 — quedan
+// disponibles en Stock → "Analítica de proveedores" y en Despachos → "Ver
+// detalle de cargas" respectivamente, no se perdió la funcionalidad, solo
+// se sacó de Home). Toda la persistencia pasa por services — este
+// componente no llama a Supabase directamente (memory/conventions.md).
 
-import { computed, reactive, ref } from 'vue'
+import { ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import VCard from '@/components/shared/VCard.vue'
-import VKpiCard from '@/components/shared/VKpiCard.vue'
-import VTable from '@/components/shared/VTable.vue'
-import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
-import VButton from '@/components/shared/VButton.vue'
 import VSemaforo from '@/components/shared/VSemaforo.vue'
-import {
-  fetchResumenGeneral,
-  fetchAnaliticaProveedores,
-  fetchDetalleDespachosCamion,
-} from '@/modules/analytics/services/analytics.service'
-import { fetchObras } from '@/services/flota.service'
-import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { useAlertaStockSemana } from '@/modules/dashboard/composables/useAlertaStockSemana'
+import { useDashboardHome } from '@/modules/dashboard/composables/useDashboardHome'
 
 const error = ref(null)
 
-const obras = ref([])
-const formulas = ref([])
-const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
-const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
-
-async function cargarBase() {
-  try {
-    const [listaObras, listaFormulas] = await Promise.all([fetchObras(), fetchFormulas({ soloActivas: true })])
-    obras.value = listaObras
-    formulas.value = listaFormulas
-  } catch (e) {
-    error.value = e.message
-  }
-}
-
 // ---------------------------------------------------------------------------
-// KPIs del mes
+// Panel de control (2026-09-04, réplica del legado — relevado en vivo
+// contra produccion.vialtec.app, memory/pending.md)
 // ---------------------------------------------------------------------------
-
-const resumen = ref({ rango: null, asfaltoTn: 0, hormigonM3: 0, despachosDelMes: 0, ingresosInsumosTn: 0 })
-const cargandoResumen = ref(false)
-
-async function cargarResumen() {
-  cargandoResumen.value = true
-  error.value = null
-  try {
-    resumen.value = await fetchResumenGeneral()
-  } catch (e) {
-    error.value = e.message
-  } finally {
-    cargandoResumen.value = false
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Analítica de proveedores
-// ---------------------------------------------------------------------------
-
-const filtrosProveedores = reactive({ desde: '', hasta: '' })
-const proveedores = ref([])
-const cargandoProveedores = ref(false)
-
-const columnasProveedores = [
-  { key: 'proveedor', label: 'Proveedor' },
-  { key: 'cantidadActualTn', label: 'Período actual (tn)' },
-  { key: 'cantidadAnteriorTn', label: 'Período anterior (tn)' },
-  { key: 'variacionPct', label: 'Variación' },
-]
-
-async function cargarProveedores() {
-  cargandoProveedores.value = true
-  error.value = null
-  try {
-    proveedores.value = await fetchAnaliticaProveedores({
-      desde: filtrosProveedores.desde || undefined,
-      hasta: filtrosProveedores.hasta || undefined,
-    })
-  } catch (e) {
-    error.value = e.message
-  } finally {
-    cargandoProveedores.value = false
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Despachos por camión
-// ---------------------------------------------------------------------------
-
-const filtrosDespachos = reactive({ material: '', obraId: '', desde: '', hasta: '' })
-const despachos = ref([])
-const cargandoDespachos = ref(false)
-
-const columnasDespachos = [
-  { key: 'fechaLabel', label: 'Fecha' },
-  { key: 'obraNombre', label: 'Obra' },
-  { key: 'formulaNombre', label: 'Fórmula' },
-  { key: 'patente', label: 'Patente' },
-  { key: 'numero_remito', label: 'N° Remito' },
-  { key: 'volumenLabel', label: 'Volumen' },
-]
-
-const filasDespachos = computed(() =>
-  despachos.value.map((d) => ({
-    ...d,
-    // Defensivo (2026-09-01): fecha/volumen deberían venir siempre completos
-    // desde plantas_v_despachos_camion, pero una fila con dato faltante no
-    // debe mostrar "Invalid Date"/"NaN" sin explicación en la tabla.
-    fechaLabel: d.fecha ? new Date(d.fecha).toLocaleString('es-AR') : '—',
-    obraNombre: d.obra_id ? obrasPorId.value[d.obra_id]?.nombre ?? `Obra #${d.obra_id}` : '—',
-    formulaNombre: d.formulaId ? formulasPorId.value[d.formulaId]?.nombre ?? '—' : '—',
-    volumenLabel: d.volumen != null ? `${Number(d.volumen).toFixed(2)} ${d.unidad_volumen ?? ''}`.trim() : '—',
-  }))
-)
-
-async function cargarDespachos() {
-  cargandoDespachos.value = true
-  error.value = null
-  try {
-    despachos.value = await fetchDetalleDespachosCamion({
-      material: filtrosDespachos.material || undefined,
-      obraId: filtrosDespachos.obraId || undefined,
-      desde: filtrosDespachos.desde || undefined,
-      hasta: filtrosDespachos.hasta || undefined,
-    })
-  } catch (e) {
-    error.value = e.message
-  } finally {
-    cargandoDespachos.value = false
-  }
-}
-
-function limpiarFiltrosDespachos() {
-  filtrosDespachos.material = ''
-  filtrosDespachos.obraId = ''
-  filtrosDespachos.desde = ''
-  filtrosDespachos.hasta = ''
-  cargarDespachos()
-}
+const {
+  encabezadoFecha,
+  encabezadoRangoSemana,
+  cargandoKpis,
+  resumenSemana,
+  stockActual,
+  materialesAjustados,
+  materialesCriticos,
+  cargandoProximos,
+  filasProximos,
+  cargandoConsumo,
+  materialesConsumo,
+  materialSeleccionado,
+  filasConsumo,
+  iniciar: iniciarPanelControl,
+} = useDashboardHome()
 
 // ---------------------------------------------------------------------------
 // Alerta de stock proyectado (semana en curso) — banner 🔴/🟡, sin bloqueo
@@ -149,16 +46,18 @@ function limpiarFiltrosDespachos() {
 // ---------------------------------------------------------------------------
 const { cargando: cargandoAlertaStock, alertas: alertasStock, cargar: cargarAlertaStock } = useAlertaStockSemana()
 
-cargarBase()
-cargarResumen()
-cargarProveedores()
-cargarDespachos()
 cargarAlertaStock()
+iniciarPanelControl()
 </script>
 
 <template>
   <div>
-    <VSection title="Home">
+    <VSection>
+      <div class="mb-4">
+        <h2 class="text-lg font-bold text-text">Panel de control</h2>
+        <p class="text-sm capitalize text-text-soft">{{ encabezadoFecha }} · Semana del {{ encabezadoRangoSemana }}</p>
+      </div>
+
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
@@ -188,115 +87,129 @@ cargarAlertaStock()
         </ul>
       </div>
 
-      <!-- KPIs del mes -->
-      <p v-if="cargandoResumen" class="mb-4 text-sm text-text-soft">Cargando resumen…</p>
-      <div v-else class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <VKpiCard label="Asfalto (mes)" :value="resumen.asfaltoTn.toFixed(1)" unidad="tn" />
-        <VKpiCard label="Hormigón (mes)" :value="resumen.hormigonM3.toFixed(1)" unidad="m³" />
-        <VKpiCard label="Despachos del mes" :value="resumen.despachosDelMes" />
-        <VKpiCard label="Ingresos de insumos (mes)" :value="resumen.ingresosInsumosTn.toFixed(1)" unidad="tn" />
+      <!-- 5 KPI (réplica exacta del legado — relevado en vivo 2026-09-04,
+           memory/pending.md): franja superior de color por tarjeta, mismo
+           criterio semántico que estados.js (Pedidos)/Stock. -->
+      <p v-if="cargandoKpis" class="mb-4 text-sm text-text-soft">Cargando…</p>
+      <div v-else class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div class="rounded-xl border-t-4 border-t-vialtec bg-white p-4 shadow-sm">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Pedidos activos</p>
+          <p class="mt-2 text-2xl font-extrabold text-vialtec">{{ resumenSemana.pedidosActivos }}</p>
+          <p class="text-xs text-text-soft">en curso</p>
+        </div>
+        <div class="rounded-xl border-t-4 border-t-info bg-white p-4 shadow-sm">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Confirmados</p>
+          <p class="mt-2 text-2xl font-extrabold text-info">{{ resumenSemana.confirmados }}</p>
+          <p class="text-xs text-text-soft">{{ resumenSemana.confirmados }} para despachar</p>
+        </div>
+        <div class="rounded-xl border-t-4 border-t-success bg-white p-4 shadow-sm">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Despachos esta semana</p>
+          <p class="mt-2 text-2xl font-extrabold text-success">{{ resumenSemana.despachos.cantidad }}</p>
+          <p class="text-xs text-text-soft">
+            {{ resumenSemana.despachos.asfaltoTn.toFixed(1) }} tn · {{ resumenSemana.despachos.hormigonM3.toFixed(1) }} m³
+          </p>
+        </div>
+        <div class="rounded-xl border-t-4 border-t-warning bg-white p-4 shadow-sm">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Ajustados</p>
+          <p class="mt-2 text-2xl font-extrabold text-warning">{{ materialesAjustados }}</p>
+          <p class="text-xs text-text-soft">stock bajo</p>
+        </div>
+        <div class="rounded-xl border-t-4 border-t-danger bg-white p-4 shadow-sm">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Críticos</p>
+          <p class="mt-2 text-2xl font-extrabold text-danger">{{ materialesCriticos }}</p>
+          <p class="text-xs text-text-soft">stock insuficiente</p>
+        </div>
       </div>
-    </VSection>
 
-    <!-- Analítica de proveedores -->
-    <VSection title="Analítica de proveedores">
-      <VCard class="mb-4">
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <label class="text-sm text-text-mid">
-            Desde
-            <input
-              v-model="filtrosProveedores.desde"
-              type="date"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-          <label class="text-sm text-text-mid">
-            Hasta
-            <input
-              v-model="filtrosProveedores.hasta"
-              type="date"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-        </div>
-        <p class="mt-2 text-xs text-text-soft">
-          Sin fechas, muestra el mes en curso comparado contra el mismo largo de período inmediatamente anterior.
-        </p>
-        <VButton size="sm" class="mt-3" @click="cargarProveedores">Filtrar</VButton>
-      </VCard>
-
-      <VCard>
-        <p v-if="cargandoProveedores" class="text-sm text-text-soft">Cargando…</p>
-        <VTable v-else :columns="columnasProveedores" :rows="proveedores">
-          <template #cell-cantidadActualTn="{ row }">{{ row.cantidadActualTn.toFixed(2) }} tn</template>
-          <template #cell-cantidadAnteriorTn="{ row }">{{ row.cantidadAnteriorTn.toFixed(2) }} tn</template>
-          <template #cell-variacionPct="{ row }">
-            <VBadge v-if="row.variacionPct == null" variant="default">s/d</VBadge>
-            <VBadge v-else :variant="row.variacionPct >= 0 ? 'success' : 'danger'">
-              {{ row.variacionPct >= 0 ? '+' : '' }}{{ row.variacionPct.toFixed(1) }}%
-            </VBadge>
+      <!-- Consumo de material (8 semanas) + Próximos despachos -->
+      <div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
+        <VCard>
+          <h3 class="mb-3 text-sm font-bold text-text">Consumo de material</h3>
+          <p v-if="cargandoConsumo" class="text-sm text-text-soft">Cargando…</p>
+          <template v-else-if="materialesConsumo.length">
+            <select
+              v-model="materialSeleccionado"
+              class="mb-3 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            >
+              <option v-for="m in materialesConsumo" :key="m" :value="m">{{ m }}</option>
+            </select>
+            <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-text-soft">Últimas 8 semanas</p>
+            <ul class="divide-y divide-border">
+              <li v-for="fila in filasConsumo" :key="fila.semana" class="flex items-center justify-between py-1.5 text-sm">
+                <span class="text-text-soft">{{ fila.semana }}</span>
+                <span class="font-medium text-text">{{ fila.valorLabel }}</span>
+              </li>
+            </ul>
           </template>
-        </VTable>
-        <p v-if="!cargandoProveedores && !proveedores.length" class="py-4 text-center text-sm text-text-soft">
-          Sin ingresos de proveedores registrados en el rango elegido.
-        </p>
-      </VCard>
-    </VSection>
+          <p v-else class="text-sm text-text-soft">Sin despachos en las últimas 8 semanas para graficar consumo.</p>
+        </VCard>
 
-    <!-- Despachos por camión -->
-    <VSection title="Historial detallado de despachos por camión">
-      <VCard class="mb-4">
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <label class="text-sm text-text-mid">
-            Material
-            <select
-              v-model="filtrosDespachos.material"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+        <VCard>
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-text">Próximos despachos</h3>
+            <span class="rounded-full bg-vialtec/10 px-2 py-0.5 text-xs font-bold text-vialtec">{{ filasProximos.length }}</span>
+          </div>
+          <p class="text-xs text-text-soft">Todos los pedidos confirmados</p>
+          <p v-if="cargandoProximos" class="mt-3 text-sm text-text-soft">Cargando…</p>
+          <template v-else>
+            <div
+              v-for="p in filasProximos"
+              :key="p.id"
+              class="flex items-start gap-3 border-b border-border py-3 last:border-0"
             >
-              <option value="">Todos</option>
-              <option value="asfalto">Asfalto</option>
-              <option value="hormigon">Hormigón</option>
-            </select>
-          </label>
-          <label class="text-sm text-text-mid">
-            Obra
-            <select
-              v-model="filtrosDespachos.obraId"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            >
-              <option value="">Todas</option>
-              <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
-            </select>
-          </label>
-          <label class="text-sm text-text-mid">
-            Desde
-            <input
-              v-model="filtrosDespachos.desde"
-              type="date"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-          <label class="text-sm text-text-mid">
-            Hasta
-            <input
-              v-model="filtrosDespachos.hasta"
-              type="date"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-        </div>
-        <div class="mt-3 flex gap-2">
-          <VButton size="sm" @click="cargarDespachos">Filtrar</VButton>
-          <VButton variant="ghost" size="sm" @click="limpiarFiltrosDespachos">Limpiar</VButton>
-        </div>
-      </VCard>
+              <div
+                class="flex w-12 shrink-0 flex-col items-center rounded-lg px-2 py-1"
+                :class="{
+                  'bg-danger-light text-danger': p.etiquetaVariante === 'danger',
+                  'bg-warning-light text-warning': p.etiquetaVariante === 'warning',
+                  'bg-gray-50 text-text-soft': p.etiquetaVariante === 'default',
+                }"
+              >
+                <span class="text-sm font-bold">{{ p.diaCorto }}</span>
+                <span class="text-[10px] uppercase">{{ p.mesCorto }}</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-bold text-text">{{ p.destino }}</p>
+                <p class="text-xs text-text-soft">{{ p.formulaNombre }} · {{ p.cantidadLabel }}</p>
+              </div>
+              <span
+                v-if="p.etiqueta"
+                class="shrink-0 text-xs font-bold"
+                :class="p.etiquetaVariante === 'danger' ? 'text-danger' : 'text-warning'"
+              >
+                {{ p.etiqueta }}
+              </span>
+            </div>
+            <p v-if="!filasProximos.length" class="py-4 text-center text-sm text-text-soft">
+              No hay despachos confirmados próximos.
+            </p>
+          </template>
+          <RouterLink
+            to="/plan-semanal"
+            class="mt-3 block rounded-lg bg-gray-50 py-2 text-center text-sm font-semibold text-vialtec hover:bg-gray-100"
+          >
+            Ver plan semanal →
+          </RouterLink>
+        </VCard>
+      </div>
 
+      <!-- Stock actual de insumos -->
       <VCard>
-        <p v-if="cargandoDespachos" class="text-sm text-text-soft">Cargando…</p>
-        <VTable v-else :columns="columnasDespachos" :rows="filasDespachos" />
-        <p v-if="!cargandoDespachos && !filasDespachos.length" class="py-4 text-center text-sm text-text-soft">
-          No hay despachos que coincidan con el filtro.
-        </p>
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-sm font-bold text-text">Stock actual de insumos</h3>
+          <RouterLink to="/stock" class="text-sm font-semibold text-vialtec hover:underline">Ver detalle →</RouterLink>
+        </div>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div v-for="m in stockActual" :key="m.id" class="rounded-lg border border-border p-3">
+            <p class="truncate text-[11px] font-semibold uppercase tracking-wide text-text-soft">{{ m.nombre }}</p>
+            <p
+              class="mt-1 text-lg font-bold"
+              :class="{ 'text-danger': m.estado === 'rojo', 'text-warning': m.estado === 'amarillo', 'text-success': m.estado === 'verde' }"
+            >
+              {{ (m.cantidadKg / 1000).toFixed(2) }} t
+            </p>
+          </div>
+        </div>
       </VCard>
     </VSection>
   </div>

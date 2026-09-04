@@ -16,9 +16,18 @@
 
 import { supabase } from '@/config/supabase'
 import { fetchPagina, fetchPaginado } from '@/services/fetch-paginado'
+import { limiteInicioDiaLocal, limiteFinDiaLocalExclusivo } from '@/services/fecha'
 
 const TABLA_PEDIDOS = 'plantas_pedidos'
 const TABLA_VALES = 'plantas_vales'
+// Vista puente (2026-09-04, memory/pending.md): UNION de plantas_vales real
+// + lo que el sistema legado sigue cargando en paralelo en kv_store (no
+// tiene fila real acá todavía). Solo el HISTORIAL lee de acá — registrarPesada
+// (RPC), obtenerProximoNumeroVale y obtenerAcumuladoHastaFecha siguen contra
+// TABLA_VALES real, sin cambios: la vista es puramente de lectura para no
+// mentir sobre cuántos movimientos hay, nunca una fuente para escribir ni
+// para acciones que necesiten una fila real (imprimir/corregir).
+const VISTA_BASCULA_VIVA = 'plantas_v_bascula_viva'
 
 function aTn(valor, unidad) {
   const n = Number(valor) || 0
@@ -41,19 +50,21 @@ export function formatearNumeroVale(numero) {
 // ---------------------------------------------------------------------------
 
 /**
- * Pedidos de asfalto confirmados o despachados, para el selector del form
- * "Vale Asfalto" de Báscula. Sin filtro por saldo pendiente a propósito
- * (decisión de Federico, 2026-08-28): el sistema legado permite seguir
- * pesando contra un pedido ya despachado — memory/relevamiento-sistema-viejo.md §2.
+ * Pedidos de asfalto CONFIRMADOS, para el selector del form "Vale Asfalto"
+ * de Báscula.
  *
- * Fix 2026-09-01 (regla de paginación, memory/architecture.md): el filtro
- * `estado in (confirmado, despachado)` NO tiene corte de fecha — `despachado`
- * acumula para siempre (nunca vuelve a otro estado), así que el total crece
- * sin límite con el historial migrado + el uso normal del sistema. Sin
- * fetchPaginado() acá, al superar 1000 filas PostgREST cortaría en silencio
- * — y como el `order` es ascendente (más viejo primero), lo que se pierde
- * serían los pedidos MÁS RECIENTES, justo los que un operador necesita
- * elegir en el selector.
+ * Cambio 2026-09-04 (pedido explícito de Federico): antes incluía también
+ * `despachado` (decisión del 2026-08-28, replicando que el legado permite
+ * seguir pesando contra un pedido ya despachado — memory/relevamiento-sistema-viejo.md
+ * §2). Se restringe a `confirmado` únicamente — override explícito de esa
+ * decisión anterior, no un descubrimiento de que estaba mal: Federico pidió
+ * acotar el selector para no seguir pesando contra pedidos ya cerrados.
+ *
+ * Fix 2026-09-01 (regla de paginación, memory/architecture.md) sigue
+ * aplicando aunque ahora sea un solo estado: sin corte de fecha, sin
+ * fetchPaginado() acá, al superar 1000 filas PostgREST cortaría en
+ * silencio — y como el `order` es ascendente, lo que se perdería serían los
+ * pedidos MÁS RECIENTES, justo los que un operador necesita elegir.
  */
 export async function fetchPedidosAsfaltoParaPesada() {
   return fetchPaginado(() =>
@@ -61,7 +72,7 @@ export async function fetchPedidosAsfaltoParaPesada() {
       .from(TABLA_PEDIDOS)
       .select('*')
       .eq('tipo', 'asfalto')
-      .in('estado', ['confirmado', 'despachado'])
+      .eq('estado', 'confirmado')
       .order('fecha_programada', { ascending: true })
   )
 }
@@ -192,17 +203,13 @@ export async function registrarPesada(valeData) {
  * @param {{ tipoVale?: string, obraId?: number, patente?: string, desde?: string, hasta?: string }} filtros
  * @param {{ pagina?: number, tamanoPagina?: number }} opciones
  * @returns {Promise<{ filas: any[], total: number, pagina: number, tamanoPagina: number }>}
- *   Cada fila trae embebido `plantas_ingresos` (array de a lo sumo 1 elemento,
- *   por el FK plantas_ingresos.vale_id -> plantas_vales.id) para poder
- *   calcular la diferencia peso pesado vs. cantidad declarada en el remito
- *   (calcularDiferencia() más abajo) y mostrar material/N° de remito del
- *   ingreso en la réplica del cuadro del legado (registrar_pesada_bascula
- *   guarda el material del ingreso en plantas_ingresos.material, no en
- *   plantas_vales.material — ver comentario de esa RPC). También trae
- *   `plantas_pedidos(obra_id, cliente_externo)` embebido: los vales de
- *   asfalto migrados del histórico legado (memory/pending.md) tienen
- *   `obra_id` NULL en la fila del vale — la obra solo se puede resolver a
- *   través del pedido asociado, igual que ya hace abrirImpresion() más abajo.
+ *   Lee de VISTA_BASCULA_VIVA (2026-09-04), no de plantas_vales directo —
+ *   columnas ya aplanadas (`numero_remito_ingreso`, `cantidad_remito_ingreso`,
+ *   `cliente_externo`, `material`) en vez de embeds de PostgREST
+ *   (`plantas_ingresos(...)`, `plantas_pedidos(...)`) porque las filas que
+ *   todavía solo viven en el legado (`pendiente_migracion = true`) no tienen
+ *   fila real de esas tablas detrás para que el embed funcione — ver
+ *   supabase/scripts/vistas_puente_legado_bascula_stock.sql.
  */
 /**
  * Query base compartida entre fetchHistorialVales() (paginada, para la UI)
@@ -211,27 +218,21 @@ export async function registrarPesada(valeData) {
  */
 function queryHistorialVales(filtros) {
   let query = supabase
-    .from(TABLA_VALES)
-    .select('*, plantas_ingresos(cantidad, numero_remito, material), plantas_pedidos(obra_id, cliente_externo)', {
-      count: 'exact',
-    })
+    .from(VISTA_BASCULA_VIVA)
+    .select('*', { count: 'exact' })
     .order('fecha_pesada', { ascending: false })
 
   if (filtros.tipoVale) query = query.eq('tipo_vale', filtros.tipoVale)
   if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
   if (filtros.patente) query = query.ilike('patente', `%${filtros.patente}%`)
-  if (filtros.desde) query = query.gte('fecha_pesada', filtros.desde)
-  // Fix 2026-09-02 (default "Hoy" nuevo — roadmap Mobile): `fecha_pesada`
-  // es timestamptz, no date. Un `lte('fecha_pesada', '2026-09-02')`
-  // castea el string a medianoche (00:00:00) de ese día y excluye TODO
-  // el resto del día — con desde=hasta=hoy (el default nuevo) esto
-  // dejaba la tabla prácticamente vacía. Se compara contra el día
-  // SIGUIENTE con `lt` (límite exclusivo) para incluir el día completo.
-  if (filtros.hasta) {
-    const diaSiguiente = new Date(`${filtros.hasta}T00:00:00`)
-    diaSiguiente.setDate(diaSiguiente.getDate() + 1)
-    query = query.lt('fecha_pesada', diaSiguiente.toISOString().slice(0, 10))
-  }
+  // Fix 2026-09-04 (memory/pending.md): `fecha_pesada` es timestamptz, no
+  // date. Pasar la fecha "pelada" (`filtros.desde` tal cual, o el string
+  // sliceado a 'YYYY-MM-DD' que tenía `hasta`) la castea contra medianoche
+  // UTC, no medianoche LOCAL (Argentina, UTC-3) — el `hasta` en particular
+  // perdía en silencio los vales cargados entre las 21:00 y las 23:59
+  // locales de ese día. Ver src/services/fecha.js para el detalle completo.
+  if (filtros.desde) query = query.gte('fecha_pesada', limiteInicioDiaLocal(filtros.desde))
+  if (filtros.hasta) query = query.lt('fecha_pesada', limiteFinDiaLocalExclusivo(filtros.hasta))
 
   return query
 }
@@ -258,13 +259,13 @@ export async function fetchTodosLosVales(filtros = {}) {
  * Solo tiene sentido para ingreso_arido (memory/business-rules.md: el stock
  * se actualiza con lo declarado en el remito, no con el peso neto — la
  * diferencia es la que se registra para seguimiento, no la que se aplica).
- * `vale` es una fila de fetchHistorialVales() (con plantas_ingresos embebido).
- * Devuelve null cuando no aplica (asfalto, hormigón, egreso, o sin cantidad
- * de remito cargada todavía).
+ * `vale` es una fila de fetchHistorialVales() (VISTA_BASCULA_VIVA, columna
+ * `cantidad_remito_ingreso` ya aplanada). Devuelve null cuando no aplica
+ * (asfalto, hormigón, egreso, o sin cantidad de remito cargada todavía).
  */
 export function calcularDiferencia(vale) {
   if (vale.tipo_vale !== 'ingreso_arido') return null
-  const cantidadRemito = vale.plantas_ingresos?.[0]?.cantidad
+  const cantidadRemito = vale.cantidad_remito_ingreso
   if (cantidadRemito == null) return null
   return Number(aTn(vale.peso_neto, vale.unidad).toFixed(2)) - Number(cantidadRemito)
 }

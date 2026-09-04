@@ -31,8 +31,8 @@ import {
 } from '@/modules/bascula/services/bascula.service'
 import { fetchObras, fetchNombresPorEmail } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+import { getPedido } from '@/modules/pedidos/services/pedidos.service'
 import { patentesService, proveedoresService } from '@/modules/maestros/services/maestros.service'
-import { hoyISO } from '@/services/fecha'
 // Excel con formato corporativo (2026-09-03, pedido de Federico: logo +
 // estilo de colores + pie institucional en todos los exports) — reemplaza
 // a src/services/excel-export.js (SheetJS, no soporta escribir estilos).
@@ -87,6 +87,19 @@ export const COLOR_PUERTA = {
   egreso_arido: { borde: 'border-l-orange-500', texto: 'text-orange-600' },
 }
 
+// Mismo esquema de color que COLOR_PUERTA de arriba, pero como franja +
+// fondo tenue para las FILAS del historial "Movimientos del día" (2026-09-04,
+// pedido explícito de Federico: que coincida exacto con el legado — vale
+// asfalto violeta, ingreso verde, egreso naranja, memory/pending.md). No se
+// reusa COLOR_PUERTA tal cual porque ahí las clases son para una card con
+// texto de color (borde + texto), acá es una fila de tabla con fondo tenue
+// (borde + bg) — mismo criterio de color, presentación distinta.
+export const COLOR_FILA_VALE = {
+  asfalto: 'border-l-4 border-l-vialtec bg-vialtec/5',
+  ingreso_arido: 'border-l-4 border-l-success bg-success-light',
+  egreso_arido: 'border-l-4 border-l-orange-500 bg-orange-50',
+}
+
 const TAMANO_PAGINA_HISTORIAL = 50
 
 export function useBascula() {
@@ -108,6 +121,25 @@ export function useBascula() {
   const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
   const pedidosPorId = computed(() => Object.fromEntries(pedidosParaPesada.value.map((p) => [p.id, p])))
   const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
+
+  /**
+   * Nombre a mostrar para un pedido en el selector de "Vale Asfalto" (bug
+   * real reportado 2026-09-04: "Obra #null" en la gran mayoría de los
+   * pedidos). Causa real: una venta externa (`tipo_pedido='venta'`) nunca
+   * tiene `obra_id` por diseño — el selector asumía que todo pedido lo
+   * tenía. Mismo criterio que `nombreDestinoPedido()` de PlanSemanalView.vue
+   * (fix 2026-09-03 análogo, no existe un helper compartido para esto —
+   * conventions.md: son 3 formas ligeramente distintas de nombrar según qué
+   * objeto trae cada vista, no vale la pena forzar un solo helper transversal
+   * por unas pocas líneas).
+   */
+  function nombreDestinoPedido(p) {
+    if (p.tipo_pedido === 'venta') return p.cliente_externo || 'Venta externa'
+    if (p.obra_id) return obrasPorId.value[p.obra_id]?.nombre ?? `Obra #${p.obra_id}`
+    // obra_id null y NO es venta -> dato huérfano real (memory/pending.md,
+    // obra sin equivalente en flota_obras) — fallback legible.
+    return 'Obra sin asignar'
+  }
 
   async function cargarBase() {
     cargandoBase.value = true
@@ -313,11 +345,13 @@ export function useBascula() {
   const totalHistorial = ref(0)
   const paginaHistorial = ref(1)
   const cargandoHistorial = ref(false)
-  // Default "Hoy" (2026-09-02, réplica del legado — memory/relevamiento-
-  // sistema-viejo.md §2: "Movimientos del día" filtra Desde/Hasta
-  // prellenado con la fecha de hoy, verificado de nuevo en vivo hoy contra
-  // produccion.vialtec.app). "Ver histórico completo" limpia el rango.
-  const filtros = reactive({ tipoVale: '', obraId: '', patente: '', desde: hoyISO(), hasta: hoyISO() })
+  // Sin default de fecha (2026-09-04, override explícito de Federico esta
+  // sesión — antes prellenaba "Hoy", réplica del legado confirmada
+  // 2026-09-02): arranca sin filtro de fecha, mostrando el historial
+  // completo más reciente primero (paginado). Los filtros ahora se aplican
+  // en vivo a medida que se eligen (ver aplicarFiltrosHistorial() más abajo
+  // y los @change en BasculaView.vue) — ya no hace falta un botón "Filtrar".
+  const filtros = reactive({ tipoVale: '', obraId: '', patente: '', desde: '', hasta: '' })
 
   // Nombres de responsable (2026-09-02, réplica exacta del cuadro del
   // legado, migración 20): `responsable_email` viene crudo en cada vale —
@@ -334,37 +368,47 @@ export function useBascula() {
    */
   function enriquecerVale(v, mapaNombres = nombresPorEmail.value) {
     const diferencia = calcularDiferencia(v)
-    const numeroRemitoIngreso = v.plantas_ingresos?.[0]?.numero_remito
-    const cantidadRemitoIngreso = v.plantas_ingresos?.[0]?.cantidad
-    // Obra efectiva: vale.obra_id si la tiene, si no la del pedido
-    // asociado (vales de asfalto migrados del histórico legado quedan con
-    // obra_id NULL en la fila del vale — memory/pending.md, ver comentario
-    // de fetchHistorialVales()).
-    const obraIdEfectiva = v.obra_id ?? v.plantas_pedidos?.obra_id
+    // 2026-09-04: columnas ya aplanadas por VISTA_BASCULA_VIVA (ver
+    // bascula.service.js#queryHistorialVales) — ya no hace falta el embed
+    // `plantas_ingresos`/`plantas_pedidos`, la vista resuelve `obra_id`,
+    // `material` y `cliente_externo` por fila (real o legado-vivo).
+    const numeroRemitoIngreso = v.numero_remito_ingreso
+    const cantidadRemitoIngreso = v.cantidad_remito_ingreso
+    const obraIdEfectiva = v.obra_id
     return {
       ...v,
       obraNombre: obraIdEfectiva
         ? obrasPorId.value[obraIdEfectiva]?.nombre ?? `Obra #${obraIdEfectiva}`
-        : v.plantas_pedidos?.cliente_externo || '—',
+        : v.cliente_externo || '—',
       pesoNetoLabel: `${v.peso_neto} ${v.unidad}`,
       fechaLabel: new Date(v.fecha_pesada).toLocaleString('es-AR'),
       horaLabel: new Date(v.fecha_pesada).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
       diferenciaLabel: diferencia == null ? '—' : `${diferencia > 0 ? '+' : ''}${diferencia.toFixed(2)} tn`,
       // MATERIAL/OBRA combinada (columna única en el legado): obra para
-      // asfalto (con el mismo fallback al pedido de arriba), material de
-      // texto libre para ingreso (vive en plantas_ingresos.material, no
-      // en el vale — ver comentario de fetchHistorialVales()) / egreso.
+      // asfalto, material de texto libre para ingreso/egreso — ambos ya
+      // vienen resueltos en `v.material` por la vista.
       materialObraLabel:
         v.tipo_vale === 'asfalto'
           ? obraIdEfectiva
             ? obrasPorId.value[obraIdEfectiva]?.nombre ?? `Obra #${obraIdEfectiva}`
-            : v.plantas_pedidos?.cliente_externo || '—'
-          : v.tipo_vale === 'ingreso_arido'
-            ? v.plantas_ingresos?.[0]?.material || '—'
-            : v.material || '—',
+            : v.cliente_externo || '—'
+          : v.material || '—',
       remitoLabel: numeroRemitoIngreso || '—',
-      responsableLabel: v.responsable_email ? mapaNombres[v.responsable_email] ?? v.responsable_email : '—',
-      acumuladoLabel: v.tipo_vale === 'asfalto' && v.acumulado_obra_tn != null ? `${Number(v.acumulado_obra_tn).toFixed(2)} tn` : '—',
+      // Responsable: email real si lo hay (cruzado contra flota_usuarios_email,
+      // igual que antes); si la fila es solo-legado sin email, cae al texto
+      // suelto que sí guardaba el legado (operador/responsable) antes de '—'.
+      responsableLabel: v.responsable_email
+        ? mapaNombres[v.responsable_email] ?? v.responsable_email
+        : v.responsable_texto_legado || '—',
+      // Fix 2026-09-04 (bug real: "falta el acumulado" en la tabla y el
+      // Excel): antes leía `acumulado_obra_tn`, una foto guardada al pesar
+      // que la migración del histórico nunca pobló (quedaba null salvo en
+      // vales cargados 100% desde el sistema nuevo). Ahora usa
+      // `acumulado_dia_tn`, calculado en vivo por la vista con una suma
+      // corrida (ver plantas_v_bascula_viva) — mismo criterio y mismo
+      // resultado que ya usaba obtenerAcumuladoHastaFecha() para imprimir,
+      // ahora también disponible fila por fila sin una consulta extra.
+      acumuladoLabel: v.tipo_vale === 'asfalto' && v.acumulado_dia_tn != null ? `${Number(v.acumulado_dia_tn).toFixed(2)} tn` : '—',
       // S/REMITO y DIF. (legado): solo tienen valor en filas de ingreso —
       // memory/relevamiento-sistema-viejo.md §2, verificado en vivo: vacías
       // en filas de asfalto/egreso. calcularDiferencia() ya devuelve null
@@ -481,11 +525,19 @@ export function useBascula() {
   // -------------------------------------------------------------------------
   // Impresión (vale individual / remito con acumulado dinámico)
   // -------------------------------------------------------------------------
-  // REGLA: no existe impresión para ingreso/egreso de áridos, solo asfalto
-  // (memory/business-rules.md). El acumulado SIEMPRE se recalcula en vivo acá
-  // (nunca se lee vale.acumulado_obra_tn como fuente de verdad) — mismo
-  // criterio para modo "vale" y modo "remito" (Logica sis. plantas v1.rtf
-  // §2.4: "Tanto el imprimible como el historial recalculan dinámicamente").
+  // REGLA: "Vale" imprime para asfalto Y para egreso de áridos (pedido de
+  // Federico, 2026-09-04 — antes solo asfalto). "Remito" sigue siendo
+  // exclusivo de asfalto: es el formato atado al flujo pedido/obra
+  // (acumulado por pedido, rango de vales correlativos del día), egreso de
+  // áridos no tiene pedido asociado. Ingreso de áridos sigue sin impresión.
+  // El acumulado SIEMPRE se recalcula en vivo acá (nunca se lee
+  // vale.acumulado_obra_tn como fuente de verdad) — mismo criterio para modo
+  // "vale" y modo "remito" (Logica sis. plantas v1.rtf §2.4: "Tanto el
+  // imprimible como el historial recalculan dinámicamente"). Ese acumulado
+  // por pedido/obra solo tiene sentido para asfalto (obtenerAcumuladoHastaFecha
+  // filtra tipo_vale='asfalto') — para egreso de áridos no hay un concepto de
+  // "acumulado del día" definido todavía, el vale imprime sin esa línea
+  // (queda "—", mismo criterio que ya usa la tabla/Excel del historial).
 
   const modalImpresionAbierto = ref(false)
   const modoImpresion = ref('vale')
@@ -500,8 +552,34 @@ export function useBascula() {
   const rangoValesParaImprimir = ref({ valeDesde: null, valeHasta: null, cantidadVales: 0 })
 
   async function abrirImpresion(vale, modo) {
+    // Guarda defensiva (2026-09-04): una fila `pendiente_migracion` (todavía
+    // solo en el legado, VISTA_BASCULA_VIVA) no tiene un vale real de
+    // plantas_vales detrás — no hay acumulado ni numero_vale reales para
+    // imprimir. La UI ya deshabilita el botón para estas filas; esto es
+    // solo el resguardo por si se llama igual.
+    if (vale.pendiente_migracion) {
+      error.value = 'Este movimiento todavía no está migrado al sistema nuevo — no se puede imprimir desde acá.'
+      return
+    }
     valeParaImprimir.value = vale
-    const pedido = vale.pedido_id ? pedidosPorId.value[vale.pedido_id] : null
+    // Fix 2026-09-04 (bug real reportado por Federico: "el vale no está
+    // trayendo el dato de la obra ni la mezcla"): `pedidosPorId` sale de
+    // `fetchPedidosAsfaltoParaPesada()`, que desde hoy filtra solo
+    // `estado = 'confirmado'` (override explícito pedido por Federico esta
+    // misma sesión) — un vale de un pedido que YA se despachó (la inmensa
+    // mayoría de los históricos que se imprimen) no aparece más en esa
+    // lista acotada, así que pedido quedaba `null` y obra/mezcla vacías.
+    // Fallback: si no está en el cache de la lista de pesada, se trae el
+    // pedido puntual por id (1 sola fila, barato) — no bloquea la
+    // impresión si falla, el vale se imprime igual sin obra/mezcla.
+    let pedido = vale.pedido_id ? pedidosPorId.value[vale.pedido_id] : null
+    if (!pedido && vale.pedido_id) {
+      try {
+        pedido = await getPedido(vale.pedido_id)
+      } catch (e) {
+        pedido = null
+      }
+    }
     pedidoParaImprimir.value = pedido
     // Destino: obra si la tiene; si no, venta externa -> cliente_externo del
     // pedido (una pesada de venta externa no trae obra_id, memory/business-rules.md).
@@ -512,16 +590,26 @@ export function useBascula() {
     modoImpresion.value = modo
     modalImpresionAbierto.value = true
     error.value = null
-    try {
-      const { acumuladoTn, valeDesde, valeHasta, cantidadVales } = await obtenerAcumuladoHastaFecha({
-        pedidoId: vale.pedido_id,
-        obraId: vale.obra_id,
-        fechaCorte: vale.fecha_pesada,
-      })
-      acumuladoParaImprimir.value = acumuladoTn
-      rangoValesParaImprimir.value = { valeDesde, valeHasta, cantidadVales }
-    } catch (e) {
-      error.value = e.message
+    // obtenerAcumuladoHastaFecha() solo tiene sentido (y solo consulta) vales
+    // de asfalto — para egreso de áridos no hay acumulado del día definido,
+    // el vale imprime directamente sin esa línea en vez de pedirle a esa
+    // función un resultado que no puede dar (con vale.tipo_vale='egreso_arido'
+    // devolvería 0/vacío igual, por el filtro fijo que tiene esa query).
+    if (vale.tipo_vale === 'asfalto') {
+      try {
+        const { acumuladoTn, valeDesde, valeHasta, cantidadVales } = await obtenerAcumuladoHastaFecha({
+          pedidoId: vale.pedido_id,
+          obraId: vale.obra_id,
+          fechaCorte: vale.fecha_pesada,
+        })
+        acumuladoParaImprimir.value = acumuladoTn
+        rangoValesParaImprimir.value = { valeDesde, valeHasta, cantidadVales }
+      } catch (e) {
+        error.value = e.message
+      }
+    } else {
+      acumuladoParaImprimir.value = null
+      rangoValesParaImprimir.value = { valeDesde: null, valeHasta: null, cantidadVales: 0 }
     }
   }
 
@@ -560,6 +648,7 @@ export function useBascula() {
     patentes,
     proveedores,
     pedidosParaPesada,
+    nombreDestinoPedido,
     proximoNumeroVale,
     puertasAbiertas,
     slots,

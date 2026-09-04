@@ -307,23 +307,26 @@ function unidadDe(tipo) {
       </form>
     </VModal>
 
-    <!-- Modal: Ver remito imprimible -->
-    <VModal :open="modalRemitoAbierto" title="Remito de despacho" @update:open="modalRemitoAbierto = $event">
-      <p v-if="cargandoRemito" class="text-sm text-text-soft">Cargando…</p>
-      <div v-else class="imprimible">
-        <DespachoImprimible
-          v-if="pedidoRemito"
-          :pedido="pedidoRemito"
-          :obra-nombre="destinoDe(pedidoRemito)"
-          :formula-nombre="formulas.find((f) => f.id === pedidoRemito.formula_id)?.nombre"
-          :cargas="cargasRemito"
-        />
-      </div>
-      <div class="mt-4 flex justify-end gap-2">
-        <VButton variant="secondary" @click="modalRemitoAbierto = false">Cerrar</VButton>
-        <VButton @click="imprimir">Imprimir</VButton>
-      </div>
-    </VModal>
+    <!-- Modal: Ver remito imprimible — Teleport a <body> (2026-09-04, mismo
+         fix que Báscula: ver comentario en src/assets/main.css). -->
+    <Teleport to="body">
+      <VModal :open="modalRemitoAbierto" title="Remito de despacho" size="xl" @update:open="modalRemitoAbierto = $event">
+        <p v-if="cargandoRemito" class="text-sm text-text-soft">Cargando…</p>
+        <div v-else class="imprimible">
+          <DespachoImprimible
+            v-if="pedidoRemito"
+            :pedido="pedidoRemito"
+            :obra-nombre="destinoDe(pedidoRemito)"
+            :formula-nombre="formulas.find((f) => f.id === pedidoRemito.formula_id)?.nombre"
+            :cargas="cargasRemito"
+          />
+        </div>
+        <div class="mt-4 flex justify-end gap-2">
+          <VButton variant="secondary" @click="modalRemitoAbierto = false">Cerrar</VButton>
+          <VButton @click="imprimir">Imprimir</VButton>
+        </div>
+      </VModal>
+    </Teleport>
 
     <!-- Modal: elegir cuál vale imprimir (solo cuando el despacho tuvo más de un camión pesado en báscula) -->
     <VModal
@@ -351,25 +354,28 @@ function unidadDe(tipo) {
       </div>
     </VModal>
 
-    <!-- Modal: Imprimir vale (reusa ValeImprimible.vue de Báscula, mismo componente que useBascula.js) -->
-    <VModal :open="modalImpresionValeAbierto" title="Vale de pesaje" @update:open="modalImpresionValeAbierto = $event">
-      <div class="imprimible">
-        <ValeImprimible
-          v-if="valeParaImprimir && pedidoParaImprimirVale"
-          :vale="valeParaImprimir"
-          :obra-nombre="destinoDe(pedidoParaImprimirVale)"
-          :mezcla-nombre="formulas.find((f) => f.id === pedidoParaImprimirVale.formula_id)?.nombre"
-          modo="vale"
-          :acumulado-tn="acumuladoParaImprimirVale"
-          :pedido="pedidoParaImprimirVale"
-          :rango-vales="rangoValesParaImprimirVale"
-          :patentes="patentes"
-        />
-      </div>
-      <div class="mt-4 flex justify-end gap-2">
-        <VButton variant="secondary" @click="modalImpresionValeAbierto = false">Cerrar</VButton>
-        <VButton @click="imprimir">Imprimir</VButton>
-      </div>
-    </VModal>
+    <!-- Modal: Imprimir vale (reusa ValeImprimible.vue de Báscula, mismo
+         componente que useBascula.js) — Teleport a <body>, mismo fix. -->
+    <Teleport to="body">
+      <VModal :open="modalImpresionValeAbierto" title="Vale de pesaje" size="xl" @update:open="modalImpresionValeAbierto = $event">
+        <div class="imprimible">
+          <ValeImprimible
+            v-if="valeParaImprimir && pedidoParaImprimirVale"
+            :vale="valeParaImprimir"
+            :obra-nombre="destinoDe(pedidoParaImprimirVale)"
+            :mezcla-nombre="formulas.find((f) => f.id === pedidoParaImprimirVale.formula_id)?.nombre"
+            modo="vale"
+            :acumulado-tn="acumuladoParaImprimirVale"
+            :pedido="pedidoParaImprimirVale"
+            :rango-vales="rangoValesParaImprimirVale"
+            :patentes="patentes"
+          />
+        </div>
+        <div class="mt-4 flex justify-end gap-2">
+          <VButton variant="secondary" @click="modalImpresionValeAbierto = false">Cerrar</VButton>
+          <VButton @click="imprimir">Imprimir</VButton>
+        </div>
+      </VModal>
+    </Teleport>
   </div>
 </template>

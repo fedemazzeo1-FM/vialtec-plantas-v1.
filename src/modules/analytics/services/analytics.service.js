@@ -15,6 +15,7 @@
 
 import { supabase } from '@/config/supabase'
 import { fetchPaginado } from '@/services/fetch-paginado'
+import { limiteInicioDiaLocal, limiteFinDiaLocalExclusivo } from '@/services/fecha'
 
 function aTn(valor, unidad) {
   const n = Number(valor) || 0
@@ -86,8 +87,14 @@ export async function fetchResumenGeneral({ mes } = {}) {
 function normalizarRango({ desde, hasta } = {}) {
   const hoy = new Date()
   const inicioMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+  // Fix 2026-09-04 (mismo bug de Báscula, memory/pending.md): `new
+  // Date('2026-09-01')` (fecha pelada, sin hora) el motor de JS la
+  // interpreta como medianoche UTC, no LOCAL — a diferencia de `hasta`
+  // (que ya agregaba 'T23:59:59' y por eso quedaba bien). Se alinea el
+  // criterio: siempre parsear con hora explícita para que el motor use el
+  // timezone local del navegador.
   return {
-    desde: desde ? new Date(desde) : inicioMesActual,
+    desde: desde ? new Date(`${desde}T00:00:00`) : inicioMesActual,
     hasta: hasta ? new Date(`${hasta}T23:59:59`) : hoy,
   }
 }
@@ -221,8 +228,10 @@ export async function fetchDetalleDespachosCamion(filtros = {}) {
 
     if (filtros.material) query = query.eq('material', filtros.material)
     if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
-    if (filtros.desde) query = query.gte('fecha', filtros.desde)
-    if (filtros.hasta) query = query.lte('fecha', filtros.hasta)
+    // Fix 2026-09-04 (mismo bug de Báscula, memory/pending.md): `fecha` de
+    // plantas_v_despachos_camion es timestamptz — ver src/services/fecha.js.
+    if (filtros.desde) query = query.gte('fecha', limiteInicioDiaLocal(filtros.desde))
+    if (filtros.hasta) query = query.lt('fecha', limiteFinDiaLocalExclusivo(filtros.hasta))
 
     return query
   })

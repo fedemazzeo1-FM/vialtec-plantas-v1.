@@ -18,6 +18,7 @@ import {
   VARIANTE_TIPO_VALE,
   OPCIONES_TIPO_PUERTA,
   COLOR_PUERTA,
+  COLOR_FILA_VALE,
   TIPO_CORTO_VALE,
   ENTRADA_SALIDA_VALE,
 } from '@/modules/bascula/composables/useBascula'
@@ -29,6 +30,7 @@ const {
   patentes,
   proveedores,
   pedidosParaPesada,
+  nombreDestinoPedido,
   proximoNumeroVale,
   puertasAbiertas,
   slots,
@@ -215,7 +217,7 @@ iniciar()
               >
                 <option value="" disabled>Elegir pedido…</option>
                 <option v-for="p in pedidosParaPesada" :key="p.id" :value="p.id">
-                  {{ obras.find((o) => o.id === p.obra_id)?.nombre ?? `Obra #${p.obra_id}` }} — {{ p.cantidad_solicitada }} tn
+                  {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn
                   ({{ p.estado }})
                 </option>
               </select>
@@ -307,11 +309,16 @@ iniciar()
       <!-- Filtros de historial -->
       <VCard class="mb-4">
         <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <!-- Filtro en vivo (2026-09-04, pedido explícito de Federico: sin
+               botón "Filtrar", se aplica solo a medida que se elige cada
+               campo) — @change en vez de v-model a secas: dispara
+               aplicarFiltrosHistorial() apenas cambia el valor. -->
           <label class="text-sm text-text-mid">
             Tipo
             <select
               v-model="filtros.tipoVale"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              @change="aplicarFiltrosHistorial"
             >
               <option value="">Todos</option>
               <option value="asfalto">Asfalto</option>
@@ -325,6 +332,7 @@ iniciar()
             <select
               v-model="filtros.obraId"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              @change="aplicarFiltrosHistorial"
             >
               <option value="">Todas</option>
               <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
@@ -336,6 +344,7 @@ iniciar()
               v-model="filtros.patente"
               type="text"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              @change="aplicarFiltrosHistorial"
             />
           </label>
           <label class="text-sm text-text-mid">
@@ -344,6 +353,7 @@ iniciar()
               v-model="filtros.desde"
               type="date"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              @change="aplicarFiltrosHistorial"
             />
           </label>
           <label class="text-sm text-text-mid">
@@ -352,11 +362,11 @@ iniciar()
               v-model="filtros.hasta"
               type="date"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              @change="aplicarFiltrosHistorial"
             />
           </label>
         </div>
         <div class="mt-3 flex gap-2">
-          <VButton size="sm" @click="aplicarFiltrosHistorial">Filtrar</VButton>
           <VButton variant="ghost" size="sm" @click="limpiarFiltrosHistorial">Limpiar</VButton>
           <VButton variant="secondary" size="sm" class="ml-auto" :disabled="exportandoHistorial" @click="exportarHistorialExcel">
             {{ exportandoHistorial ? 'Exportando…' : '⬇ Excel' }}
@@ -374,17 +384,35 @@ iniciar()
           :page="paginaHistorial"
           :page-size="TAMANO_PAGINA_HISTORIAL"
           :total="totalHistorial"
+          :row-class="(row) => COLOR_FILA_VALE[row.tipo_vale]"
           @update:page="cambiarPaginaHistorial"
         >
           <template #cell-tipo_vale="{ row }">
-            <VBadge :variant="VARIANTE_TIPO_VALE[row.tipo_vale]" :title="ETIQUETA_TIPO_VALE[row.tipo_vale]">
-              {{ row.tipoCorto }}
-            </VBadge>
+            <div class="flex flex-wrap items-center gap-1">
+              <VBadge :variant="VARIANTE_TIPO_VALE[row.tipo_vale]" :title="ETIQUETA_TIPO_VALE[row.tipo_vale]">
+                {{ row.tipoCorto }}
+              </VBadge>
+              <!-- 2026-09-04 (memory/pending.md): fila que todavía solo vive
+                   en el sistema legado (VISTA_BASCULA_VIVA), sin fila real en
+                   plantas_vales detrás todavía — de solo lectura acá. -->
+              <VBadge v-if="row.pendiente_migracion" variant="default" title="Todavía solo está en el sistema anterior, no migrado a este sistema">
+                Legado
+              </VBadge>
+            </div>
           </template>
           <template #cell-acciones="{ row }">
-            <div v-if="row.tipo_vale === 'asfalto'" class="flex gap-1.5">
+            <!-- 2026-09-04 (pedido de Federico): "Vale" también para egreso de
+                 áridos (Salida de áridos) — antes solo asfalto tenía botón de
+                 impresión. Sigue sin "Remito": ese formato es específico del
+                 flujo de pedido/obra de asfalto (acumulado por pedido, rango
+                 de vales correlativos), egreso de áridos no tiene pedido
+                 asociado. Ingreso de áridos sigue sin impresión (no pedido). -->
+            <div
+              v-if="!row.pendiente_migracion && (row.tipo_vale === 'asfalto' || row.tipo_vale === 'egreso_arido')"
+              class="flex gap-1.5"
+            >
               <VButton variant="secondary" size="sm" @click="abrirImpresionVale(row)">Vale</VButton>
-              <VButton variant="secondary" size="sm" @click="abrirImpresionRemito(row)">Remito</VButton>
+              <VButton v-if="row.tipo_vale === 'asfalto'" variant="secondary" size="sm" @click="abrirImpresionRemito(row)">Remito</VButton>
             </div>
             <span v-else class="text-xs text-gray-300">—</span>
           </template>
@@ -395,29 +423,34 @@ iniciar()
       </VCard>
     </VSection>
 
-    <!-- Modal de impresión -->
-    <VModal
-      :open="modalImpresionAbierto"
-      :title="modoImpresion === 'remito' ? 'Remito de entrega' : 'Vale de pesaje'"
-      @update:open="modalImpresionAbierto = $event"
-    >
-      <div class="imprimible">
-        <ValeImprimible
-          v-if="valeParaImprimir"
-          :vale="valeParaImprimir"
-          :obra-nombre="obraNombreParaImprimir"
-          :mezcla-nombre="mezclaNombreParaImprimir"
-          :modo="modoImpresion"
-          :acumulado-tn="acumuladoParaImprimir"
-          :pedido="pedidoParaImprimir"
-          :rango-vales="rangoValesParaImprimir"
-          :patentes="patentes"
-        />
-      </div>
-      <div class="mt-4 flex justify-end gap-2">
-        <VButton variant="secondary" @click="modalImpresionAbierto = false">Cerrar</VButton>
-        <VButton @click="imprimir">Imprimir</VButton>
-      </div>
-    </VModal>
+    <!-- Modal de impresión — Teleport a <body> (2026-09-04, bug real: el
+         diálogo de impresión mostraba páginas de más porque este modal
+         vivía dentro de #app, ver comentario en src/assets/main.css). -->
+    <Teleport to="body">
+      <VModal
+        :open="modalImpresionAbierto"
+        :title="modoImpresion === 'remito' ? 'Remito de entrega' : 'Vale de pesaje'"
+        size="xl"
+        @update:open="modalImpresionAbierto = $event"
+      >
+        <div class="imprimible">
+          <ValeImprimible
+            v-if="valeParaImprimir"
+            :vale="valeParaImprimir"
+            :obra-nombre="obraNombreParaImprimir"
+            :mezcla-nombre="mezclaNombreParaImprimir"
+            :modo="modoImpresion"
+            :acumulado-tn="acumuladoParaImprimir"
+            :pedido="pedidoParaImprimir"
+            :rango-vales="rangoValesParaImprimir"
+            :patentes="patentes"
+          />
+        </div>
+        <div class="mt-4 flex justify-end gap-2">
+          <VButton variant="secondary" @click="modalImpresionAbierto = false">Cerrar</VButton>
+          <VButton @click="imprimir">Imprimir</VButton>
+        </div>
+      </VModal>
+    </Teleport>
   </div>
 </template>

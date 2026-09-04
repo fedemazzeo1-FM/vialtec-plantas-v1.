@@ -23,6 +23,12 @@
 // código para la última columna de botones) se separa del resto: va sin
 // label, ancho completo, con un separador arriba — es donde viven los
 // VButton de la fila, que ya tienen área táctil ~44px (ver VButton.vue).
+//
+// `rowClass` (opcional, 2026-09-04 — Báscula, memory/pending.md): función
+// `(row) => string` con clases extra por fila (ej. franja de color por
+// tipo_vale, réplica del legado). Se aplica tanto en la card mobile como en
+// el <tr> desktop — un solo lugar para no duplicar el criterio de color por
+// breakpoint. Devuelve '' o algo falsy si la fila no necesita clase extra.
 import { useBreakpoint } from '@/composables/useBreakpoint'
 
 defineProps({
@@ -31,6 +37,7 @@ defineProps({
   page: { type: Number, default: null },
   pageSize: { type: Number, default: null },
   total: { type: Number, default: null },
+  rowClass: { type: Function, default: null },
 })
 
 defineEmits(['update:page'])
@@ -46,6 +53,7 @@ const { esMobile } = useBreakpoint()
         v-for="(row, i) in rows"
         :key="row.id ?? i"
         class="rounded-xl border border-border bg-white p-3 shadow-sm"
+        :class="rowClass?.(row)"
       >
         <div class="space-y-1.5">
           <div
@@ -87,6 +95,7 @@ const { esMobile } = useBreakpoint()
             v-for="(row, i) in rows"
             :key="row.id ?? i"
             class="text-text transition-colors duration-150 hover:bg-gray-50"
+            :class="rowClass?.(row)"
           >
             <td v-for="col in columns" :key="col.key" class="px-4 py-3 align-middle">
               <slot :name="`cell-${col.key}`" :row="row" :index="i">

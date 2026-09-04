@@ -50,8 +50,10 @@ const ENTIDADES = {
   // en maestros.service.js) — "es_externa" ya no es columna/campo visible
   // porque queda implícito por la tab en la que se está parado.
   vehiculosPropios: {
-    label: 'Vehículos propios',
-    nombreSingular: 'vehículo propio',
+    // Renombrado 2026-09-04 (pedido de Federico) de "Vehículos propios" a
+    // "Camiones propios" — mismo catálogo/service, solo la etiqueta visible.
+    label: 'Camiones propios',
+    nombreSingular: 'camión propio',
     columnas: [
       { key: 'patente', label: 'Patente' },
       { key: 'tipo_camion', label: 'Tipo camión' },
@@ -67,8 +69,10 @@ const ENTIDADES = {
     vacio: () => ({ patente: '', tipo_camion: '', tara: null, chofer_habitual: '', activo: true }),
   },
   vehiculosExternos: {
-    label: 'Vehículos externos',
-    nombreSingular: 'vehículo externo',
+    // Renombrado 2026-09-04 (pedido de Federico) de "Vehículos externos" a
+    // "Camiones externos" — mismo catálogo/service, solo la etiqueta visible.
+    label: 'Camiones externos',
+    nombreSingular: 'camión externo',
     columnas: [
       { key: 'patente', label: 'Patente' },
       { key: 'tipo_camion', label: 'Tipo camión' },

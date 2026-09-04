@@ -8,11 +8,10 @@
 // directo por URL (router/index.js, mismo guard genérico que usa toda la
 // app) — no hace falta un guard especial acá.
 //
-// La tab "Usuarios" depende de la migración 21 (BORRADOR, todavía no
-// aplicada — ver supabase/migrations/21_admin_gestion_usuarios_roles.sql y
-// memory/pending.md): hasta que Federico la confirme y se aplique, la lista
-// puede salir incompleta y "Guardar" va a fallar. El aviso de abajo explica
-// esto en la propia pantalla en vez de fallar en silencio.
+// La tab "Usuarios" depende de la migración 21 (policy "admin lee todos los
+// usuarios" + RPC admin_upsert_usuario_rol) — APLICADA 2026-09-03 noche con
+// confirmación explícita de Federico, ver supabase/migrations/21_admin_gestion_usuarios_roles.sql
+// y memory/pending.md.
 
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -113,13 +112,6 @@ function formatearPermiso(valor) {
 
       <!-- Tab Usuarios -->
       <template v-if="tabActiva === 'usuarios'">
-        <div class="mb-3 rounded-lg border border-vialtec/20 bg-vialtec/5 px-3 py-2 text-xs text-text-mid">
-          Esta pantalla queda operativa cuando se aplique la migración 21 (borrador
-          en <code>supabase/migrations/21_admin_gestion_usuarios_roles.sql</code>,
-          pendiente de tu confirmación — ver <code>memory/pending.md</code>). Hasta
-          entonces la lista puede salir incompleta y "Guardar" puede fallar.
-        </div>
-
         <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
           {{ error }}
         </div>

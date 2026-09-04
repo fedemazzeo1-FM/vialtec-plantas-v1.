@@ -14,6 +14,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import VCard from '@/components/shared/VCard.vue'
 import VTable from '@/components/shared/VTable.vue'
+import VBadge from '@/components/shared/VBadge.vue'
 import VModal from '@/components/shared/VModal.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
@@ -261,7 +262,15 @@ const columnasProveedorInsumo = [
           @update:page="cambiarPaginaHistorial"
         >
           <template #cell-tipo="{ row }">
-            {{ etiquetaTipo(row.tipo) }}
+            <div class="flex flex-wrap items-center gap-1">
+              <span>{{ etiquetaTipo(row.tipo) }}</span>
+              <!-- 2026-09-04 (memory/pending.md): movimiento que todavía solo
+                   vive en el sistema legado, sin fila real en
+                   plantas_stock_movimientos todavía. -->
+              <VBadge v-if="row.pendiente_migracion" variant="default" title="Todavía solo está en el sistema anterior, no migrado a este sistema">
+                Legado
+              </VBadge>
+            </div>
           </template>
           <template #cell-cantidad_kg="{ row }">
             <span :class="row.cantidad_kg > 0 ? 'text-success' : 'text-danger'">
