@@ -69,7 +69,10 @@ export async function fetchStockActual() {
 // crece sin límite)
 // ---------------------------------------------------------------------------
 
-const TIPOS_INGRESO = ['ingreso_proveedor', 'ingreso_manual']
+// Exportado: useStock.js lo reusa para acotar la tab "Historial de ingresos"
+// a solo estos 2 tipos (memory/conventions.md, no duplicar la lista) — ver
+// comentario 2026-09-06 en queryMovimientos() más abajo.
+export const TIPOS_INGRESO = ['ingreso_proveedor', 'ingreso_manual']
 
 // Vista puente (2026-09-04, memory/pending.md): UNION de plantas_stock_movimientos
 // real + lo que el legado sigue cargando en paralelo en kv_store (todavía sin
@@ -91,7 +94,14 @@ function queryMovimientos(filtros) {
     .order('fecha_movimiento', { ascending: false })
 
   if (filtros.materialId) query = query.eq('material_id', filtros.materialId)
-  if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
+  // filtros.tipo acepta un string (un tipo puntual, .eq) o un array (ej.
+  // TIPOS_INGRESO — memory/pending.md 2026-09-06: la tab "Historial de
+  // ingresos" de Stock mostraba TODOS los tipos de movimiento por defecto
+  // (incluidos egresos por despacho), cuando la idea es que ahí solo
+  // aparezcan ingresos de materiales — useStock.js pasa el array cuando el
+  // usuario no eligió un tipo puntual en el filtro).
+  if (Array.isArray(filtros.tipo)) query = query.in('tipo', filtros.tipo)
+  else if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
   // Fix 2026-09-04 (mismo bug de Báscula, memory/pending.md): fecha_movimiento
   // es timestamptz — la fecha "pelada"/`T23:59:59` sin offset se casteaba
   // contra UTC en vez de hora local (Argentina, UTC-3), perdiendo en

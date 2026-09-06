@@ -36,15 +36,16 @@ const tabActiva = ref(TABS.some((t) => t.valor === route.query.tab) ? route.quer
 const ESTADO_A_COLOR = { rojo: 'rojo', amarillo: 'amarillo', verde: 'verde' }
 const ESTADO_LABEL = { rojo: 'Insuficiente', amarillo: 'Ajustado', verde: 'OK' }
 
+// Fix 2026-09-06 (Federico, prueba de flujo total): esta tab es "Historial
+// de INGRESOS" — el filtro de Tipo antes ofrecía también los tipos de
+// egreso/ajuste (que useStock.js igual traía por defecto al no filtrar
+// nada). Se acota a los 2 tipos que son ingresos reales; los egresos ya
+// tienen su propia vista (Despachos → detalle de cargas, Báscula →
+// historial de Egreso árido) y no se duplican acá.
 const TIPOS_MOVIMIENTO = [
   { value: '', label: 'Todos' },
   { value: 'ingreso_proveedor', label: 'Ingreso proveedor' },
-  { value: 'egreso_despacho', label: 'Egreso por despacho' },
-  { value: 'egreso_arido', label: 'Egreso árido' },
   { value: 'ingreso_manual', label: 'Ingreso manual' },
-  { value: 'egreso_manual', label: 'Egreso manual' },
-  { value: 'ajuste', label: 'Ajuste (relevamiento)' },
-  { value: 'recalculo_despacho', label: 'Recálculo de despacho' },
 ]
 
 const columnasHistorial = [

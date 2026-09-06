@@ -81,6 +81,15 @@ export async function fetchPedidosAsfaltoParaPesada() {
 // Próximo N° de vale (header operativo de Báscula)
 // ---------------------------------------------------------------------------
 
+// Bloque reservado para los 500 vales de ingreso_arido migrados del legado
+// que nunca tuvieron un N° de vale real en papel (memory/pending.md,
+// renumeración 2026-09-06) — quedaron en 90000001-90000500, bien afuera del
+// rango de numeración real (9579 en adelante), para no colisionar nunca con
+// el asfalto real del legado que sigue avanzando en paralelo hasta el corte.
+// Se excluye acá para no confundir el próximo N° "de papel" que ve el
+// balancero.
+const PISO_RANGO_SINTETICO_INGRESO = 90000000
+
 /**
  * Estimación de sola lectura del próximo N° de vale a asignar. No consulta
  * la secuencia de Postgres directamente (eso consumiría/reservaría un valor
@@ -93,6 +102,7 @@ export async function obtenerProximoNumeroVale() {
   const { data, error } = await supabase
     .from(TABLA_VALES)
     .select('numero_vale')
+    .lt('numero_vale', PISO_RANGO_SINTETICO_INGRESO)
     .order('numero_vale', { ascending: false })
     .limit(1)
 

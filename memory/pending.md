@@ -65,6 +65,129 @@ Sigue siendo un objetivo, no una fecha 100% confirmada — no asumir que el
 corte ya pasó sin confirmarlo de nuevo con Federico al arrancar una sesión
 posterior a esa fecha.
 
+## ✅ Prueba de flujo TOTAL + auditoría exhaustiva — 2026-09-06, APLICADO y VERIFICADO
+
+Primera ejecución del punto (a)/(b) pedido por Federico el 2026-09-04 (ver
+sección de arriba). Metodología: prueba real contra producción con datos
+mínimos claramente marcados ("PRUEBA QA - BORRAR", obra real Highland, 1 tn,
+fórmula real CAC D19) manejando el navegador con la sesión real de Federico
+— aprobado explícitamente por él por el efecto colateral conocido (1 número
+de vale consumido y no reutilizable, como un vale de papel anulado) — y
+borrado íntegro al terminar (pedido, historial, carga, vale, movimientos de
+stock; stock repuesto exacto a los valores previos, verificado por SQL
+antes/después).
+
+**Flujo probado end-to-end, 100% correcto:**
+Crear pedido → Confirmar → Pesar en Báscula (vale asfalto N° 10494, el
+pedido quedó `confirmado`, sin auto-cierre — migración 14 funcionando) →
+Registrar despacho en Pedidos con ese N° de vale → pedido `despachado` →
+descuento de stock exacto (Piedra 6/20 -470kg = 47%×1000×1tn, Arena 0/6
+-530kg = 53%×1000×1tn, relación cantidad×fórmula perfecta) → historial del
+pedido con los 3 eventos (solicitado/confirmado/despachado, usuario y
+timestamp reales) → Despachos → Detalle de cargas consolidado
+correctamente (PEDIDO 1tn = REAL 1tn, diferencia 0.00tn).
+
+**Hallazgos de la auditoría:**
+
+1. **🔴 Confirmado, sin tocar (decisión de Federico)**: `kv_store` tiene
+   una policy RLS `"Acceso publico kv"` — `roles={public}`, `cmd=ALL`,
+   `qual=true` — cualquiera con la anon key puede leer/escribir/borrar TODO
+   el histórico del legado sin login. Ya estaba anotado como pendiente;
+   confirmado en vivo. Federico decidió NO tocarlo ahora (el legado lo
+   sigue consumiendo en vivo, riesgo de interrumpir la operación
+   pre-corte) — **se resuelve el día de la migración final, cuando se
+   apague el legado**.
+2. **✅ Corregido en esta sesión**: la tab "Historial de ingresos" de Stock
+   mostraba TODOS los tipos de movimiento por defecto (incluidos egresos
+   por despacho/árido/manual y ajustes), cuando la idea es que solo
+   aparezcan ingresos de materiales — reportado por Federico en vivo
+   durante la prueba, al ver el egreso de mi pedido de prueba mezclado ahí.
+   Fix: `queryMovimientos()` (`stock.service.js`) ahora acepta `tipo` como
+   array (`.in()`), y la tab acota por defecto a `TIPOS_INGRESO`
+   (`ingreso_proveedor`/`ingreso_manual`, exportado desde el service) salvo
+   que el usuario elija un tipo puntual; el dropdown "Tipo" de
+   `StockView.vue` se acotó a esos 2 valores (los egresos ya tienen su
+   propia vista en Despachos/Báscula, no se duplican acá). Verificado
+   visualmente y con build limpio.
+3. **🟡 Confirmado, sin tocar (decisión de Federico)**:
+   `plantas_aplicar_movimiento_stock()` no inserta fila en
+   `plantas_stock_movimientos` cuando el delta aplicado da exactamente 0
+   (material ya en el piso de 0) — no rompe el stock, pero no deja rastro
+   de que un despacho "debería" haber consumido ese insumo. Federico
+   decidió mantener el comportamiento actual (no meter registros en cero
+   innecesarios).
+4. **Investigado, NO es un hallazgo nuevo**: la diferencia entre
+   `sum(plantas_stock_movimientos)` y `plantas_stock.cantidad_kg` por
+   material es un límite ya documentado en el propio
+   `migracion_historial_v2.sql` (línea ~105): el saldo final se cargó
+   directo desde `vt_s9`, no derivado matemáticamente de los movimientos
+   migrados. No accionable.
+5. **Nota menor, no urgente**: `plantas_pedidos.nro_vale_global` queda
+   `null` en despachos hechos por el flujo nuevo (solo lo tienen 95/160,
+   todos migrados) — el N° de vale real queda correctamente en
+   `plantas_cargas_asfalto.numero_vale` por carga, no se pierde
+   información, es una columna legada que ya no se sigue poblando.
+6. **Orientación de impresión (punto pendiente desde 2026-09-03)**:
+   verificado en código, ya está resuelto — un único `@page` global en A4
+   landscape (210mm) para toda la app, sin ningún `@page` con nombre en
+   portrait residual. Vale y remito de Báscula y Despachos imprimen
+   horizontal. Confirmado por Federico como el comportamiento deseado, sin
+   cambio de código necesario.
+
+**Archivos tocados**: `src/services/stock.service.js`,
+`src/modules/stock/composables/useStock.js`, `src/views/StockView.vue`.
+Build verificado (`npm run build` limpio) en cada paso.
+
+## ✅ Renumeración de vales sintéticos de ingreso_arido — 2026-09-06, APLICADO y VERIFICADO
+
+Hallazgo de la auditoría de arriba, ya documentado desde el 2026-09-04
+("Vistas puente Báscula/Stock"): los 500 `ingreso_arido` migrados el 1/9
+recibieron `numero_vale` SINTÉTICO (la identity de la tabla los numeró
+correlativos en ese momento, 9994-10493) porque el legado nunca los
+numera — pero el asfalto real del legado sigue avanzando en paralelo y ya
+venía entrando en ese mismo rango. Propuesta técnica presentada a Federico
+con impacto evaluado (sin FK por `numero_vale`, vista puente matchea por
+`datos_legados`/`numero_remito`+`material` no por `numero_vale`, pero sí
+hacía falta ajustar `obtenerProximoNumeroVale()` que hacía
+`max(numero_vale)+1` sin filtrar tipo) — **aprobada por Federico
+2026-09-06**.
+
+**Ejecutado:**
+- `src/modules/bascula/services/bascula.service.js#obtenerProximoNumeroVale()`:
+  agregado `.lt('numero_vale', 90000000)` para excluir el bloque sintético
+  del cálculo del "Próximo N°" que ve el balancero (inofensivo hasta que
+  se corrió el script de abajo, necesario después). Build verificado.
+- Script SQL corrido contra producción (transaccional): `numero_vale` es
+  `GENERATED ALWAYS AS IDENTITY` (arranca en 9579) — no admite `UPDATE`
+  directo, hubo que bajarla a `GENERATED BY DEFAULT`, renumerar, y
+  devolverla a `GENERATED ALWAYS` en la misma transacción. Los 500
+  `ingreso_arido` (los que tenían `numero_vale` entre 9994-10493 y
+  `datos_legados` poblado = ninguno es real) se movieron a
+  **90000001-90000500** — bloque separado que no puede colisionar con un
+  número de vale real, pasado ni futuro (a la velocidad actual, faltarían
+  siglos para llegar ahí). Solo cambió `numero_vale`; `id`, `datos_legados`
+  y la fila completa quedaron intactos — verificado que
+  `plantas_ingresos.vale_id` (FK por `id`, no por `numero_vale`) y el
+  `datos_legados->>'id'` de cada fila renumerada siguen apuntando
+  correctamente.
+- **Verificado post-script**: 0 filas en 9994-10493, 500 filas en
+  90000001-90000500 (las 500 son `ingreso_arido`), columna `numero_vale`
+  vuelve a ser `GENERATED ALWAYS` (`is_identity = YES`), secuencia real sin
+  tocar (siguió en su posición, próximo vale real ~10495 — el hueco de
+  10494 es el de la prueba de flujo de arriba, ya conocido y aceptado).
+
+**🔴 Pendiente para el día de la migración final / corte de dominio** (NO
+hacer antes, es parte de esa migración): cuando se migre el asfalto real
+del legado que hoy ocupa (o va a ocupar) la zona 9994 en adelante con sus
+números reales de papel, esos van a insertarse limpios ahí (ya no hay nada
+sintético nuestro en el medio). Al terminar esa migración hay que correr
+`setval('plantas_vales_numero_vale_seq', (select max(numero_vale) from
+plantas_vales where numero_vale < 90000000), true)` para que la secuencia
+quede sincronizada exacta contra el `max(numero_vale)` real — mismo
+criterio que se usó el 2026-09-01 con `migracion_historial_v2.sql`. Sin
+este paso, el sistema nuevo podría volver a asignar un número ya usado por
+el legado recién migrado.
+
 ## ✅ Báscula: impresión round 3 + Vale para egreso de áridos — 2026-09-04 (madrugada), APLICADO y VERIFICADO
 
 Después del round 2 (más abajo), Federico sacó el filtro de fecha "hoy" por

@@ -9,6 +9,7 @@ import {
   fetchTodosLosMovimientos,
   registrarMovimientoManual,
   registrarRelevamiento,
+  TIPOS_INGRESO,
 } from '@/services/stock.service'
 import { materialesService } from '@/modules/maestros/services/maestros.service'
 import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
@@ -195,7 +196,12 @@ export function useStock() {
       const resultado = await fetchMovimientos(
         {
           materialId: filtrosHistorial.materialId || undefined,
-          tipo: filtrosHistorial.tipo || undefined,
+          // Fix 2026-09-06 (Federico, prueba de flujo total): esta tab es
+          // "Historial de INGRESOS" — si no se eligió un tipo puntual en el
+          // filtro, acotar a TIPOS_INGRESO en vez de traer todos los tipos
+          // (antes mostraba también egresos por despacho/árido/manual y
+          // ajustes, que tienen su propia vista en Despachos/Báscula).
+          tipo: filtrosHistorial.tipo || TIPOS_INGRESO,
           desde: filtrosHistorial.desde || undefined,
           hasta: filtrosHistorial.hasta || undefined,
         },
@@ -304,7 +310,9 @@ export function useStock() {
     try {
       const filas = await fetchTodosLosMovimientos({
         materialId: filtrosHistorial.materialId || undefined,
-        tipo: filtrosHistorial.tipo || undefined,
+        // Mismo criterio que cargarMovimientos() — el Excel de esta tab
+        // exporta lo mismo que se ve en pantalla, solo ingresos por defecto.
+        tipo: filtrosHistorial.tipo || TIPOS_INGRESO,
         desde: filtrosHistorial.desde || undefined,
         hasta: filtrosHistorial.hasta || undefined,
       })
