@@ -39,7 +39,7 @@ const iniciales = computed(() =>
     >
       <div class="relative flex items-center justify-between px-3 py-4">
         <div v-if="!colapsado">
-          <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-9 w-auto" />
+          <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-14 w-auto" />
           <p class="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-soft">Plantas</p>
         </div>
         <span

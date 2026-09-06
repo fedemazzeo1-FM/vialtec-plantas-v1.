@@ -382,6 +382,173 @@ el rol permitido de alguna RPC o policy a futuro, hay que actualizar
 **Archivos**: `supabase/migrations/23_rls_fina_rol_obra.sql` (aplicada),
 `src/views/UsuariosPermisosView.vue`. Build verificado.
 
+## 🔴 Regresión de RLS: timeout en Stock → Historial de ingresos — 2026-09-06, ENCONTRADO y CORREGIDO
+
+Durante el smoke-test post-migración-23, "Historial de ingresos" tiró
+**"canceling statement due to statement timeout"** al abrir la tab —
+regresión real introducida por la propia migración 23, no un bug
+preexistente.
+
+**Causa**: `plantas_v_stock_movimientos_viva` lee `plantas_stock_movimientos`
+dos veces sin materializar — una en la CTE "migrados", otra dentro de un
+`NOT EXISTS` correlado fila por fila contra los ~700+ elementos del array
+`vt_m9` de `kv_store` (anti-join legado). Al agregarle RLS a
+`plantas_stock_movimientos` (`plantas_puede_ver_stock()`, función
+`SECURITY DEFINER` opaca para el planner), Postgres puede elegir un plan
+que reevalúe esa función una vez por cada fila del legado en vez de una
+sola vez — **exactamente la misma causa raíz, en el mismo tipo de vista
+puente, que ya se había encontrado y resuelto en `plantas_v_bascula_viva`
+el 2026-09-04** (esa vista no se vio afectada ahora porque ya materializaba
+`plantas_vales`/`plantas_ingresos` desde ese fix anterior). Confirmado con
+`EXPLAIN ANALYZE` como rol `authenticated`: 144ms con un plan hash decente,
+pero el plan es inestable — el timeout real en vivo sí ocurrió una vez.
+
+**Fix** (`supabase/migrations/25_fix_timeout_vista_stock_viva.sql`): CTE
+`psm_visible AS MATERIALIZED` que lee `plantas_stock_movimientos` (con su
+RLS) una sola vez; las dos CTEs de la vista pasan a leer de ahí. Verificado
+con `EXPLAIN ANALYZE`: bajó a 19.8ms, plan ahora usa "CTE Scan on
+psm_visible" (evaluado una vez, reusado) en vez de dos `Seq Scan ...
+Filter: plantas_puede_ver_stock()` separados. Reprobado en vivo en el
+navegador (recargado varias veces) sin que vuelva a aparecer el timeout.
+
+**Chequeado y descartado el mismo riesgo en otras vistas**:
+`plantas_v_despachos_camion` (Dashboard, ahora con RLS de
+`plantas_puede_ver_obra(obra_id)` en 2 de sus 3 fuentes) es un `UNION ALL`
+simple de 3 escaneos directos, sin anti-join/subquery correlada contra el
+legado — no le aplica este patrón de riesgo, no necesitó cambios.
+
+**Lección para la migración final (Paso 4)**: cualquier vista puente nueva
+o script de migración que compare "¿ya migrado?" con un `NOT EXISTS`/anti-
+join contra una tabla que ahora tiene RLS debe materializar esa lectura
+primero — no asumir que Postgres siempre va a elegir el plan barato.
+
+## ✅ postergar_pedido restringido a admin/plantista — 2026-09-06, APLICADO
+
+Hallazgo de la auditoría de RLS de arriba: `postergar_pedido()` era la
+única RPC de transición de estado de Pedidos sin ningún chequeo de rol.
+Decisión de Federico: restringirla a `admin`/`plantista`, mismo criterio
+que `confirmar_pedido()`/`archivar_pedido()`. Aplicado en
+`supabase/migrations/24_postergar_pedido_restringido.sql`. No hizo falta
+tocar el frontend — el botón "Postergar" ya se muestra solo por estado
+(igual que "Confirmar"/"Despachar"), el chequeo real vive en el RPC, mismo
+patrón que el resto de las transiciones.
+
+## ✅ Verificación RLS Fórmulas/Maestros + smoke-test de flujos restantes — 2026-09-06, VERIFICADO
+
+Cierre del Paso 3 al 100% + los flujos que habían quedado sin probar de la
+prueba de flujo total:
+
+- **Fórmulas**: editar CAC D19 como admin — funciona. Verificado sin
+  ambigüedad cambiando un valor real (Piedra 6/20: 47 → 47.1 → confirmado
+  en DB → revertido a 47).
+- **Materiales**: editar ADD PLAS como admin (guardado sin cambios) —
+  funciona, sin error.
+- **Stock — Ingreso manual**: Filler +1tn, verificado en DB (25422 →
+  26422 kg), revertido.
+- **Stock — Salida manual**: Fuel Oil −1tn, verificado en DB (23700 →
+  22700 kg), revertido.
+- **Stock — Relevamiento mensual**: modal pre-carga el stock actual de
+  cada material; guardado sin cambiar nada → 0 movimientos `ajuste`
+  creados (verificado en DB) — el guard `saveStockGuard` solo audita
+  diferencias reales, comportamiento correcto.
+- **Simulador**: 50tn CAC D19 → cálculo de impacto exacto (Arena 0/6
+  −26.5tn, Asfalto CA30 −2.25tn → "INSUFICIENTE" porque está en 0, Piedra
+  6/20 −23.5tn) — 100% client-side, sin persistencia, nada que limpiar.
+- **Plan Semanal**: calendario semanal, KPIs por obra y matriz de días
+  cargan sin errores.
+
+Todos los datos de prueba borrados/revertidos, verificado por SQL. Build
+limpio (sin cambios de frontend en esta pasada, solo las 2 migraciones de
+arriba).
+
+## 📋 Decisiones de Federico — cierre de pendientes previo al Paso 4 (2026-09-06)
+
+- **Módulo de Auditoría**: queda para DESPUÉS del corte — la trazabilidad
+  ya existe en la DB (`plantas_pedidos_historial`, `plantas_stock_movimientos`
+  con `responsable_email`, etc.), solo falta la pantalla visual y no es
+  bloqueante para salir a producción.
+- **Módulo de Backup**: NO se va a desarrollar — Supabase ya maneja
+  backups automáticos de infraestructura. El día del corte se hace una
+  exportación manual directa desde el panel de Supabase.
+- **3 usuarios sin nombre** (`angel.moreira`, `balanza`, `juan.heinrich`):
+  se dejan como están — se completan en `flota_usuarios_email` más
+  adelante, post-corte.
+- **Catálogo Choferes**: se deja como está — no se tocan catálogos
+  históricos a horas de la migración final.
+- **Exports faltantes** (Pedidos sin Excel; Despachos con solo "Informe
+  mensual" de los 6 botones del legado): quedan postergados como mejora
+  post-corte — los 5 exports ya probados (Stock×3, Informe mensual,
+  Báscula) son suficientes para el corte.
+
+## ✅ Paso 4 — script de migración final + dry-run — 2026-09-06, VERIFICADO (no ejecutado en real)
+
+Preparación completa para la migración final del corte, sin tocar
+producción todavía (solo lectura + una transacción con `rollback` al
+final).
+
+**1) Auditoría del delta desde el 01/09** — nuevo script
+`supabase/scripts/auditoria_delta_desde_01_09.sql` (mismo patrón que
+`auditoria_historico_vs_legado.sql`, invertido: `fecha >= '2026-09-01'`).
+Resultado de la corrida 2026-09-06: **4 pedidos**, **18 eventos de
+historial**, **4 cargas de hormigón** (detalle de por qué el dry-run
+inserta 5, ver más abajo), **20 vales de asfalto**, **0 egreso_arido**,
+**3 ingresos de áridos** (vale + `plantas_ingresos` + su reflejo en
+`plantas_stock_movimientos`), **1 relevamiento nuevo sin reconciliar**
+(2026-09-03). **Chequeo crítico de colisión de `numero_vale`: 0 filas** —
+el rango real pendiente (9994-10013) cayó justo donde la renumeración de
+vales sintéticos de hoy mismo dejó libre, confirmando que esa migración
+(ver más arriba) no era solo preventiva, era un requisito real para poder
+migrar este delta sin chocar contra el `UNIQUE`.
+
+**2) Script de migración final** — `supabase/scripts/migracion_final_corte.sql`,
+reutiliza tal cual la lógica de inserción de `migracion_historial_v2.sql`
+(secciones 5-8: Pedidos+Historial, Cargas hormigón, Vales+Ingresos, Stock
+movimientos) — ya es idempotente por diseño (`not exists` contra el id
+nativo del legado en cada INSERT, sin filtro de fecha), así que no hizo
+falta escribir lógica nueva, solo volver a correr el mismo patrón: procesa
+TODO `kv_store` de nuevo y solo inserta lo que todavía no está. Esto
+significa que es seguro correrlo más de una vez si el legado sigue vivo
+entre el dry-run y el corte real — no duplica nada.
+
+**Alcance deliberadamente excluido**: `plantas_stock` (balance final). La
+migración original del 01/09 lo seteó directo desde `vt_s9` como bootstrap
+único — repetir eso ahora sobreescribiría el ledger real que el sistema
+nuevo viene llevando de forma independiente (despachos, báscula, manual)
+desde esa fecha. **Queda como decisión de Federico para el día del corte**
+(ver `supabase/scripts/CHECKLIST_CORTE_FINAL.md` punto 3): confiar en el
+ledger nuevo tal cual, o cargar un relevamiento físico fresco (vía "Stock →
+Relevamiento mensual", que ya audita el ajuste correctamente).
+
+**3) Dry-run ejecutado contra producción** (transacción completa,
+terminada en `rollback`, conteos verificados exactos al valor previo
+después): `total_pedidos` 184→188 (+4), `total_historial` 543→561 (+18),
+`total_cargas_hormigon` 114→119 (**+5**, no +4 — investigado: uno de los 4
+pedidos nuevos es de hormigón y trae su propio camión, se resuelve
+correctamente dentro de la misma transacción porque el pedido recién
+insertado ya es visible para el INSERT de cargas que sigue — no es un bug,
+confirma que el script es transaccionalmente consistente), `total_vales`
+885→908 (+23 = 20 asfalto + 3 ingreso_arido), `total_ingresos` 500→503
+(+3), `total_stock_movimientos` 786→789 (+3). `setval()` verificado:
+`secuencia_actual` quedó igual a `max_vale_real` (10016). **3 chequeos de
+integridad post-inserción: 0 duplicados de `numero_vale`, 0 pedidos con
+`id_legado` duplicado, 0 ingresos huérfanos.**
+
+**4) Checklist técnico del corte** — `supabase/scripts/CHECKLIST_CORTE_FINAL.md`,
+9 secciones en orden: re-auditar el delta en vivo justo antes (el legado
+sigue vivo, el delta real del día del corte va a ser mayor a lo medido
+hoy), dry-run de nuevo, decisión de Federico sobre el balance de stock,
+corrida real (`rollback` → `commit`), `npx vercel --prod` (manual, como
+siempre), cambio de DNS de `produccion.vialtec.app` (lo tiene que hacer
+Federico, Claude no tiene acceso al proveedor de DNS), verificación
+post-corte, dar de baja el legado, y **recién ahí** resolver la RLS abierta
+de `kv_store` (sin riesgo de romper su escritura en vivo una vez apagado).
+
+**Archivos**: `supabase/scripts/auditoria_delta_desde_01_09.sql`,
+`supabase/scripts/migracion_final_corte.sql`,
+`supabase/scripts/CHECKLIST_CORTE_FINAL.md`. Ninguno tocó producción — el
+único cambio real de datos en esta sesión fue el dry-run, revertido con
+`rollback` y verificado.
+
 ## ✅ Báscula: impresión round 3 + Vale para egreso de áridos — 2026-09-04 (madrugada), APLICADO y VERIFICADO
 
 Después del round 2 (más abajo), Federico sacó el filtro de fecha "hoy" por
