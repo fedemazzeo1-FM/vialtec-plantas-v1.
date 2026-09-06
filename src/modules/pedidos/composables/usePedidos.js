@@ -422,22 +422,27 @@ export function usePedidos() {
   const pedidoCancelar = ref(null)
   const motivoCancelacion = ref('')
   const cancelando = ref(false)
+  // Error propio del modal (no el `error` genérico de arriba, que renderiza
+  // en un banner al tope de la vista — con el modal abierto queda tapado y
+  // el usuario no lo ve, memory/pending.md hallazgo 2026-09-06).
+  const errorCancelacion = ref(null)
 
   function abrirCancelacion(pedido) {
     pedidoCancelar.value = pedido
     motivoCancelacion.value = ''
+    errorCancelacion.value = null
     modalCancelAbierto.value = true
   }
 
   async function confirmarCancelacion() {
     cancelando.value = true
-    error.value = null
+    errorCancelacion.value = null
     try {
       await cancelarPedidoService(pedidoCancelar.value.id, motivoCancelacion.value, { usuarioLegado: auth.nombre })
       modalCancelAbierto.value = false
       await cargarPedidos()
     } catch (e) {
-      error.value = e.message
+      errorCancelacion.value = e.message
     } finally {
       cancelando.value = false
     }
@@ -535,6 +540,7 @@ export function usePedidos() {
     pedidoCancelar,
     motivoCancelacion,
     cancelando,
+    errorCancelacion,
     abrirCancelacion,
     confirmarCancelacion,
     archivar,

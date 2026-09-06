@@ -405,7 +405,10 @@ export async function finalizarDespacho(pedidoId, { dividir = false, fechaResidu
  */
 export async function cancelarPedido(id, motivo, { usuarioLegado } = {}) {
   if (!motivo || !motivo.trim()) {
-    throw new Error('cancelarPedido: el motivo es obligatorio')
+    // Mensaje user-facing (memory/pending.md, hallazgo 2026-09-06): antes
+    // filtraba el nombre de la función ("cancelarPedido: ...") — el modal
+    // ahora lo muestra inline, tiene que ser legible para el operador.
+    throw new Error('El motivo es obligatorio para cancelar el pedido.')
   }
   const { data, error } = await supabase.rpc('cancelar_pedido', {
     p_pedido_id: id,

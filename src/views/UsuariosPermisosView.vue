@@ -73,8 +73,9 @@ function toggleObra(id) {
   else formData.obraIds.splice(i, 1)
 }
 
-// Etiquetas legibles de los campos de PERMISOS_POR_ROL, para la tab
-// "Permisos por rol" — mismo orden en el que se definen en auth.store.js.
+// Etiquetas legibles de los campos de PERMISOS_POR_ROL, para el bloque
+// "Pantallas visibles" de la tab "Permisos por rol" — mismo orden en el
+// que se definen en auth.store.js.
 const CAMPOS_PERMISO = [
   { key: 'tabs', label: 'Pantallas visibles' },
   { key: 'crearPedido', label: 'Crear pedido' },
@@ -92,6 +93,80 @@ function formatearPermiso(valor) {
   if (valor === 'ver') return 'Solo ver'
   return String(valor)
 }
+
+// -----------------------------------------------------------------------
+// Matriz REAL de permisos (2026-09-06, migración 23 — tarea P0.2).
+//
+// A diferencia de PERMISOS_POR_ROL de arriba (que solo controla qué
+// pestañas/botones muestra la UI — un usuario con la pestaña oculta igual
+// podría llamar la API directo si el server no lo bloqueara), esto
+// documenta el chequeo real server-side: cada fila cita la RPC
+// `SECURITY DEFINER` o la policy de RLS que lo hace cumplir, no salteable
+// desde el cliente. Auditado en vivo contra pg_proc/pg_policies de
+// producción al escribir la migración 23 — si se cambia el rol permitido
+// de una RPC o una policy, hay que actualizar esto a mano (no se puede
+// introspectar en runtime desde el frontend).
+const ROLES_MATRIZ = ['admin', 'plantista', 'encargado', 'supervisor', 'balancero', 'gerencia', 'plantista_hormigon']
+
+const MATRIZ_REAL_PERMISOS = [
+  {
+    seccion: 'Pedidos',
+    filas: [
+      { accion: 'Crear pedido', fuente: 'RPC crear_pedido', roles: ['admin', 'plantista', 'encargado', 'supervisor'] },
+      { accion: 'Confirmar pedido', fuente: 'RPC confirmar_pedido', roles: ['admin', 'plantista'] },
+      {
+        accion: 'Postergar pedido',
+        fuente: 'RPC postergar_pedido',
+        roles: ROLES_MATRIZ,
+        nota: 'Único caso sin chequeo de rol en el servidor — cualquier autenticado puede postergar si tiene la pantalla visible. Hallazgo de esta auditoría, no corregido todavía (no fue pedido).',
+      },
+      { accion: 'Cancelar pedido', fuente: 'RPC cancelar_pedido', roles: ['admin', 'plantista', 'encargado', 'supervisor'] },
+      { accion: 'Archivar pedido', fuente: 'RPC archivar_pedido', roles: ['admin', 'plantista'] },
+      { accion: 'Finalizar despacho (cerrar)', fuente: 'RPC finalizar_despacho', roles: ['admin', 'plantista', 'plantista_hormigon'] },
+      { accion: 'Corregir despacho', fuente: 'RPC corregir_despacho', roles: ['admin', 'plantista', 'plantista_hormigon'] },
+    ],
+  },
+  {
+    seccion: 'Báscula',
+    filas: [
+      { accion: 'Ver historial de Báscula (vales/ingresos)', fuente: 'RLS plantas_vales / plantas_ingresos', roles: ['admin', 'plantista', 'balancero'] },
+      { accion: 'Registrar pesada (vale asfalto / ingreso / egreso árido)', fuente: 'RPC registrar_pesada_bascula', roles: ['admin', 'plantista', 'balancero'] },
+      { accion: 'Registrar carga de asfalto (desde Pedidos)', fuente: 'RPC registrar_carga_asfalto', roles: ['admin', 'plantista'] },
+      { accion: 'Registrar carga de hormigón', fuente: 'RPC registrar_carga_hormigon', roles: ['admin', 'plantista', 'plantista_hormigon'] },
+    ],
+  },
+  {
+    seccion: 'Stock',
+    filas: [
+      { accion: 'Ver Stock e historial de movimientos', fuente: 'RLS plantas_stock / plantas_stock_movimientos', roles: ['admin', 'plantista', 'balancero', 'gerencia'] },
+      { accion: 'Movimiento manual (ingreso/egreso)', fuente: 'RPC registrar_movimiento_manual', roles: ['admin', 'plantista'] },
+      { accion: 'Relevamiento mensual', fuente: 'RPC registrar_relevamiento_stock', roles: ['admin', 'plantista'] },
+    ],
+  },
+  {
+    seccion: 'Maestros',
+    filas: [
+      {
+        accion: 'Ver catálogos (fórmulas, materiales, patentes, proveedores, choferes, encargados)',
+        fuente: 'RLS — SELECT abierto',
+        roles: ROLES_MATRIZ,
+      },
+      { accion: 'Crear / editar / borrar catálogos', fuente: 'RLS — INSERT/UPDATE/DELETE', roles: ['admin', 'plantista'] },
+    ],
+  },
+  {
+    seccion: 'Usuarios y Permisos',
+    filas: [{ accion: 'Administrar usuarios y roles', fuente: 'RPC admin_upsert_usuario_rol + RLS plantas_usuarios_roles', roles: ['admin'] }],
+  },
+]
+
+// Columnas de VTable para la matriz de arriba: Acción + una por rol (con
+// slot #cell-<rol> para el ✓/—) + Fuente.
+const columnasMatriz = [
+  { key: 'accion', label: 'Acción' },
+  ...ROLES_MATRIZ.map((rol) => ({ key: rol, label: rol })),
+  { key: 'fuente', label: 'Dónde se aplica' },
+]
 </script>
 
 <template>
@@ -154,11 +229,54 @@ function formatearPermiso(valor) {
 
       <!-- Tab Permisos por rol -->
       <template v-else>
+        <h3 class="mb-1 text-sm font-semibold text-text-strong">Matriz real — qué bloquea de verdad el servidor</h3>
         <p class="mb-3 text-xs text-text-soft">
-          Matriz de permisos por rol (solo lectura acá — se define en
-          <code>src/stores/auth.store.js#PERMISOS_POR_ROL</code>). Es la fuente que usa
-          la UI para mostrar/ocultar pantallas y botones; el chequeo real y no
-          salteable vive en las RPC/RLS del server.
+          Cada fila cita la RPC <code>SECURITY DEFINER</code> o la policy de RLS que hace
+          cumplir esa acción — no salteable desde el cliente aunque alguien llame la API
+          directo. Auditado en vivo contra <code>pg_proc</code>/<code>pg_policies</code> de
+          producción al escribir la migración 23 (2026-09-06, tarea P0.2). Distinto de
+          "Pantallas visibles" más abajo, que solo controla qué muestra la UI.
+        </p>
+        <div class="space-y-5">
+          <div v-for="grupo in MATRIZ_REAL_PERMISOS" :key="grupo.seccion">
+            <h4 class="mb-1.5 text-xs font-bold uppercase tracking-wide text-text-soft">{{ grupo.seccion }}</h4>
+            <VCard>
+              <VTable :columns="columnasMatriz" :rows="grupo.filas">
+                <template #cell-accion="{ row }">
+                  {{ row.accion }}
+                  <p v-if="row.nota" class="mt-1 text-xs text-danger">⚠ {{ row.nota }}</p>
+                </template>
+                <template v-for="rol in ROLES_MATRIZ" :key="rol" #[`cell-${rol}`]="{ row }">
+                  <span v-if="row.roles.includes(rol)" class="text-success">✓</span>
+                  <span v-else class="text-text-soft/40">—</span>
+                </template>
+                <template #cell-fuente="{ row }">
+                  <code class="text-xs text-text-soft">{{ row.fuente }}</code>
+                </template>
+              </VTable>
+            </VCard>
+          </div>
+
+          <div>
+            <h4 class="mb-1.5 text-xs font-bold uppercase tracking-wide text-text-soft">Visibilidad de Pedidos por obra (no es por rol)</h4>
+            <p class="text-xs text-text-soft">
+              Qué obras ve cada usuario en Pedidos/Despachos/Cargas/Historial no depende del
+              rol sino de su fila individual en <code>plantas_usuarios_roles</code>
+              (<code>ver_todas_obras</code>, <code>obra_ids</code>, <code>ver_ventas</code> —
+              RLS de <code>plantas_pedidos</code>/<code>plantas_cargas_asfalto</code>/
+              <code>plantas_cargas_hormigon</code>/<code>plantas_pedidos_historial</code>,
+              migraciones 17 y 23). Se administra desde la tab "Usuarios" de acá arriba, no
+              hay nada que configurar por rol. Hoy los 22 usuarios reales tienen
+              <code>ver_todas_obras = true</code> — el filtro no restringe a nadie todavía.
+            </p>
+          </div>
+        </div>
+
+        <h3 class="mb-1 mt-6 text-sm font-semibold text-text-strong">Pantallas visibles (solo UI)</h3>
+        <p class="mb-3 text-xs text-text-soft">
+          Controla qué pestañas/botones muestra la interfaz — se define en
+          <code>src/stores/auth.store.js#PERMISOS_POR_ROL</code>. No es un control de
+          seguridad por sí solo, es la matriz de arriba la que no se puede saltear.
         </p>
         <div class="space-y-4">
           <VCard v-for="(permisos, rol) in PERMISOS_POR_ROL" :key="rol">

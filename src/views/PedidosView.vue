@@ -65,6 +65,7 @@ const {
   pedidoCancelar,
   motivoCancelacion,
   cancelando,
+  errorCancelacion,
   abrirCancelacion,
   confirmarCancelacion,
   archivar,
@@ -676,6 +677,9 @@ iniciar()
     <!-- Cancelación -->
     <VModal :open="modalCancelAbierto" title="Cancelar pedido" @update:open="modalCancelAbierto = $event">
       <form class="space-y-3" @submit.prevent="confirmarCancelacion">
+        <div v-if="errorCancelacion" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
+          {{ errorCancelacion }}
+        </div>
         <label class="block text-sm text-text-mid">
           Motivo (obligatorio)
           <textarea

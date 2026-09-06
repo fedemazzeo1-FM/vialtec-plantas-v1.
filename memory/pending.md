@@ -188,6 +188,200 @@ criterio que se usó el 2026-09-01 con `migracion_historial_v2.sql`. Sin
 este paso, el sistema nuevo podría volver a asignar un número ya usado por
 el legado recién migrado.
 
+## ✅ Prueba de flujo TOTAL — casos de borde (Paso 1, parte 2) — 2026-09-06, APLICADO y VERIFICADO
+
+Continuación de la prueba de flujo de la sección de arriba (que cubrió solo
+el camino feliz de un despacho de asfalto simple) — pedido explícito de
+Federico de cubrir además los casos de borde: Postergar/Cancelar/Dividir
+pedido, hormigón multi-carga, Báscula ingreso/egreso de áridos, Corregir
+despacho, Usuarios y Permisos, Dashboard y exports a Excel. Misma
+metodología: datos mínimos marcados "PRUEBA QA - BORRAR"/"QA Test" contra
+producción, verificación por SQL antes/después, borrado íntegro y stock
+repuesto exacto al terminar cada caso (verificado, 0 rastros).
+
+**Todo lo probado funcionó correctamente:**
+- **Postergar → re-confirmar**: pedido postergado (fecha nueva + motivo)
+  vuelve a `confirmado` sin problema (transición documentada en
+  `business-rules.md`), timeline de 4 eventos correcto.
+- **Despacho parcial + Dividir pedido**: 6 de 10 tn despachadas → pedido
+  original `despachado` (6tn), pedido residual `confirmado` (4tn, fecha
+  elegida) creado automáticamente. Stock descontado exacto por fórmula.
+- **Cancelar pedido**: bloqueado sin motivo (mensaje "cancelarPedido: el
+  motivo es obligatorio", ver hallazgo 🟡 abajo), cancela bien con motivo,
+  sin reactivación posible después (solo queda "Archivar" en la card).
+- **Hormigón multi-carga**: 2 cargas (2 remitos distintos) sobre un mismo
+  pedido, cierran el pedido con el total sumado correcto, descuento de
+  stock exacto en los 6 materiales de la fórmula (Agua excluida).
+- **Báscula — Ingreso de áridos**: vale con N° real correlativo (confirma
+  que el fix de `obtenerProximoNumeroVale()` de la renumeración de arriba
+  funciona), stock actualizado por la **cantidad declarada en el remito**
+  (no el peso neto pesado), diferencia trazable.
+- **Báscula — Egreso de áridos**: vale con N° real correlativo, stock
+  descontado por el **peso neto real** (no hay remito de origen acá) —
+  ambos casos respetan exactamente `business-rules.md`.
+- **Corregir despacho**: cambia `cantidad_despachada` y reajusta stock
+  (`recalculo_despacho`) — ver hallazgo 🔴 abajo, el reajuste no siempre es
+  correcto.
+- **Usuarios y Permisos**: la Migración 21 ya estaba aplicada (ver sección
+  dedicada más abajo, corrección de una entrada vieja de este archivo que
+  había quedado desactualizada) — alta y edición de usuario probadas
+  end-to-end, funcionan.
+- **Dashboard/Home**: KPIs, consumo de material y próximos despachos
+  cargan sin errores de consola con los datos reales post-limpieza.
+- **Exports a Excel**: los 3 de Stock (Stock actual, Historial de
+  ingresos, Analítica de proveedores), el Informe mensual de Despachos y
+  el de Báscula — los 5 generan un `.xlsx` válido. **Nota de proceso**: la
+  descarga tarda 2-6 segundos en materializarse en disco (ExcelJS
+  generando el archivo) — un chequeo inmediato después del click puede dar
+  falso negativo, hay que esperar antes de concluir que un export falló.
+  **Pedidos no tiene botón de exportar Excel** — gap ya documentado desde
+  la Fase 1 (2026-08-28), no es un bug de esta prueba, sigue pendiente si
+  se lo quiere agregar.
+
+**Hallazgos reales encontrados:**
+
+1. **🔴 Corregir despacho puede crear stock fantasma** —
+   `plantas_descontar_stock_despacho()` (llamado desde `corregir_despacho`)
+   recalcula el delta de stock como `fórmula × (cantidad_nueva −
+   cantidad_vieja)`, asumiendo que el despacho original consumió el 100%
+   de lo que la fórmula indicaba. Si un material estaba en el piso de 0
+   durante el despacho original (por diseño, `plantas_aplicar_movimiento_stock`
+   no descuenta ni deja rastro cuando el delta aplicado da 0 — decisión de
+   Federico de mantener así, ver sección de arriba), la corrección
+   posterior le "devuelve" kg que en la realidad nunca salieron, generando
+   stock que no existe. Reproducido en vivo: pedido de 6tn de asfalto con
+   Asfalto CA30 en 0 → corregido a 5.5tn → Asfalto CA30 pasó de 0 a 22.5kg
+   fantasma. **Sin corregir, pendiente de decisión de Federico** sobre
+   cómo tratarlo (¿la corrección debería leer el histórico real de
+   movimientos del pedido en vez de recalcular desde la fórmula?).
+2. **🟡 Menor — Cancelar pedido pisa las `observaciones` originales**:
+   `cancelar_pedido()` hace `update ... set observaciones = p_motivo`,
+   reemplazando cualquier nota previa del pedido (ej. instrucciones de
+   entrega) por el motivo de cancelación — el motivo ya queda guardado
+   también en `plantas_pedidos_historial.motivo` (con auditoría completa),
+   así que pisar `observaciones` es innecesario y pierde información.
+3. **🟡 Menor — mensaje de validación de "Cancelar pedido" mal ubicado**:
+   al cancelar sin motivo, el error ("cancelarPedido: el motivo es
+   obligatorio" — string crudo con el nombre de la función interna) se
+   muestra en un banner arriba de la página, no dentro del modal — con el
+   modal abierto tapa esa zona, un usuario real podría no verlo.
+
+## ✅ Fix de los 2 hallazgos de arriba — 2026-09-06, APLICADO y VERIFICADO
+
+Decisión de Federico sobre los 3 hallazgos de la sección de arriba:
+
+1. **Corregir despacho — stock fantasma**: `plantas_descontar_stock_despacho()`
+   (migración 22, `supabase/migrations/22_fix_corregir_despacho_y_cancelar_pedido.sql`)
+   ahora calcula el ajuste contra el **historial real** de
+   `plantas_stock_movimientos` de ese pedido+material (`sum` de los tipos
+   `egreso_despacho`/`recalculo_despacho`, que son los únicos que esta misma
+   función genera) en vez de recalcular desde la fórmula asumiendo consumo
+   completo. Efecto colateral bueno: la función queda **idempotente** —
+   correcciones repetidas sobre el mismo pedido siempre convergen al valor
+   correcto, sin importar cuántas veces se corrija ni si algún material tocó
+   el piso de 0 en el medio. El primer llamado (desde `finalizar_despacho`,
+   sin movimientos previos) se comporta idéntico a antes — no cambia nada
+   del flujo normal de despacho, solo el de corrección.
+   **Reproducido el bug original y verificado el fix en vivo**: mismo
+   escenario (pedido de 6tn CAC D19 con Asfalto CA30 en 0, corregido a
+   5.5tn) — Asfalto CA30 se mantuvo en 0 (antes pasaba a 22.5kg fantasma),
+   Piedra 6/20 y Arena 0/6 siguieron acreditándose bien (+235kg/+265kg,
+   igual que en el caso sin bug).
+2. **Cancelar pedido — observaciones**: `cancelar_pedido()` (misma
+   migración 22) ahora concatena `"MOTIVO CANCELACIÓN: <motivo> | OBS:
+   <observación original>"` en vez de pisarla — verificado en vivo con un
+   pedido con observación previa, el resultado final coincide exacto con
+   el formato pedido.
+3. **Modal de cancelación — mensaje mal ubicado**: nuevo ref
+   `errorCancelacion` en `usePedidos.js` (propio del modal, no comparte el
+   `error` genérico de la vista) + bloque de error dentro del `<form>` del
+   modal en `PedidosView.vue`, mismo estilo que ya usa el modal de
+   Postergar. De paso, `pedidos.service.js#cancelarPedido()` dejó de tirar
+   el string crudo `"cancelarPedido: el motivo es obligatorio"` (nombre de
+   función filtrado) por uno legible. Verificado en vivo: al cancelar sin
+   motivo, el mensaje aparece dentro del modal, arriba del textarea.
+
+**Archivos**: `supabase/migrations/22_fix_corregir_despacho_y_cancelar_pedido.sql`
+(aplicada), `src/modules/pedidos/composables/usePedidos.js`,
+`src/modules/pedidos/services/pedidos.service.js`, `src/views/PedidosView.vue`.
+Build verificado (`npm run build` limpio) y probado en vivo con datos QA
+borrados íntegramente al terminar (stock repuesto exacto).
+
+## ✅ Paso 3 — RLS fina por rol/obra (tarea P0.2) — 2026-09-06, APLICADO y VERIFICADO
+
+Antes de escribir política alguna, auditoría en vivo contra `pg_policies`/
+`pg_proc` de producción (no contra lo que decían `pending.md`/`modules-
+status.md`, que estaban desactualizados en esto también) — bien menos
+gap del que se creía:
+
+- **Ya estaba resuelto**: `plantas_pedidos` tiene SELECT filtrado por obra
+  desde la migración 17 (2026-08-31) — `ver_todas_obras`/`obra_ids`/
+  `ver_ventas` de `plantas_usuarios_roles`. Los 22 usuarios reales tienen
+  `ver_todas_obras=true` hoy, así que el filtro no restringe a nadie
+  todavía (decisión de Federico, "evitar bloqueos iniciales"). Toda la
+  escritura de Pedidos/Báscula/Stock ya pasa por RPC `SECURITY DEFINER`
+  (bypassea RLS) — confirmado que no hay policy de INSERT/UPDATE/DELETE
+  para `authenticated` en esas tablas antes de tocar nada.
+- **Gaps reales encontrados** (los cerró la migración 23,
+  `supabase/migrations/23_rls_fina_rol_obra.sql`):
+  1. `plantas_cargas_asfalto`/`hormigon` y `plantas_pedidos_historial`
+     seguían con SELECT sin filtrar (`using(true)`) — se extendió el mismo
+     criterio de obra que ya usa `plantas_pedidos`, vía función nueva
+     `plantas_puede_ver_obra(obra_id, tipo_pedido)` (no duplica la lógica).
+  2. `plantas_vales`/`plantas_ingresos` (detalle de Báscula) y
+     `plantas_stock`/`plantas_stock_movimientos` eran legibles por
+     cualquier autenticado aunque esas pantallas ni aparecen en el menú de
+     `encargado`/`supervisor`/`plantista_hormigon`
+     (`PERMISOS_POR_ROL`, `src/stores/auth.store.js`) — se restringió por
+     rol con 2 funciones nuevas: `plantas_puede_ver_bascula()`
+     (`admin`/`plantista`/`balancero`) y `plantas_puede_ver_stock()`
+     (esos 3 + `gerencia`).
+  3. `plantas_formulas`/`materiales`/`patentes`/`proveedores`/`choferes`/
+     `encargados` aceptaban INSERT/UPDATE/DELETE de cualquier autenticado
+     — confirmado en código (`maestros.service.js`/`formulas.service.js`
+     escriben directo, sin RPC, a diferencia de Pedidos/Báscula). Riesgo
+     real más alto en fórmulas/materiales (afectan el cálculo de consumo/
+     descuento de stock). Escritura restringida a `admin`/`plantista` en
+     los 6 catálogos (decisión de Federico: mismo criterio para todos, no
+     diferenciar balancero en patentes/choferes) — lectura sin cambios
+     (varios roles la necesitan para dropdowns).
+- **plantas_pedidos y plantas_usuarios_roles: sin cambios**, ya estaban
+  bien.
+
+**Hallazgo colateral, no corregido a propósito (no fue pedido)**:
+`postergar_pedido()` es la única RPC de Pedidos **sin ningún chequeo de
+rol** — cualquier usuario autenticado puede postergar un pedido si tiene la
+pantalla visible, a diferencia de crear/confirmar/cancelar/despachar/
+corregir/archivar que sí validan `plantas_rol_actual()`. Bajo impacto (solo
+cambia fecha/motivo, no toca stock ni cierra nada), pero es una
+inconsistencia real frente al resto de las transiciones de estado. Queda
+documentado en la matriz nueva de "Permisos por rol" (ver abajo) con una
+nota visible en rojo — decisión de si corregirlo queda para Federico.
+
+**Regresión verificada**: build limpio, smoke test en vivo como admin
+(único rol con sesión real disponible) en Stock/Báscula — sin cambios, todo
+sigue andando. No fue posible loguearse como los otros 6 roles reales para
+probarlos en vivo (no se piden ni escriben contraseñas ajenas) — la
+verificación de esos roles es por lectura de código (cada policy/RPC
+citada arriba, trazable 1 a 1 contra `pg_policies`/`pg_proc`).
+
+**Matriz real de permisos — `UsuariosPermisosView.vue`** (pedido de
+Federico durante esta misma sesión: "permisos por rol es solo para el
+admin, hacelo bien detallado y real"): la tab "Permisos por rol" (ya
+admin-only desde antes, sin cambios en el guard) pasó de mostrar solo el
+resumen de `PERMISOS_POR_ROL` (qué pestañas/botones oculta la UI) a una
+matriz nueva arriba, por acción × los 7 roles, citando la RPC o policy de
+RLS real que la hace cumplir (Pedidos, Báscula, Stock, Maestros, Usuarios)
+— incluye la nota del hallazgo de `postergar_pedido` de arriba. El resumen
+de `PERMISOS_POR_ROL` se conserva debajo, aclarado como "solo UI, no es
+control de seguridad por sí solo". Es una matriz hardcodeada a mano (no se
+puede introspectar RPC/RLS desde el frontend en runtime) — **si se cambia
+el rol permitido de alguna RPC o policy a futuro, hay que actualizar
+`MATRIZ_REAL_PERMISOS` en el archivo a mano, no se sincroniza sola**.
+
+**Archivos**: `supabase/migrations/23_rls_fina_rol_obra.sql` (aplicada),
+`src/views/UsuariosPermisosView.vue`. Build verificado.
+
 ## ✅ Báscula: impresión round 3 + Vale para egreso de áridos — 2026-09-04 (madrugada), APLICADO y VERIFICADO
 
 Después del round 2 (más abajo), Federico sacó el filtro de fecha "hoy" por
@@ -1609,7 +1803,23 @@ calcar `green/red/amber/blue` como en Flota) antes de aplicar el config.
 Un valor (`amber-light`) quedó sin confirmar, marcado explícitamente en el
 documento.
 
-## 🔴 Confirmación pendiente — Migración 21: Usuarios y Permisos por rol (2026-09-03)
+## ✅ Migración 21 (Usuarios y Permisos por rol) — YA APLICADA, sección anterior desactualizada
+
+**Corrección 2026-09-06**: la sección de abajo (2026-09-03) quedó desactualizada
+sin que nadie la actualizara cuando se resolvió — `modules-status.md` fila #9
+ya documentaba correctamente "Migración 21 aplicada 2026-09-03 noche", pero
+esta sección de `pending.md` seguía pidiendo confirmación para algo que ya
+estaba hecho. Verificado hoy en vivo, sin ambigüedad: la policy "admin lee
+todos los usuarios" y el RPC `admin_upsert_usuario_rol` existen en producción,
+y **probé el flujo completo end-to-end** (alta de usuario de prueba con rol
+`encargado` + obra asignada, edición cambiando el rol a `supervisor`, borrado
+de limpieza) — las 3 operaciones funcionan correctamente vía RPC. Tab
+"Permisos por rol" también verificada, renderiza la matriz de los 7 roles sin
+errores. **La tab "Usuarios" está 100% operativa, no hay nada pendiente acá.**
+Se conserva el texto original abajo como referencia histórica de la decisión
+de diseño, pero ya no es accionable.
+
+### (Histórico, ya resuelto) Confirmación pendiente — Migración 21: Usuarios y Permisos por rol (2026-09-03)
 
 Pedido explícito de Federico: *"MÓDULO DE USUARIOS Y PERMISOS POR ROL: Incluir
 la pestaña/tab 'Usuarios' dentro del Módulo de Permisos por Rol para unificar
@@ -1617,21 +1827,7 @@ ahí toda la administración de cuentas y asignación de roles. Restringir el
 acceso a este módulo y sus configuraciones exclusivamente a usuarios con rol
 Admin."*
 
-**Ya hecho** (sin tocar la base de datos): `/usuarios` — nueva pantalla con 2
-tabs (`UsuariosPermisosView.vue`), servicio (`usuarios.service.js`) y
-composable (`useUsuariosRoles.js`). Visible/accesible SOLO para rol admin (el
-link de nav se filtra solo — admin es el único rol con `tabs: 'todas'` en
-`PERMISOS_POR_ROL` — y el router bloquea el acceso directo por URL con el
-mismo guard genérico de siempre). Tab "Permisos por rol" ya funciona 100% (es
-de solo lectura, muestra la matriz que ya vive en `auth.store.js`, no toca la
-DB). Build verificado.
-
-**Falta tu confirmación para la tab "Usuarios"** (alta/edición de cuentas):
-hoy la RLS de `plantas_usuarios_roles` (migración 07) solo deja a cada
-usuario leer SU PROPIA fila, y no existe ninguna vía de escritura desde el
-cliente — a propósito, según el comentario de esa misma migración ("hasta
-que exista la pantalla ABM de Roles"), que es exactamente esto. Dejé armada
-la migración 21 como **borrador, sin aplicar**, en
+Dejé armada la migración 21 como **borrador, sin aplicar**, en
 `supabase/migrations/21_admin_gestion_usuarios_roles.sql`:
 - Agrega una policy de SELECT: admin puede leer todas las filas (la policy
   de "cada uno lee la suya" sigue intacta).
@@ -1640,16 +1836,6 @@ la migración 21 como **borrador, sin aplicar**, en
   mismo patrón que ya usan Pedidos/Báscula.
 - 100% aditivo, no toca datos existentes. Reversible con 2 `drop` (detallado
   al final del archivo).
-
-Por favor revisá el archivo y confirmame para aplicarla (`mcp supabase
-apply_migration` o el flujo que prefieras) — recién ahí la tab "Usuarios"
-queda 100% operativa. Mientras tanto la pantalla ya avisa esto mismo en un
-cartel visible arriba de la tabla, no falla en silencio.
-
-**Verificado en vivo** (2026-09-03 de madrugada, logueado como admin): las 2
-tabs cargan sin errores — "Permisos por rol" muestra la matriz completa de
-los 7 roles correctamente; "Usuarios" muestra el cartel de aviso + tu propia
-fila (único resultado posible hoy bajo la RLS actual, como se esperaba).
 
 ## ⚠️ Ambigüedad sin resolver — orientación de vale/remito (2026-09-03)
 

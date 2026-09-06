@@ -109,8 +109,12 @@ Falta antes de considerar esto terminado:
    flota (`rol` en su propio vocabulario, `es_admin`,
    `puede_aprobar_obra/taller/stock`), no una tabla neutra de nombres —
    no se debe insertar ahí sin que él confirme rol/flags.
-2. Tarea P0.2: RLS fina por rol/obra (reemplazar los `using (true)` de la
-   migración 08).
+2. ~~Tarea P0.2: RLS fina por rol/obra (reemplazar los `using (true)` de la
+   migración 08).~~ — **COMPLETADA 2026-09-06**, migración 23. Ver
+   `pending.md` para el detalle completo (helpers
+   `plantas_puede_ver_obra/bascula/stock`, tablas cubiertas, hallazgo de
+   `postergar_pedido` sin chequeo de rol) y el módulo "Usuarios y
+   Permisos" abajo (fila #9) para la matriz real nueva en la UI.
 3. **Pregunta abierta sin resolver**: Federico mencionó que el sistema viejo
    vive en tablas `vt_f9`/`vt_s9`/`vt_maestros9` en esta misma base — se
    verificó contra el schema real (`information_schema.tables`, todos los
@@ -380,7 +384,11 @@ Fase 1). Fuera de alcance a propósito, no pedido por Federico esta vez: los
 5 botones de export (Eficiencia, Resumen mensual, Excel período, Por obra,
 Excel completo) y el Resumen mensual completo (reporting pesado, toca
 Stock + Ventas externas). Visibilidad "solo mis despachos" para
-encargado/supervisor sigue pendiente de RLS fina (P0.2).
+encargado/supervisor: el mecanismo de RLS por obra ya existe desde la
+migración 23 (2026-09-06, ver `pending.md`), pero sigue sin restringir a
+nadie porque los 22 usuarios reales tienen `ver_todas_obras=true` — activar
+la restricción real es una decisión de asignación de `obra_ids` por
+persona, no una tarea de código pendiente.
 
 ## Stock e Inventarios — COMPLETADO (MVP) — 2026-08-31
 
