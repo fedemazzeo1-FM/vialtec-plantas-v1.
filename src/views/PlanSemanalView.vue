@@ -4,7 +4,7 @@
 // pasa por pedidos.service.js — este componente no llama a Supabase
 // directamente (memory/conventions.md).
 
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import VCard from '@/components/shared/VCard.vue'
 import VKpiCard from '@/components/shared/VKpiCard.vue'
 import VBadge from '@/components/shared/VBadge.vue'
@@ -19,6 +19,9 @@ import {
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { hoyISO } from '@/services/fecha'
+import { useBreakpoint } from '@/composables/useBreakpoint'
+
+const { esMobile } = useBreakpoint()
 
 const NOMBRES_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 const VARIANTE_ESTADO = {
@@ -123,12 +126,24 @@ async function cargarSemana() {
     totales.value = totalesSemana
     obras.value = listaObras
     formulas.value = listaFormulas
+    // Mobile (2026-09-07, roadmap: "operatividad rápida"): en la grilla
+    // apilada de 1 columna, "hoy" puede quedar varios scrolls por debajo del
+    // lunes (ej. si se entra un viernes) — se autoscrollea a la columna del
+    // día actual apenas termina de renderizar, sin animación brusca (scroll
+    // suave). Solo aplica en mobile: en desktop las 7 columnas ya se ven
+    // todas juntas, no hay nada que scrollear.
+    if (esMobile.value) {
+      await nextTick()
+      diaHoyRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   } catch (e) {
     error.value = e.message
   } finally {
     cargando.value = false
   }
 }
+
+const diaHoyRef = ref(null)
 
 function semanaAnterior() {
   const f = new Date(fechaRef.value)
@@ -202,6 +217,7 @@ cargarSemana()
           <div
             v-for="dia in diasSemana"
             :key="dia.iso"
+            :ref="(el) => { if (dia.esHoy) diaHoyRef.value = el }"
             class="flex flex-col"
             :class="dia.esFinDeSemana && !dia.esHoy ? 'bg-gray-50/60' : ''"
           >

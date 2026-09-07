@@ -29,6 +29,17 @@
 // tipo_vale, réplica del legado). Se aplica tanto en la card mobile como en
 // el <tr> desktop — un solo lugar para no duplicar el criterio de color por
 // breakpoint. Devuelve '' o algo falsy si la fila no necesita clase extra.
+//
+// `col.secundaria: true` (opcional, 2026-09-07 — roadmap mobile, pedido de
+// Federico: "menos sobrecarga de datos secundarios" en listados de tablas
+// densas como el historial de Báscula, 14 columnas). Solo afecta el modo
+// card mobile: esas columnas quedan colapsadas detrás de un toggle "Ver
+// más"/"Ver menos" por card en vez de mostrarse siempre — mismo dato,
+// ningún caller pierde información, solo cambia qué se ve por default en
+// pantalla chica. Sin ninguna columna marcada `secundaria`, el comportamiento
+// es idéntico a antes (todas las columnas siempre visibles). Desktop no se
+// toca — ahí siempre se ven todas las columnas, como siempre.
+import { reactive } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 
 defineProps({
@@ -43,6 +54,12 @@ defineProps({
 defineEmits(['update:page'])
 
 const { esMobile } = useBreakpoint()
+
+const filasExpandidas = reactive(new Set())
+function toggleExpandida(key) {
+  if (filasExpandidas.has(key)) filasExpandidas.delete(key)
+  else filasExpandidas.add(key)
+}
 </script>
 
 <template>
@@ -57,7 +74,7 @@ const { esMobile } = useBreakpoint()
       >
         <div class="space-y-1.5">
           <div
-            v-for="col in columns.filter((c) => c.key !== 'acciones')"
+            v-for="col in columns.filter((c) => c.key !== 'acciones' && !c.secundaria)"
             :key="col.key"
             class="flex items-start justify-between gap-3 text-sm"
           >
@@ -69,6 +86,34 @@ const { esMobile } = useBreakpoint()
             </span>
           </div>
         </div>
+
+        <!-- Columnas secundarias: colapsadas por default (menos ruido en la
+             primera mirada), un toggle por card las despliega sin perder el
+             dato — nunca se ocultan del todo. -->
+        <template v-if="columns.some((c) => c.secundaria)">
+          <button
+            type="button"
+            class="mt-2 flex min-h-[36px] items-center gap-1 text-xs font-semibold text-vialtec"
+            @click="toggleExpandida(row.id ?? i)"
+          >
+            {{ filasExpandidas.has(row.id ?? i) ? '▴ Ver menos' : '▾ Ver más' }}
+          </button>
+          <div v-if="filasExpandidas.has(row.id ?? i)" class="mt-1.5 space-y-1.5 border-t border-border pt-2">
+            <div
+              v-for="col in columns.filter((c) => c.secundaria)"
+              :key="col.key"
+              class="flex items-start justify-between gap-3 text-sm"
+            >
+              <span class="shrink-0 text-xs font-semibold uppercase tracking-wide text-text-soft">{{ col.label }}</span>
+              <span class="text-right text-text">
+                <slot :name="`cell-${col.key}`" :row="row" :index="i">
+                  {{ col.format ? col.format(row[col.key], row) : row[col.key] }}
+                </slot>
+              </span>
+            </div>
+          </div>
+        </template>
+
         <div v-if="columns.some((c) => c.key === 'acciones')" class="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
           <slot name="cell-acciones" :row="row" :index="i" />
         </div>

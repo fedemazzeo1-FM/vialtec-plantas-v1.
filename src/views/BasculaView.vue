@@ -72,23 +72,31 @@ const {
 // contra produccion.vialtec.app): HORA, TIPO, MATERIAL/OBRA, PATENTE,
 // REMITO, RESPONSABLE, VALE, BRUTO, TARA, NETO, ACUM., S/REMITO, DIF., E/S.
 // Ancho total intencional (14 columnas + acciones) — en desktop scrollea
-// horizontal como en el legado, en mobile cada vale se ve como card
-// (VTable.vue, roadmap Mobile) sin tocar esta config.
+// horizontal como en el legado y se ven las 14 igual que siempre.
+//
+// Mobile (roadmap 2026-09-07, "menos sobrecarga de datos secundarios"):
+// con 14 columnas, la card de VTable.vue quedaba mostrando 14 renglones de
+// golpe por vale — mucho para una consulta rápida parado en la báscula.
+// `secundaria: true` (VTable.vue) deja Hora/Tipo/Material-Obra/Patente/N°
+// Vale/Neto siempre visibles (lo que un balancero necesita de un vistazo) y
+// el resto (Remito/Responsable/Bruto/Tara/Acum./S-Remito/Dif./E-S) atrás de
+// un "Ver más" por card — mismo dato, un toque para verlo completo. Ningún
+// cambio en desktop (esa columna se sigue viendo siempre en la tabla).
 const columnasHistorial = [
   { key: 'horaLabel', label: 'Hora' },
   { key: 'tipo_vale', label: 'Tipo' },
   { key: 'materialObraLabel', label: 'Material/Obra' },
   { key: 'patente', label: 'Patente' },
-  { key: 'remitoLabel', label: 'Remito' },
-  { key: 'responsableLabel', label: 'Responsable' },
+  { key: 'remitoLabel', label: 'Remito', secundaria: true },
+  { key: 'responsableLabel', label: 'Responsable', secundaria: true },
   { key: 'numero_vale', label: 'N° Vale', format: (v) => formatearNumeroVale(v) },
-  { key: 'peso_bruto', label: 'Bruto', format: (v) => Number(v).toFixed(2) },
-  { key: 'tara', label: 'Tara', format: (v) => Number(v).toFixed(2) },
+  { key: 'peso_bruto', label: 'Bruto', format: (v) => Number(v).toFixed(2), secundaria: true },
+  { key: 'tara', label: 'Tara', format: (v) => Number(v).toFixed(2), secundaria: true },
   { key: 'pesoNetoLabel', label: 'Neto' },
-  { key: 'acumuladoLabel', label: 'Acum.' },
-  { key: 'sRemitoLabel', label: 'S/Remito' },
-  { key: 'diferenciaLabel', label: 'Dif.' },
-  { key: 'entradaSalida', label: 'E/S' },
+  { key: 'acumuladoLabel', label: 'Acum.', secundaria: true },
+  { key: 'sRemitoLabel', label: 'S/Remito', secundaria: true },
+  { key: 'diferenciaLabel', label: 'Dif.', secundaria: true },
+  { key: 'entradaSalida', label: 'E/S', secundaria: true },
   { key: 'acciones', label: '' },
 ]
 

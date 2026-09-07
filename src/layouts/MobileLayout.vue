@@ -17,7 +17,13 @@ import { SECCIONES, SECCION_ADMINISTRACION, ICONOS } from '@/layouts/nav'
 const auth = useAuthStore()
 const menuAbierto = ref(false)
 
-const TABS_INFERIOR = ['pedidos', 'bascula', 'despachos', 'stock']
+// Prioridad de la nav inferior (2026-09-07, pedido explícito de Federico:
+// "priorizar los módulos estrictamente operativos" para uso rápido desde el
+// celular) — Báscula/Pedidos/Plan semanal/Stock son las 4 pantallas de
+// operación diaria en planta; Despachos (más de reporte/consulta que de
+// carga rápida) baja a la hoja "Más" junto con el resto. Antes era
+// ['pedidos', 'bascula', 'despachos', 'stock'].
+const TABS_INFERIOR = ['bascula', 'pedidos', 'plan-semanal', 'stock']
 
 // SECCION_ADMINISTRACION no tiene tratamiento especial de "pinneado abajo"
 // acá (2026-09-06) — a diferencia de DesktopLayout, "Más" ya es una hoja
@@ -29,8 +35,17 @@ const todosLosLinks = computed(() =>
   TODAS_LAS_SECCIONES.flatMap((s) => s.links).filter((l) => auth.puedeVerTab(l.tab))
 )
 
+// Label corto solo para la nav inferior (2026-09-07) — "Plan semanal" no
+// entra cómodo en una de 4 columnas a 10px sin romper en 2 líneas
+// desprolijas; el resto de los labels ya son cortos de por sí. No se toca
+// `nav.js` (fuente compartida con Desktop y la hoja "Más", donde sí hay
+// lugar de sobra para el nombre completo).
+const ETIQUETA_CORTA_INFERIOR = { 'plan-semanal': 'Semanal' }
+
 const linksNavInferior = computed(() =>
-  TABS_INFERIOR.map((tab) => todosLosLinks.value.find((l) => l.tab === tab)).filter(Boolean)
+  TABS_INFERIOR.map((tab) => todosLosLinks.value.find((l) => l.tab === tab))
+    .filter(Boolean)
+    .map((link) => ({ ...link, labelCorta: ETIQUETA_CORTA_INFERIOR[link.tab] ?? link.label }))
 )
 
 // El resto de los módulos visibles para el rol (los que no entran en la nav
@@ -85,7 +100,7 @@ function cerrarMenu() {
           class="h-6 w-6 shrink-0"
           v-html="ICONOS[link.icon]"
         />
-        <span class="text-[10px] font-semibold">{{ link.label }}</span>
+        <span class="text-[10px] font-semibold">{{ link.labelCorta }}</span>
       </router-link>
       <button
         type="button"

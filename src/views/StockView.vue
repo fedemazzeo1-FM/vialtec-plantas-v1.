@@ -48,14 +48,18 @@ const TIPOS_MOVIMIENTO = [
   { value: 'ingreso_manual', label: 'Ingreso manual' },
 ]
 
+// `secundaria` (2026-09-07, roadmap mobile): en la card mobile, Remito y
+// Responsable quedan atrás de "Ver más" — lo que importa de un vistazo es
+// fecha/material/cantidad/proveedor, no quién lo cargó ni el N° de remito
+// (VTable.vue). Desktop sigue mostrando las 7 columnas siempre.
 const columnasHistorial = [
   { key: 'fecha_movimiento', label: 'Fecha', format: (v) => new Date(v).toLocaleString('es-AR') },
   { key: 'tipo', label: 'Tipo' },
   { key: 'materialNombre', label: 'Material' },
   { key: 'cantidad_kg', label: 'Cantidad' },
   { key: 'origen', label: 'Proveedor / Motivo' },
-  { key: 'numero_remito', label: 'Remito' },
-  { key: 'responsableNombre', label: 'Responsable' },
+  { key: 'numero_remito', label: 'Remito', secundaria: true },
+  { key: 'responsableNombre', label: 'Responsable', secundaria: true },
 ]
 
 const {
