@@ -1,5 +1,67 @@
 # pending.md — Pendientes
 
+## ✅ Plan Semanal — pedidos despachados sin marcar + obra faltante (2026-09-07, post-corte)
+
+Federico reportó viendo Plan Semanal: varios pedidos de martes/miércoles/
+jueves (01, 02 y 03/09) figuraban "Confirmado" cuando deberían estar
+despachados, y uno del miércoles mostraba "Obra sin asignar". No tenía
+acceso al legado para comparar (ya dado de baja). Investigado y corregido
+en producción — dos causas distintas, ambas heredadas de datos del
+legado, no bugs de esta sesión:
+
+**1) 5 de 6 pedidos "confirmado" ya estaban despachados de verdad.**
+Cada uno tenía su evento `despachado` en `plantas_pedidos_historial`
+(03/09, usuario "Felix Pereyra") Y sus cargas/vales reales cargados —
+pero el campo `plantas_pedidos.estado` se había quedado en "confirmado".
+Es una inconsistencia del propio legado (el campo de estado del pedido
+nunca se sincronizó con el historial ahí), que la migración del delta
+copió tal cual venía. Consecuencia real, no solo visual: como esos 5
+pedidos nunca pasaron por `estado = 'despachado'` en el sistema nuevo,
+**el stock nunca se descontó** para esas 5 entregas.
+
+Corregido (autorizado por Federico) para los 5:
+`21a1360b…` (hormigón, Previal-Ute, 30 m³), `e16bc19b…` (hormigón, Predio
+Vialtec, 3 m³), `52a1a0a9…` (asfalto venta AUTOVIA MERCOSUR, 350.28 tn —
+suma real de 12 vales, no la cantidad solicitada de 400), `f451ac0b…`
+(asfalto venta MUNICIPALIDAD DE PILAR, 40.80 tn), `b59864f7…` (asfalto,
+Municipalidad Exaltación de la Cruz, 7.98 tn). Para cada uno: `UPDATE
+plantas_pedidos SET estado='despachado', cantidad_despachada=<suma real
+de cargas/vales>` + `SELECT plantas_descontar_stock_despacho(id, 0,
+cantidad_despachada)` (misma función que usa `finalizar_despacho()`,
+llamada directo porque no hay sesión JWT vía SQL directo — sin insertar
+un evento de historial nuevo, ya existía el real). El sexto pedido de esa
+semana (jueves, Predio Vialtec, hormigón 1.5 m³) sí estaba bien como
+"confirmado" — no tenía despacho real, se dejó igual.
+
+**2) "Obra sin asignar" — la obra no existía en `flota_obras`, no era un
+error de mapeo.** El pedido (miércoles 02/09, `b59864f7…`) pertenece a
+"Municipalidad exaltacion de la cruz" (`vt_maestros9`, id legado
+`cjlmpvj`) — esta obra nunca se cargó en `flota_obras` (tabla compartida
+con Flota). Esto YA estaba detectado desde la migración original del
+01/09 (ver más abajo, "Idempotencia..." → checklist punto 2) como
+pendiente de decisión de Federico — son 3 pedidos en total los que la
+referencian (2 ya despachados de junio/agosto 2026, más este). Otros dos
+pedidos "Obra sin asignar" de esa misma semana (venta AUTOVIA MERCOSUR /
+MUNICIPALIDAD DE PILAR) son correctos como están: son `tipo_pedido =
+'venta'` con `cliente_externo`, no llevan obra por diseño.
+
+Corregido (autorizado por Federico): `INSERT INTO flota_obras (nombre,
+estado, activo) VALUES ('Municipalidad de Exaltación de la Cruz',
+'activa', true)` → id **38** (identity, autogenerado — no se fuerza el id
+a mano). Vinculados los 3 pedidos (`obra_id = 38`) y sus **9 vales**
+asociados en `plantas_vales` (también tenían `obra_id = null`, copiado
+del pedido al momento de migrar) — necesario para que
+`plantas_puede_ver_obra()` (RLS fina, migración 23) los muestre bien a
+roles con visibilidad acotada por obra, no solo a `ver_todas_obras=true`.
+
+**Nota para el futuro**: si aparece otra obra "sin asignar" en un pedido
+`tipo_pedido = 'obra'` (no `'venta'`), el diagnóstico es el mismo: buscar
+`datos_legados->>'obraId'` en `plantas_pedidos`, cruzarlo contra
+`vt_maestros9.obras` en `kv_store` para el nombre real, y contra
+`flota_obras` para ver si existe con otro nombre/grafía o si hay que
+darla de alta — no asumir que es un bug del mapeo de la migración antes
+de descartar que la obra directamente no esté cargada en Flota.
+
 ## 🎯 Plan de corte definitivo legado → nuevo (decisión de Federico, 2026-09-04)
 
 Al mostrar Federico una captura del "Cronograma Semanal" del legado con
@@ -1601,9 +1663,12 @@ script es seguro de reintentar si algo falla a mitad de camino.
    181 migrados, Báscula/Despachos muestran los vales y despachos
    históricos, Stock refleja el saldo de `vt_s9`, Maestros lista
    materiales/proveedores/patentes migrados.
-2. Resolver a mano el pedido con `obra_id = null` (Municipalidad Exaltación
-   de la Cruz, 3 pedidos) si Federico decide crear esa obra en `flota_obras`
-   — ver detalle en la sección de arriba y en el encabezado del script.
+2. ✅ **RESUELTO 2026-09-07** — Federico confirmó crear la obra. Alta en
+   `flota_obras` (id 38, "Municipalidad de Exaltación de la Cruz") y
+   vinculación de los 3 pedidos (`obra_id = 38`) + sus 9 vales asociados
+   (también tenían `obra_id = null`, copiado del pedido al momento de
+   migrar). Ver entrada fechada más abajo, "Plan Semanal — pedidos
+   despachados sin marcar + obra faltante".
 3. Correr `select setval('plantas_vales_numero_vale_seq', (select max(numero_vale) from plantas_vales), true);`
    ya lo hace el propio script antes del `commit;` (sección 7) — no hace
    falta repetirlo a mano, pero confirmar en la UI que "Próximo N° de vale"
