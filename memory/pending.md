@@ -15,7 +15,21 @@ el filtro elegido sobrevive porque queda en la URL, no solo en memoria.
 Build verificado. **Falta que Federico confirme** que, imprimiendo de
 nuevo con un filtro no-default activo, ya no vuelve a "semana en curso".
 
-## 🔴 Remito de Báscula en portrait — 2do intento (2026-09-07), mecanismo distinto
+## ✅ Remito de Báscula en portrait — CONFIRMADO funcionando + rediseño con más espacio (2026-09-07)
+
+Federico confirmó imprimiendo de verdad: el 2do fix (mecanismo por JS,
+commit `9934d5a`) funciona — el remito sale vertical. Pidió de seguido
+aprovechar mejor la hoja ahora que es portrait real (297mm de alto, antes
+comprimido para entrar en la landscape vieja de ~210mm): paddings más
+generosos, logo más grande, C.U.I.T./I.E.R.I.C./II.BB.CM/Inicio de
+actividad apilados uno abajo del otro, 4 filas en blanco en la tabla (en
+vez de 2), y firmas con una caja en blanco real (25mm) arriba de la línea
+en vez de un simple guión bajo. Ver commit `272b748` — medido con el mismo
+harness de siempre, entra holgado (274-279mm de contenido contra 297mm
+disponibles). **Falta la última confirmación visual/impresión real** de
+este ajuste de diseño puntual (la orientación en sí ya está confirmada).
+
+## 🔴 Remito de Báscula en portrait — 2do intento (2026-09-07), mecanismo distinto — HISTÓRICO, ver entrada de arriba, ya confirmado
 
 Federico probó el primer fix (commit `76db6bf`, named page de CSS) e
 imprimiendo de verdad reportó "sigue saliendo en la hoja horizontal" —
