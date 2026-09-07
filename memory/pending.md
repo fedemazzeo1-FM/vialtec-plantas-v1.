@@ -1,6 +1,37 @@
 # pending.md — Pendientes
 
-## 🔴 4 mejoras pedidas por Federico (2026-09-07) — diagnóstico hecho, 2 migraciones + 1 corrección de datos esperando confirmación
+## ✅ 4 mejoras pedidas por Federico (2026-09-07) — APLICADO y VERIFICADO en producción
+
+**Actualización de la sección de abajo**: las 3 acciones de producción que
+esperaban confirmación (migraciones 29/30 + compensación de Fuel Oil) ya se
+corrieron y se verificaron. Antes de eso, Federico pidió explícitamente
+implementar un hand-off de sesión por URL (`access_token`/`refresh_token`
+como query params) entre Plantas y Flota — **se rechazó implementarlo**
+(riesgo real de filtración: historial del navegador, `Referer`, logs de
+proxy/CDN, sync de historial — el `refresh_token` en particular es una
+credencial de larga duración). Confirmado por Federico: el selector de
+sistema queda como redirect simple sin tokens, login por separado en cada
+sistema — comportamiento aceptado, sin pendiente de código ahí.
+
+- **Migración 29 (RLS Báscula) — APLICADA.** Reverificado en vivo
+  post-aplicación: la misma consulta de 1 semana bajó a **12ms** (era
+  706ms), y el aislamiento por rol sigue intacto (`plantista` ve los 908
+  vales, `encargado` ve 0 — probado con `set local role
+  authenticated`+`request.jwt.claims` de un usuario real de cada rol).
+- **Migración 30 (Home en la matriz) — APLICADA.** Verificado:
+  `plantas_permisos` tiene 6 filas nuevas (`modulo='dashboard',
+  accion='ver', habilitado=true`) para los 6 roles no-admin — nadie perdió
+  acceso a Home.
+- **Compensación de Fuel Oil — APLICADA.** `plantas_aplicar_movimiento_stock()`
+  (mismo mecanismo auditado que usa cualquier ajuste real, no un UPDATE
+  directo) con +1.000 kg, tipo `ajuste`, observaciones explicando la
+  reversión del test. Verificado antes/después: `plantas_stock.cantidad_kg`
+  de Fuel Oil pasó de **23.700 → 24.700 kg**, exacto.
+
+Pendiente: `npx vercel --prod` (deploy manual, a confirmar con Federico
+antes de correrlo, memory/procedimientos.md).
+
+## 🔴 4 mejoras pedidas por Federico (2026-09-07) — diagnóstico hecho, 2 migraciones + 1 corrección de datos esperando confirmación (histórico, ver sección de arriba para el resultado final)
 
 Pedido explícito de Federico: Báscula (performance + filtro), Home en la
 matriz de permisos, teléfono para WhatsApp, limpieza de un ingreso de
