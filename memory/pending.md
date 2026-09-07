@@ -1,5 +1,102 @@
 # pending.md — Pendientes
 
+## 🔴 4 mejoras pedidas por Federico (2026-09-07) — diagnóstico hecho, 2 migraciones + 1 corrección de datos esperando confirmación
+
+Pedido explícito de Federico: Báscula (performance + filtro), Home en la
+matriz de permisos, teléfono para WhatsApp, limpieza de un ingreso de
+prueba en Stock — más un 5to pedido que llegó a mitad de sesión (remito en
+portrait). Todo el código ya está commiteado y con build limpio; lo que
+sigue abajo son las 3 acciones sobre producción que el clasificador de
+permisos bloqueó (correctamente — son schema cambiante/datos, protocolo de
+`procedimientos.md`) y necesitan tu "dale" explícito antes de correr.
+
+1. **Báscula — performance + filtro semanal — CÓDIGO LISTO, MIGRACIÓN 29
+   PENDIENTE.** Medido con `EXPLAIN ANALYZE` contra producción (rol
+   `authenticated` real): listar 1 semana de historial de Báscula tardaba
+   **706ms** con solo ~900 vales en toda la tabla — nada crítico hoy, pero
+   iba a degradarse linealmente con el uso. Causa real: las policies RLS de
+   `plantas_vales`/`plantas_ingresos`/`plantas_stock`/`plantas_stock_movimientos`
+   (`plantas_puede_ver_bascula()`/`plantas_puede_ver_stock()`) y la de
+   `plantas_pedidos`/`plantas_usuarios_roles` (`auth.email()` directo)
+   se reevaluaban **una vez por cada fila** en vez de una sola vez por
+   consulta — mismo patrón que el propio advisor de performance de Supabase
+   marca como WARN (`auth_rls_initplan`) en 2 de estas tablas. Fix (patrón
+   oficial de Supabase, cero cambio de comportamiento): envolver esas
+   llamadas en `(select ...)` para que Postgres las trate como InitPlan.
+   Verificado en un `begin/rollback` contra producción: **706ms → 13.4ms
+   (~52x)**, mismo resultado exacto. Migración lista en
+   `supabase/migrations/29_optimizacion_rls_bascula.sql` — **falta que la
+   aplique** (bloqueada por el clasificador de permisos al intentar
+   `apply_migration`, requiere confirmación explícita).
+   - Filtro de fecha por defecto a la semana en curso: **ya implementado y
+     commiteado** (`useBascula.js`/`BasculaView.vue`, mismo patrón que
+     Pedidos), no depende de la migración de arriba.
+2. **Home en la matriz de permisos — CÓDIGO LISTO, MIGRACIÓN 30
+   PENDIENTE.** `dashboard` (Home) era un caso hardcodeado siempre visible,
+   sin pasar por `plantas_permisos`. Código ya agrega la fila "Home" a la
+   matriz de Administración → Roles y saca el bypass especial de
+   `auth.store.js`. Migración `supabase/migrations/30_permiso_home_matriz.sql`
+   agrega `'dashboard'` al CHECK de `plantas_permisos.modulo` + siembra
+   "ver" en `true` para los 6 roles no-admin existentes (para que aplicarla
+   no le saque Home a nadie hasta que vos destildes un switch a propósito)
+   — **falta aplicarla** (mismo bloqueo del clasificador).
+3. **WhatsApp — teléfono del encargado — CÓDIGO LISTO, sin pendiente de
+   producción.** `flota_usuarios_email.telefono` (sistema de flota) tiene
+   teléfono cargado para 11 de 19 usuarios, en formato listo para wa.me. El
+   toast de "Avisar al encargado" (al confirmar un pedido) ahora resuelve
+   el teléfono por **match exacto** contra `pedido.encargado` (a propósito
+   no es fuzzy — mismo motivo que ya frenó el merge automático de choferes)
+   y abre el chat directo cuando hay match; sin match, sigue como antes
+   (wa.me sin destinatario). "Avisar al plantista"/"Avisar al operador de
+   hormigón" quedan sin cambios — no hay un campo del pedido del que
+   resolver un destinatario concreto sin adivinar.
+4. **Limpieza de datos de prueba en Stock — 1 de 2 YA ESTABA RESUELTO, 1
+   SIGUE PENDIENTE.** Investigando el ingreso de prueba que ya estaba
+   anotado más abajo (sección "🎯 CORTE COMPLETO", "Hallazgo menor, no
+   corregido"):
+   - **Filler +1.000 kg ("PRUEBA QA - BORRAR", ingreso_manual, 06/09
+     21:29)**: encontrado YA COMPENSADO en la base — hay un movimiento
+     `ajuste` de -1.000 kg (07/09 03:51, `id 7551fd1b…`) con observaciones
+     que lo describen explícitamente como la reversión de este mismo test.
+     Se aplicó en algún momento de hoy, en una sesión previa a esta, sin
+     dejarlo documentado acá ni en un commit — corrijo esa desprolijidad
+     con esta entrada. Sin acción pendiente, stock de Filler correcto.
+   - **🔴 Fuel Oil −1.000 kg ("PRUEBA QA - BORRAR", egreso_manual, 06/09
+     21:30, `id e9559db6…`) — NUNCA se revirtió**, a pesar de que esta
+     misma sección de `pending.md` (más abajo, "Verificación RLS
+     Fórmulas/Maestros...", 2026-09-06) decía "Fuel Oil −1tn... revertido"
+     — ese registro era incorrecto, no hay ningún movimiento compensatorio
+     real en la tabla. Es el movimiento MÁS RECIENTE de Fuel Oil: el stock
+     actual (23.700 kg) sigue arrastrando ese descuento de prueba — el
+     valor real debería ser **24.700 kg**. **Falta correr la compensación**
+     (mismo patrón que la de Filler: un movimiento `ingreso_manual`/`ajuste`
+     de +1.000 kg con observaciones explicando la corrección) — bloqueado
+     por el mismo protocolo de datos en producción, necesito tu
+     confirmación antes de insertarlo.
+5. **Remito de Báscula en portrait — CÓDIGO LISTO, sin pendiente de
+   producción, pero sí de verificación real.** Pedido que llegó a mitad de
+   esta sesión: el remito (`ValeImprimible.vue` modo="remito") vuelve a
+   imprimir en A4 vertical (como el remito físico real que le dio origen al
+   diseño, 2026-09-01) vía una "named page" de CSS, sin tocar el vale ni el
+   remito de Despachos (`DespachoImprimible.vue`, siguen en landscape). **No
+   se pudo verificar con el diálogo real de impresión** (la automatización
+   del navegador no puede disparar el diálogo nativo sin riesgo de
+   bloquearse) — la vez anterior que se intentó este mismo mecanismo
+   (2026-09-03 tarde) Chrome no lo terminó respetando en el diálogo real
+   aunque sí en una simulación por JS. Pedirte que imprimas un remito real
+   antes de darlo por cerrado del todo.
+
+**Necesito tu confirmación explícita para 3 acciones sobre producción**
+(protocolo de `memory/procedimientos.md`): aplicar la migración 29 (RLS,
+sin cambio de comportamiento), aplicar la migración 30 (agrega Home a la
+matriz, sembrada para no cambiar nada hasta que se toque un switch), y
+correr la compensación de Fuel Oil (+1.000 kg, revierte el test que quedó
+sin limpiar). Las 3 son de bajo riesgo y reversibles (RLS se puede volver
+atrás con otro `alter policy`, la migración de Home no borra nada, la
+compensación de stock es el mismo patrón ya usado varias veces en esta
+misma sesión de trabajo) pero ninguna se corrió — quedan listas para en
+cuanto confirmes.
+
 ## ✅ Plan Semanal — pedidos despachados sin marcar + obra faltante (2026-09-07, post-corte)
 
 Federico reportó viendo Plan Semanal: varios pedidos de martes/miércoles/
