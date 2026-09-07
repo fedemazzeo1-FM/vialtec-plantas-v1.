@@ -19,7 +19,7 @@ import {
   fetchHistorialPedido,
   obtenerRangoSemana,
 } from '@/modules/pedidos/services/pedidos.service'
-import { fetchObras } from '@/services/flota.service'
+import { fetchObras, fetchTelefonoPorNombre } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { patentesService, choferesService } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
@@ -377,7 +377,17 @@ export function usePedidos() {
     error.value = null
     try {
       await confirmarPedidoService(pedido.id, { usuarioLegado: auth.nombre })
-      mostrarToastWhatsapp(toastConfirmarPedido(pedido, { obraNombre: obraNombreDe(pedido) }))
+      // Teléfono del encargado (2026-09-07): match exacto por nombre contra
+      // flota_usuarios_email — best-effort, un error acá (o simplemente no
+      // tener ese usuario cargado en flota) no debe romper la confirmación
+      // del pedido, el toast simplemente cae a wa.me sin destinatario.
+      let telefonoEncargado = null
+      try {
+        telefonoEncargado = await fetchTelefonoPorNombre(pedido.encargado)
+      } catch (e) {
+        telefonoEncargado = null
+      }
+      mostrarToastWhatsapp(toastConfirmarPedido(pedido, { obraNombre: obraNombreDe(pedido), telefono: telefonoEncargado }))
       if (pedido.tipo === 'hormigon') {
         mostrarToastWhatsapp(toastConfirmarHormigonOperador(pedido, { obraNombre: obraNombreDe(pedido) }))
       }

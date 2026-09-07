@@ -4,11 +4,15 @@
 // toast con ese mensaje y un botón que abre el link en una pestaña nueva;
 // el usuario elige el contacto en su WhatsApp y lo manda él mismo.
 //
-// Sin teléfono todavía: `plantas_usuarios_roles` no tiene una columna de
-// teléfono hoy (memory/relevamiento-sistema-viejo.md, gap de Usuarios), así
-// que se arma wa.me/?text=... sin número de destino — el día que exista un
-// teléfono en el perfil, pasarlo como segundo argumento de `urlWhatsapp()`
-// y listo, arma wa.me/<telefono>?text=... automáticamente.
+// `plantas_usuarios_roles` sigue sin columna de teléfono propia (memory/
+// relevamiento-sistema-viejo.md, gap de Usuarios) — pero el sistema de flota
+// (`flota_usuarios_email.telefono`) sí lo tiene para varios usuarios
+// (2026-09-07, ver `flota.service.js#fetchTelefonoPorNombre()`). Cuando se
+// puede resolver un destinatario CONCRETO y sin ambigüedad (el encargado que
+// pidió, por nombre exacto) el caller pasa `telefono` como segundo argumento
+// de `urlWhatsapp()` y arma wa.me/<telefono>?text=... directo a su chat
+// personal; sin match, sigue cayendo a wa.me/?text=... (el usuario elige el
+// contacto a mano) — nunca se envía a un número adivinado.
 //
 // Funciones puras, sin Supabase — no es un service (memory/conventions.md:
 // los services son solo acceso a datos). Vive en el módulo Pedidos porque
@@ -34,10 +38,14 @@ export function toastCrearPedido(pedido, { obraNombre }) {
   return { titulo: 'Avisar al plantista', mensaje, url: urlWhatsapp(mensaje) }
 }
 
-/** Al confirmar (solicitado → confirmado) — dirigido al encargado que pidió. */
-export function toastConfirmarPedido(pedido, { obraNombre }) {
+/**
+ * Al confirmar (solicitado → confirmado) — dirigido al encargado que pidió.
+ * `telefono` (opcional, ver flota.service.js#fetchTelefonoPorNombre) manda
+ * el link directo a su chat personal en vez de abrir wa.me sin destinatario.
+ */
+export function toastConfirmarPedido(pedido, { obraNombre, telefono } = {}) {
   const mensaje = `✅ Tu pedido de ${pedido.tipo === 'hormigon' ? 'hormigón' : 'asfalto'} fue confirmado\n${destinoLabel(pedido, obraNombre)} — ${pedido.cantidad_solicitada} ${unidad(pedido)}\nFecha: ${pedido.fecha_programada}`
-  return { titulo: 'Avisar al encargado', mensaje, url: urlWhatsapp(mensaje) }
+  return { titulo: 'Avisar al encargado', mensaje, url: urlWhatsapp(mensaje, telefono) }
 }
 
 /**

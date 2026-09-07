@@ -38,3 +38,36 @@ export async function fetchNombresPorEmail(emails) {
   if (error) throw error
   return Object.fromEntries((data ?? []).map((u) => [u.email, u.nombre]))
 }
+
+/**
+ * Teléfono (formato wa.me listo, ej. "5491149977622") de un usuario del
+ * sistema de flota, buscado por NOMBRE — no por email (2026-09-07, pedido de
+ * Federico: mapear el teléfono que ya carga flota_usuarios_email para que el
+ * WppToast de Pedidos apunte directo al chat personal del "encargado que
+ * pidió", en vez de abrir wa.me sin destinatario).
+ *
+ * Match exacto (case/espacios-insensitive) contra `flota_usuarios_email.nombre`
+ * — a propósito NO es un fuzzy match: `plantas_pedidos.encargado` es texto
+ * libre tipeado en ESTE sistema (no arrastra la inconsistencia histórica del
+ * legado que ya hizo descartar un merge automático para choferes, ver
+ * memory/pending.md). Si no hay match exacto, devuelve null y el toast cae
+ * al comportamiento de siempre (wa.me sin número, el usuario elige el
+ * contacto a mano) — nunca se envía a un número adivinado.
+ *
+ * @param {string} nombre
+ * @returns {Promise<string|null>}
+ */
+export async function fetchTelefonoPorNombre(nombre) {
+  const nombreLimpio = (nombre || '').trim()
+  if (!nombreLimpio) return null
+
+  const { data, error } = await supabase
+    .from('flota_usuarios_email')
+    .select('telefono')
+    .ilike('nombre', nombreLimpio)
+    .not('telefono', 'is', null)
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data?.telefono || null
+}
