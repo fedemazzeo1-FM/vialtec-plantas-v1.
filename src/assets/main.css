@@ -84,6 +84,32 @@
     margin: 0;
   }
 
+  /* Remito de Báscula en PORTRAIT (2026-09-07, pedido de Federico) — vuelve
+     a la orientación original del rediseño de 2026-09-01 contra la foto real
+     del remito físico (un remito real es A4 vertical), que se había perdido
+     el 2026-09-03 noche al unificar todo a un solo @page landscape (ver
+     comentario largo más arriba: esa unificación fue por un bug real de
+     Chrome NO respetando una "named page" para el VALE en landscape cuando
+     el default global era portrait — acá es el caso inverso, el default
+     global sigue en landscape y SOLO el remito pide portrait). Riesgo
+     conocido y documentado en ese mismo comentario: la vez anterior que se
+     probó una named page por componente, el diálogo REAL de impresión de
+     Chrome no la respetó en la práctica (una simulación por JS sí la daba
+     por buena) — pedirle a Federico que confirme imprimiendo de verdad antes
+     de darlo por cerrado. El vale (ValeImprimible.vue modo="vale") y el
+     remito de Despachos (DespachoImprimible.vue) NO se tocan, siguen con el
+     @page global de arriba. Solo cambia el tamaño de página/hoja — el
+     diseño y la estructura interna del remito (ValeImprimible.vue) no se
+     tocaron.
+  */
+  @page remito {
+    size: A4 portrait;
+    margin: 0;
+  }
+  .imprimible.modo-remito {
+    page: remito;
+  }
+
   #app {
     display: none !important;
   }
@@ -137,5 +163,12 @@
     height: 210mm;
     box-sizing: border-box;
     padding: 5mm;
+  }
+  /* Portrait para el remito (ver @page remito arriba) — mismo elemento
+     .imprimible, dimensiones invertidas para que coincidan con la hoja
+     A4 vertical en vez de quedar landscape adentro de una hoja portrait. */
+  .imprimible.modo-remito {
+    width: 210mm;
+    height: 297mm;
   }
 }

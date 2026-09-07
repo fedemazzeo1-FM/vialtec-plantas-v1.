@@ -441,7 +441,7 @@ iniciar()
         size="xl"
         @update:open="modalImpresionAbierto = $event"
       >
-        <div class="imprimible">
+        <div class="imprimible" :class="{ 'modo-remito': modoImpresion === 'remito' }">
           <ValeImprimible
             v-if="valeParaImprimir"
             :vale="valeParaImprimir"
