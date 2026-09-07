@@ -24,8 +24,12 @@ import {
 } from '@/modules/bascula/composables/useBascula'
 import { formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const { esMobile } = useBreakpoint()
+const route = useRoute()
+const router = useRouter()
 
 const {
   error,
@@ -103,7 +107,37 @@ const columnasHistorial = [
   { key: 'acciones', label: '' },
 ]
 
-iniciar()
+// Persistencia del filtro de historial en la URL (2026-09-07, pedido de
+// Federico: filtrar "el mes pasado" y después imprimir un vale/remito
+// volvía el filtro a "semana en curso" solo — no se identificó qué
+// remonta la vista en ese momento puntual, pero cualquiera sea la causa
+// esto lo neutraliza: mismo patrón ya usado en StockView.vue/
+// MaestrosView.vue para la tab activa, `router.replace` para no ensuciar
+// el historial de navegación). Si la URL ya trae un filtro (`?desde=...`,
+// llegando de un remount o de un link compartido), se usa ese en vez del
+// default de semana en curso — ver useBascula.js#iniciar().
+const filtrosDesdeUrl = {}
+if (route.query.tipo) filtrosDesdeUrl.tipoVale = route.query.tipo
+if (route.query.obra) filtrosDesdeUrl.obraId = Number(route.query.obra)
+if (route.query.patente) filtrosDesdeUrl.patente = route.query.patente
+if (route.query.desde) filtrosDesdeUrl.desde = route.query.desde
+if (route.query.hasta) filtrosDesdeUrl.hasta = route.query.hasta
+
+iniciar(filtrosDesdeUrl)
+
+watch(
+  filtros,
+  (f) => {
+    const query = {}
+    if (f.tipoVale) query.tipo = f.tipoVale
+    if (f.obraId) query.obra = f.obraId
+    if (f.patente) query.patente = f.patente
+    if (f.desde) query.desde = f.desde
+    if (f.hasta) query.hasta = f.hasta
+    router.replace({ query })
+  },
+  { deep: true }
+)
 </script>
 
 <template>

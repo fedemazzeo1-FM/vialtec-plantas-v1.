@@ -667,8 +667,24 @@ export function useBascula() {
   // puerta". El supuesto anterior era incorrecto, no un cambio de diseño.
   // -------------------------------------------------------------------------
 
-  function iniciar() {
-    aplicarFiltroSemanaActual()
+  /**
+   * @param {Partial<typeof filtros>} [filtrosIniciales] si viene con algo
+   *   (2026-09-07: BasculaView.vue lo arma desde `?tipo=&obra=&patente=&
+   *   desde=&hasta=` de la URL, ver esa vista) se usa tal cual en vez del
+   *   default de semana en curso — necesario para que el filtro sobreviva
+   *   si el componente se remonta (Federico reportó que filtrar "el mes
+   *   pasado" y después imprimir un vale/remito volvía a "semana en curso"
+   *   solo; no se encontró qué dispara el remonte en sí — imprimir no
+   *   toca `filtros` en ningún lado de este archivo — pero cualquiera sea
+   *   la causa, esto lo hace inofensivo: el filtro elegido queda en la URL,
+   *   sobrevive a un remount de la vista sea cual sea el motivo).
+   */
+  function iniciar(filtrosIniciales) {
+    if (filtrosIniciales && Object.keys(filtrosIniciales).length) {
+      Object.assign(filtros, filtrosIniciales)
+    } else {
+      aplicarFiltroSemanaActual()
+    }
     cargarBase()
     cargarHistorial()
     cargarProximoNumero()
