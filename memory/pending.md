@@ -2038,6 +2038,98 @@ se imprimen 6" (que entiendo como demasiadas hojas por remito hoy).
    Chrome, así que no lo disparé) — si al imprimirlo en papel algo no entra
    bien en la hoja, avisame y lo ajusto.
 
+## 🎯 CORTE COMPLETO — deploy, DNS y smoke test — 2026-09-07
+
+Con la migración real ya aplicada (ver entrada de arriba) y `main` mergeado
++ pusheado a GitHub (`8298e76`), Federico ejecutó el deploy y el cambio de
+dominio. Encontré y corregí 2 bugs reales de producción durante el smoke
+test — ninguno relacionado con el código migrado, los dos eran gaps de
+configuración del deploy en sí (nunca se había hecho un `npx vercel --prod`
+real contra este dominio hasta ahora).
+
+**Bug 1 — pantalla en blanco, app no arrancaba en absoluto**: el proyecto
+de Vercel (`vialtec-plantas-v2`) no tenía NINGUNA variable de entorno
+configurada (`vercel env ls production` → 0 resultados). El build corría
+sin `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, así que el cliente de
+Supabase nunca se inicializaba (`Error: Faltan VITE_SUPABASE_URL /
+VITE_SUPABASE_ANON_KEY en las variables de entorno.`, capturado en la
+consola del navegador contra el dominio real). Encontrado en el paso 1 del
+smoke test (verificación de lectura/sesión), antes de tocar `kv_store`.
+**Fix**: `vercel env add VITE_SUPABASE_URL production` y
+`vercel env add VITE_SUPABASE_ANON_KEY production --type config` (el
+`ANON_KEY` de Supabase es una clave pública por diseño — protegida por
+RLS, no por ocultarla — así que va como `config`, no `secret`; con
+`--type secret` y sin el prefijo `VITE_` Vite no la habría inlineado en el
+bundle del cliente). Autorizado explícitamente por Federico antes de
+tocar la config de Vercel.
+
+**Bug 2 — 404 en cualquier ruta que no fuera la raíz**: no existía
+`vercel.json` en el repo. El router usa `createWebHistory()` (Vue Router
+modo history), que necesita que el servidor reescriba TODAS las rutas a
+`index.html` — sin eso, Vercel devuelve 404 nativo de Vercel en cualquier
+refresh, deep-link o URL compartida que no sea `/`. Se veía al navegar
+directo a `/login` (o a cualquier otra ruta) sin pasar antes por `/`.
+**Fix**: `vercel.json` nuevo con `{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}`,
+commiteado al repo (no solo aplicado al deploy — si no, el próximo
+`vercel --prod` desde un checkout limpio lo volvería a romper).
+
+Ambos fixes requirieron un segundo y tercer `npx vercel --prod` (el
+primero con las env vars ya cargadas resolvió el blank-page; el segundo,
+después de agregar `vercel.json`, resolvió el 404). El deploy final quedó
+aliasado a `produccion.vialtec.app` correctamente (confirmado por la CLI:
+`▲ Aliased https://produccion.vialtec.app`).
+
+**Cierre de la RLS abierta de `kv_store`** (hallazgo de seguridad
+pendiente desde el relevamiento inicial, memory/business-rules.md): la
+policy `"Acceso publico kv"` (`FOR ALL TO public USING (true)` — cualquiera,
+autenticado o no, podía leer Y escribir todo el storage del legado) se
+reemplazó por `migración 28` con una sola policy de solo lectura para
+`authenticated`. **No se pudo cerrar a cero**: `plantas_v_bascula_viva` y
+`plantas_v_stock_movimientos_viva` (las vistas puente de Báscula/Stock)
+son `security_invoker = true` y leen `kv_store` con los permisos del
+usuario que las consulta desde el cliente — cerrar el SELECT también a
+`authenticated` hubiera roto esas 2 pantallas en vivo. Verificado en el
+smoke test contra el dominio real después de aplicar la migración: Báscula
+(vales/históricos) y Stock (historial de ingresos, filas "(histórico)")
+siguen cargando sin errores.
+
+**Smoke test post-corte contra `produccion.vialtec.app` (dominio real, no
+localhost)** — sesión de Federico (admin) persistió sola (mismo Supabase
+Auth que el legado, localStorage del dominio ya tenía el token):
+- Home: carga con datos reales, producción de asfalto 25.566,6 tn total
+  (11.916,7 Ammann + 13.649,9 Marini — coincide con lo esperado post-
+  migración), producción de hormigón 4.718,8 m³, Gantt de despachos.
+- Pedidos: recarga directa en `/pedidos` (antes 404) — OK, filtros y
+  listado funcionando.
+- Báscula: histórico de vales real, "Próximo N° 00010017" (consistente con
+  el `setval()` a 10016 de la migración).
+- Stock: stock actual + historial de ingresos con filas "(histórico)"
+  desde la vista puente — OK.
+- Despachos: cards de producción anual iguales a Home — OK.
+- Administración → Roles: matriz de permisos real, 7 roles, contadores de
+  usuarios correctos — OK.
+- 0 errores de consola en ninguna pantalla revisada.
+
+**Hallazgo menor, no corregido (decisión de Federico)**: en Stock →
+Historial de ingresos aparece una fila `6/9/2026, Ingreso manual, Filler,
++1.000 t, motivo "PRUEBA QA - BORRAR", responsable Federico Mazzeo` — por
+el motivo, parece un dato de prueba de una sesión anterior que quedó sin
+limpiar (no encontré rastro de que Claude la haya creado en esta sesión).
+No la borré yo: borrar un movimiento de stock ya aplicado cambia el
+balance real de "Filler" (hoy 25,42 tn en Stock actual) y no es una
+decisión que corresponda tomar sin confirmar. Si es prueba, avisame y la
+revierto con un movimiento de compensación (mismo patrón que el resto de
+las limpiezas de esta sesión).
+
+**Pendiente inmediato** (checklist, secciones 8-9 de
+`CHECKLIST_CORTE_FINAL.md`): dar de baja el legado como fuente de
+escritura (si sigue desplegado en otro lado, hay que apagarlo/quitarle
+acceso explícitamente — el cambio de DNS de `produccion.vialtec.app` no
+lo apaga solo si vive en otra URL/hosting). Las vistas puente
+(`plantas_v_bascula_viva`/`plantas_v_stock_movimientos_viva`) quedan sin
+filas "Legado" para mostrar de acá en más (ya no hay delta pendiente) —
+opcional simplificarlas más adelante, no bloqueante.
+
 ## ✅ Re-verificación pre-corte — 2026-09-07 (dry-run del día anterior a la corrida real)
 
 Pedido de Federico ("avanzamos directamente con la MIGRACIÓN GRANDE"): re-
