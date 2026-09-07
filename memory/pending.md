@@ -1,5 +1,19 @@
 # pending.md — Pendientes
 
+## ✅ Informe Mensual — orden del Resumen Anual + gráfico de barras (2026-09-07)
+
+Dos pedidos más de Federico sobre el Informe Mensual (viendo el Excel ya
+exportado): "Resumen anual" con el mes más reciente arriba, enero al final
+(commit `05c09f7` — no toca el cálculo, solo el orden de visualización); y
+un gráfico de barras de producción mensual en esa misma hoja (commit
+`b23b894`). Antes de implementar el gráfico se confirmó que `exceljs` no
+soporta gráficos nativos de Excel, y Federico eligió explícitamente la
+opción de imagen embebida (canvas -> PNG, mismo mecanismo que el logo) por
+sobre data bars nativas — es una foto fija, no editable, se regenera en
+cada export. Verificado con un test en navegador real (no se puede probar
+en Node, depende de `canvas`): 9 meses en orden cronológico, leyenda,
+colores de marca, sin desbordar. Build limpio.
+
 ## ✅ Báscula: el filtro de historial ya no se resetea solo (2026-09-07)
 
 Federico reportó: filtrando "el mes pasado" en Báscula, al imprimir un
