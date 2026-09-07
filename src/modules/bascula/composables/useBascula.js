@@ -631,8 +631,30 @@ export function useBascula() {
     return abrirImpresion(vale, 'remito')
   }
 
+  /**
+   * Fix 2026-09-07 (bug real confirmado por Federico imprimiendo de
+   * verdad): la "named page" de CSS (`@page remito` + `page: remito`,
+   * intento anterior) NO cambia la orientación real en el diálogo de
+   * impresión de Chrome — mismo mecanismo, mismo tipo de falla ya visto
+   * una vez antes para el vale (ver main.css). En vez de depender de eso,
+   * se inyecta acá un `<style>` con `@page { size: A4 portrait }` SIN
+   * nombre justo antes de imprimir el remito — al ser la última regla
+   * `@page` del documento en ese momento, gana por cascada sobre el
+   * `@page` landscape de main.css (misma especificidad, orden de
+   * declaración) y sí cambia la hoja real. Se remueve enseguida después de
+   * `window.print()` (llamada síncrona/bloqueante mientras el diálogo está
+   * abierto) para que el próximo vale — o el remito de Despachos, que no
+   * usa este composable — vuelva a imprimir landscape normal.
+   */
   function imprimir() {
+    let estiloTemporal = null
+    if (modoImpresion.value === 'remito') {
+      estiloTemporal = document.createElement('style')
+      estiloTemporal.textContent = '@page { size: A4 portrait; margin: 0; }'
+      document.head.appendChild(estiloTemporal)
+    }
     window.print()
+    estiloTemporal?.remove()
   }
 
   // -------------------------------------------------------------------------

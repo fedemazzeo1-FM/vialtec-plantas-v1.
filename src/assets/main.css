@@ -84,31 +84,28 @@
     margin: 0;
   }
 
-  /* Remito de Báscula en PORTRAIT (2026-09-07, pedido de Federico) — vuelve
-     a la orientación original del rediseño de 2026-09-01 contra la foto real
-     del remito físico (un remito real es A4 vertical), que se había perdido
-     el 2026-09-03 noche al unificar todo a un solo @page landscape (ver
-     comentario largo más arriba: esa unificación fue por un bug real de
-     Chrome NO respetando una "named page" para el VALE en landscape cuando
-     el default global era portrait — acá es el caso inverso, el default
-     global sigue en landscape y SOLO el remito pide portrait). Riesgo
-     conocido y documentado en ese mismo comentario: la vez anterior que se
-     probó una named page por componente, el diálogo REAL de impresión de
-     Chrome no la respetó en la práctica (una simulación por JS sí la daba
-     por buena) — pedirle a Federico que confirme imprimiendo de verdad antes
-     de darlo por cerrado. El vale (ValeImprimible.vue modo="vale") y el
-     remito de Despachos (DespachoImprimible.vue) NO se tocan, siguen con el
-     @page global de arriba. Solo cambia el tamaño de página/hoja — el
-     diseño y la estructura interna del remito (ValeImprimible.vue) no se
-     tocaron.
+  /* Remito de Báscula en PORTRAIT — CONFIRMADO ROTO EN LA PRÁCTICA
+     (2026-09-07, Federico probó imprimiendo de verdad: "sigue saliendo en
+     la hoja horizontal"). El intento anterior (named page: `@page remito` +
+     `.imprimible.modo-remito { page: remito }`) es exactamente el mismo
+     mecanismo que YA había fallado una vez antes para el vale (ver el
+     comentario largo más arriba, 2026-09-03) — confirmado ahora que
+     tampoco funciona en esta dirección: el diálogo real de impresión de
+     Chrome no reasigna el tamaño/orientación de la hoja por elemento vía
+     la propiedad `page`, solo respeta UN `@page` por trabajo de impresión
+     (el de más abajo, sin nombre). Se saca esa named page — NO sirve,
+     dejarla sería CSS muerto. El tamaño/orientación ahora se resuelve en
+     JS, justo antes de `window.print()` (ver
+     useBascula.js#imprimir()): se inyecta un `<style>` con
+     `@page { size: A4 portrait }` sin nombre — como es la última regla
+     `@page` en el documento al momento de imprimir, gana por cascada sobre
+     el `@page` landscape de acá abajo (misma especificidad, orden de
+     declaración) — y se remueve al terminar, así el próximo vale (o el
+     remito de Despachos, DespachoImprimible.vue, que no se tocó) vuelve a
+     imprimir landscape normal. `.imprimible.modo-remito` sigue solo con el
+     ancho/alto (210mm×297mm, más abajo) — esa parte SÍ es CSS normal, no
+     dependía del mecanismo roto.
   */
-  @page remito {
-    size: A4 portrait;
-    margin: 0;
-  }
-  .imprimible.modo-remito {
-    page: remito;
-  }
 
   #app {
     display: none !important;
