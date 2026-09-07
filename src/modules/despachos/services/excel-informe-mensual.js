@@ -36,6 +36,12 @@ import {
 
 const TN = (v) => (v ? `${Number(v).toFixed(2)} tn` : '—')
 const M3 = (v) => (v ? `${Number(v).toFixed(1)} m³` : '—')
+// Mismos valores que GRIS_TEXTO/GRIS_SUAVE de excel-corporativo.js, pero en
+// formato #RRGGBB (canvas 2D no entiende ARGB de 8 dígitos) — no vale la
+// pena una conversión genérica ARGB->CSS por 2 constantes usadas una vez
+// (generarImagenGraficoAnual() más abajo).
+const GRIS_TEXTO_HEX = '#374151'
+const GRIS_SUAVE_HEX = '#9CA3AF'
 // 'YYYY-MM-DD' (formato crudo de fecha_programada, columna `date` en
 // Supabase) -> 'DD/MM/YYYY' (mismo formato que el Excel de referencia de
 // Federico) — sin esto salía la fecha ISO cruda en la hoja de detalle.
@@ -166,8 +172,132 @@ function armarHojaResumenMensual(workbook, datos) {
   return ws
 }
 
+/**
+ * Gráfico de barras de producción mensual — imagen PNG dibujada en un
+ * `<canvas>` del navegador (2026-09-07, pedido de Federico: "un gráfico de
+ * barras... indicador de producción por mes" en Resumen Anual). `exceljs`
+ * (4.4.0, confirmado contra la librería instalada) NO tiene API para crear
+ * gráficos NATIVOS de Excel — la única forma de meter algo parecido a un
+ * gráfico es como imagen, mismo mecanismo que ya usa el logo
+ * (`workbook.addImage()`). Federico eligió esta opción sabiendo el
+ * trade-off: es una FOTO fija, no editable/interactiva en Excel — si los
+ * datos cambian hay que re-exportar el informe, mismo criterio que el resto
+ * del reporte (100% dinámico en el momento del export).
+ *
+ * Depende de `document`/`canvas`, solo existe en el navegador — a
+ * diferencia del resto de este archivo, esta función NO se puede probar
+ * desde Node/vite-node (sin DOM). Se verificó con un test en un navegador
+ * real en vez del harness de Node que se usa para el resto del informe.
+ *
+ * Orden CRONOLÓGICO (enero primero, izquierda a derecha) — a propósito
+ * DISTINTO del orden de la tabla de arriba (más reciente primero, mismo
+ * pedido de Federico): un gráfico de tendencia en el tiempo se lee de
+ * izquierda a derecha, invertirlo confundiría la lectura. Por eso recibe
+ * `datos.resumenAnual.filas` tal cual (ya viene ene->mes elegido de
+ * fetchResumenAnual()), no la versión invertida que arma la tabla.
+ *
+ * @param {Array<{ mes: string, hormigonM3: number, asfaltoTn: number }>} filas
+ * @returns {Promise<ArrayBuffer>} PNG listo para workbook.addImage()
+ */
+function generarImagenGraficoAnual(filas) {
+  const ESCALA = 2 // resolución 2x — que no se vea pixelado al embeberlo más grande en la hoja
+  const ANCHO = 900
+  const ALTO = 380
+  const MARGEN = { top: 55, right: 30, bottom: 55, left: 70 }
+  const anchoGrafico = ANCHO - MARGEN.left - MARGEN.right
+  const altoGrafico = ALTO - MARGEN.top - MARGEN.bottom
+
+  const canvas = document.createElement('canvas')
+  canvas.width = ANCHO * ESCALA
+  canvas.height = ALTO * ESCALA
+  const ctx = canvas.getContext('2d')
+  ctx.scale(ESCALA, ESCALA)
+
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillRect(0, 0, ANCHO, ALTO)
+
+  ctx.fillStyle = GRIS_TEXTO_HEX
+  ctx.font = 'bold 15px Arial, sans-serif'
+  ctx.fillText('Producción mensual', MARGEN.left, 24)
+
+  // Leyenda (colores del acento oficial de la app — mismo criterio que el
+  // resto del informe desde el fix de colores de esta sesión, no verde).
+  const COLOR_HORMIGON = '#DDD6FE' // violeta claro (VIOLETA_CLARO)
+  const COLOR_ASFALTO = '#7C3AED' // violeta (VIOLETA)
+  const leyenda = [
+    { color: COLOR_HORMIGON, texto: 'Hormigón (m³)' },
+    { color: COLOR_ASFALTO, texto: 'Asfalto (tn)' },
+  ]
+  let xLeyenda = ANCHO - MARGEN.right - 220
+  leyenda.forEach((l) => {
+    ctx.fillStyle = l.color
+    ctx.fillRect(xLeyenda, 12, 12, 12)
+    ctx.fillStyle = GRIS_TEXTO_HEX
+    ctx.font = '11px Arial, sans-serif'
+    ctx.fillText(l.texto, xLeyenda + 16, 22)
+    xLeyenda += 110
+  })
+
+  const maxValor = Math.max(1, ...filas.map((f) => Math.max(f.hormigonM3, f.asfaltoTn))) * 1.15
+  const escalaY = altoGrafico / maxValor
+  const baseY = MARGEN.top + altoGrafico
+
+  // Gridlines horizontales + eje de valores.
+  const pasos = 4
+  ctx.strokeStyle = '#E5E7EB'
+  ctx.fillStyle = GRIS_SUAVE_HEX
+  ctx.font = '10px Arial, sans-serif'
+  ctx.textAlign = 'right'
+  for (let i = 0; i <= pasos; i++) {
+    const valor = (maxValor * i) / pasos
+    const y = baseY - valor * escalaY
+    ctx.beginPath()
+    ctx.moveTo(MARGEN.left, y)
+    ctx.lineTo(MARGEN.left + anchoGrafico, y)
+    ctx.stroke()
+    ctx.fillText(Math.round(valor).toLocaleString('es-AR'), MARGEN.left - 8, y + 3)
+  }
+
+  // Barras (hormigón + asfalto, agrupadas por mes).
+  const anchoGrupo = anchoGrafico / filas.length
+  const anchoBarra = Math.min(22, anchoGrupo * 0.32)
+  ctx.textAlign = 'center'
+  filas.forEach((f, i) => {
+    const xGrupo = MARGEN.left + i * anchoGrupo + anchoGrupo / 2
+    const altoHormigon = f.hormigonM3 * escalaY
+    const altoAsfalto = f.asfaltoTn * escalaY
+
+    ctx.fillStyle = COLOR_HORMIGON
+    ctx.fillRect(xGrupo - anchoBarra - 3, baseY - altoHormigon, anchoBarra, altoHormigon)
+    ctx.fillStyle = COLOR_ASFALTO
+    ctx.fillRect(xGrupo + 3, baseY - altoAsfalto, anchoBarra, altoAsfalto)
+
+    // Mes abreviado (eje X) — "Enero 2026" -> "Ene".
+    ctx.fillStyle = GRIS_TEXTO_HEX
+    ctx.font = '11px Arial, sans-serif'
+    ctx.fillText(f.mes.slice(0, 3), xGrupo, baseY + 18)
+  })
+
+  // Eje base.
+  ctx.strokeStyle = GRIS_TEXTO_HEX
+  ctx.beginPath()
+  ctx.moveTo(MARGEN.left, baseY)
+  ctx.lineTo(MARGEN.left + anchoGrafico, baseY)
+  ctx.stroke()
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('No se pudo generar la imagen del gráfico.'))
+        return
+      }
+      blob.arrayBuffer().then(resolve, reject)
+    }, 'image/png')
+  })
+}
+
 /** Hoja "Resumen anual": acumulado mes a mes del año hasta el mes elegido. */
-function armarHojaResumenAnual(workbook, datos) {
+async function armarHojaResumenAnual(workbook, datos) {
   const ws = workbook.addWorksheet('Resumen anual')
   ws.columns = [{ width: 20 }, { width: 18 }, { width: 18 }]
 
@@ -198,6 +328,20 @@ function armarHojaResumenAnual(workbook, datos) {
   const total = ws.getRow(fila)
   total.values = ['TOTAL ACUMULADO', M3(datos.resumenAnual.totalAcumulado.hormigonM3), TN(datos.resumenAnual.totalAcumulado.asfaltoTn)]
   total.eachCell((cell) => estiloHeaderTabla(cell))
+
+  // Gráfico de barras (2026-09-07, pedido de Federico) — 2 filas de aire
+  // después del total, mismo criterio de espaciado que "Consumo de
+  // insumos" en armarHojaResumenMensual(). Si por lo que sea el navegador
+  // no puede generar la imagen (ej. `canvas.toBlob` sin soporte), el resto
+  // del informe se sigue generando igual, solo sin el gráfico — no vale la
+  // pena que un problema puramente visual tire abajo todo el export.
+  try {
+    const imagenGrafico = await generarImagenGraficoAnual(datos.resumenAnual.filas)
+    const imageId = workbook.addImage({ buffer: imagenGrafico, extension: 'png' })
+    ws.addImage(imageId, { tl: { col: 0, row: fila + 1 }, ext: { width: 630, height: 266 } })
+  } catch (e) {
+    // sin gráfico, sin romper el resto del informe (ver comentario de arriba)
+  }
 
   return ws
 }
@@ -321,7 +465,7 @@ export async function construirWorkbookInformeMensual(datos, logoBuffer) {
 
   const hojaResumen = armarHojaResumenMensual(workbook, datos)
   agregarLogo(workbook, hojaResumen, logoBuffer)
-  armarHojaResumenAnual(workbook, datos)
+  await armarHojaResumenAnual(workbook, datos)
   armarHojaProveedores(workbook, datos)
 
   for (const destino of datos.hojasInternas) {
