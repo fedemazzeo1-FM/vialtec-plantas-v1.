@@ -18,13 +18,17 @@ import { supabase } from '@/config/supabase'
 // en vuelo entre llamadas concurrentes.
 let promesaRestaurarSesion = null
 
-// Mapeo tab (router meta / nav.js) -> modulo de plantas_permisos. 'dashboard'
-// no está: es visible para cualquier usuario activo, sin togglable en la
-// matriz (siempre fue así — Home es la pantalla de aterrizaje). 'usuarios'
-// tampoco: el módulo "Administración" es SIEMPRE admin-only, fijo, no pasa
+// Mapeo tab (router meta / nav.js) -> modulo de plantas_permisos. 'usuarios'
+// no está: el módulo "Administración" es SIEMPRE admin-only, fijo, no pasa
 // por la matriz (migración 26 — mismo piso de seguridad que
 // plantas_tiene_permiso() del lado del servidor, ver ese archivo).
+// 'dashboard' (Home) SÍ pasa por la matriz desde la migración 30 (pedido de
+// Federico 2026-09-07: antes era un caso especial siempre visible, sin
+// togglable) — sembrada en `true` para los 6 roles no-admin existentes, así
+// que aplicar esa migración no le sacó Home a nadie hasta que se destilde a
+// propósito desde Administración → Roles.
 const TAB_A_MODULO = {
+  dashboard: 'dashboard',
   pedidos: 'pedidos',
   'plan-semanal': 'plan_semanal',
   despachos: 'despachos',
@@ -57,7 +61,6 @@ export const useAuthStore = defineStore('auth', {
     puedeVerTab: (state) => (tab) => {
       if (!state.rol) return false
       if (state.rol === 'admin') return true
-      if (tab === 'dashboard') return true
       if (tab === 'usuarios') return false // Administración: siempre admin-only, fijo
       const modulo = TAB_A_MODULO[tab]
       return modulo ? state.modulosVer.has(modulo) : false

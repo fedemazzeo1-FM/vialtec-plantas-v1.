@@ -11,9 +11,13 @@
 import { supabase } from '@/config/supabase'
 
 // Módulos y acciones de la matriz — deben coincidir con los CHECK de
-// plantas_permisos (migración 26). 'administracion' queda afuera a
-// propósito: ver ADMINISTRACION_SIEMPRE_ADMIN abajo.
+// plantas_permisos (migración 26, 'dashboard' sumado en la 30).
+// 'administracion' queda afuera a propósito: ver ADMINISTRACION_SIEMPRE_ADMIN
+// abajo. 'dashboard' (Home) es, en la práctica, un módulo de solo "ver" —
+// igual que plan_semanal/simulador, las otras 5 columnas quedan sin uso real
+// pero se dejan (mismo patrón ya usado para esos dos).
 export const MODULOS_MATRIZ = [
+  { key: 'dashboard', label: 'Home' },
   { key: 'pedidos', label: 'Pedidos' },
   { key: 'bascula', label: 'Báscula' },
   { key: 'stock', label: 'Stock' },
