@@ -20,12 +20,23 @@ import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
 import VSemaforo from '@/components/shared/VSemaforo.vue'
 import { useStock } from '@/modules/stock/composables/useStock'
+import { useBreakpoint } from '@/composables/useBreakpoint'
+
+const { esMobile } = useBreakpoint()
 
 const TABS = [
   { valor: 'actual', label: 'Stock actual' },
   { valor: 'ingresos', label: 'Historial de ingresos' },
   { valor: 'proveedores', label: 'Analítica de proveedores' },
 ]
+// "Historial de ingresos" oculta en mobile (2026-09-07, pedido de Federico:
+// "no hace falta... en mobile" — uso en campo, no revisión detallada de
+// historial). Se sigue pudiendo entrar por Desktop; si alguien llega acá
+// con `?tab=ingresos` desde mobile (link viejo, back del navegador), el
+// watch de abajo lo corrige a 'actual' en vez de dejar una tab activa sin
+// botón visible.
+const tabsVisibles = computed(() => (esMobile.value ? TABS.filter((t) => t.valor !== 'ingresos') : TABS))
+
 // Persistencia de navegación (mismo patrón que MaestrosView.vue,
 // memory/modules-status.md — "F5 / duplicar pestaña"): la tab activa vive
 // en `?tab=`, router.replace (no push) para no ensuciar el historial.
@@ -110,6 +121,14 @@ let proveedoresCargadosAlMenosUnaVez = false
 watch(
   tabActiva,
   (nueva) => {
+    // Guarda (2026-09-07): "ingresos" no tiene botón visible en mobile — si
+    // se llega acá igual (link viejo con ?tab=ingresos, o back del
+    // navegador), cae a "actual" en vez de dejar una tab activa sin forma
+    // de volver a ella con un click.
+    if (esMobile.value && nueva === 'ingresos') {
+      tabActiva.value = 'actual'
+      return
+    }
     router.replace({ query: { ...route.query, tab: nueva } })
     if (nueva === 'proveedores' && !proveedoresCargadosAlMenosUnaVez) {
       proveedoresCargadosAlMenosUnaVez = true
@@ -118,6 +137,12 @@ watch(
   },
   { immediate: true }
 )
+
+// Si la ventana pasa de Desktop a Mobile con "ingresos" ya activa (resize
+// en vivo, caso borde), misma corrección que arriba.
+watch(esMobile, (mobile) => {
+  if (mobile && tabActiva.value === 'ingresos') tabActiva.value = 'actual'
+})
 
 function anchoBarra(material) {
   if (!material.stock_maximo_kg) return null
@@ -142,7 +167,7 @@ const columnasProveedorInsumo = [
            de ingresos / Analítica de proveedores. -->
       <div class="mb-4 flex gap-1 overflow-x-auto border-b border-border">
         <button
-          v-for="tab in TABS"
+          v-for="tab in tabsVisibles"
           :key="tab.valor"
           type="button"
           class="shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition-colors duration-150"

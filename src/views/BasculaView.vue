@@ -23,6 +23,9 @@ import {
   ENTRADA_SALIDA_VALE,
 } from '@/modules/bascula/composables/useBascula'
 import { formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
+import { useBreakpoint } from '@/composables/useBreakpoint'
+
+const { esMobile } = useBreakpoint()
 
 const {
   error,
@@ -115,8 +118,11 @@ iniciar()
         {{ error }}
       </div>
 
+      <!-- Protagonismo del CTA en mobile (2026-09-07, pedido de Federico:
+           simplificar el uso en campo) — ancho completo + tamaño md, mismo
+           criterio que "+ Nuevo pedido" en PedidosView.vue. -->
       <div class="mb-4 flex justify-end">
-        <VButton size="sm" @click="crearSlot()">+ Abrir puerta</VButton>
+        <VButton class="w-full md:w-auto" size="md" @click="crearSlot()">+ Abrir puerta</VButton>
       </div>
 
       <!-- Puertas abiertas: cards en grilla de al menos 2 columnas (como el
@@ -315,8 +321,12 @@ iniciar()
 
       <p v-if="!slots.length" class="my-6 text-sm text-text-soft">No hay ninguna puerta abierta. Abrí una arriba.</p>
 
-      <!-- Filtros de historial -->
-      <VCard class="mb-4">
+      <!-- Filtros de historial — ocultos en mobile (2026-09-07, pedido de
+           Federico: "simplificar el uso en campo", uso mobile no es para
+           filtrar en detalle). El historial sigue visible, siempre acotado
+           a la semana en curso por default (useBascula.js) — para filtrar
+           por tipo/obra/patente/rango hay que ir a Desktop. -->
+      <VCard v-if="!esMobile" class="mb-4">
         <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
           <!-- Filtro en vivo (2026-09-04, pedido explícito de Federico: sin
                botón "Filtrar", se aplica solo a medida que se elige cada

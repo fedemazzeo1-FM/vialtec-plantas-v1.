@@ -21,6 +21,9 @@ import { useDespachoAsfalto } from '@/modules/pedidos/composables/useDespachoAsf
 import { useCargaHormigon } from '@/modules/pedidos/composables/useCargaHormigon'
 import PedidoCard from '@/modules/pedidos/components/PedidoCard.vue'
 import { ESTADOS, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
+import { useBreakpoint } from '@/composables/useBreakpoint'
+
+const { esMobile } = useBreakpoint()
 
 const {
   error,
@@ -120,8 +123,11 @@ iniciar()
       <!-- Totales de tn/m³ del PERÍODO filtrado (2026-09-01: antes no existían
            acá; los 5 KPI de estado de abajo también pasaron de ser un conteo
            global fijo a estar acotados al mismo período — ver
-           usePedidos.js#cargarResumenPeriodo). -->
-      <div class="mb-3 grid grid-cols-2 gap-3">
+           usePedidos.js#cargarResumenPeriodo).
+           Ocultos en mobile (2026-09-07, pedido de Federico: "simplificar
+           el uso en campo" — el foco pasa a ser crear/confirmar/despachar
+           rápido, no mirar totales/conteos). Siguen en Desktop sin cambios. -->
+      <div v-if="!esMobile" class="mb-3 grid grid-cols-2 gap-3">
         <VKpiCard label="Asfalto (período)" :value="totalesPeriodo.asfaltoTn.toFixed(1)" unidad="tn" />
         <VKpiCard label="Hormigón (período)" :value="totalesPeriodo.hormigonM3.toFixed(1)" unidad="m³" />
       </div>
@@ -133,8 +139,10 @@ iniciar()
            filtro rápido por estado — click activa filtros.estado (mismo
            <select> de abajo, ya no hace falta abrirlo para el caso más
            común) y recarga; click de nuevo sobre la misma card lo saca. La
-           card activa queda resaltada con el mismo color del punto. -->
-      <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+           card activa queda resaltada con el mismo color del punto.
+           Ocultas en mobile, mismo motivo que el bloque de arriba — el
+           filtro por estado sigue disponible en Desktop. -->
+      <div v-if="!esMobile" class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
         <button
           v-for="estado in ESTADOS"
           :key="estado"
@@ -173,7 +181,11 @@ iniciar()
         </div>
       </VCard>
 
-      <VCard class="mb-4">
+      <!-- Filtros — ocultos en mobile (2026-09-07, pedido de Federico:
+           "simplificar el uso en campo"). El listado sigue acotado a la
+           semana en curso por default (tarjeta de arriba); para filtrar por
+           estado/obra/rango o ver archivados hay que ir a Desktop. -->
+      <VCard v-if="!esMobile" class="mb-4">
         <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <label class="text-sm text-text-mid">
             Estado
@@ -231,9 +243,12 @@ iniciar()
            exacta del legado — relevado en vivo contra produccion.vialtec.app,
            memory/pending.md): ya no hay tabs Asfalto/Hormigón, las dos
            secciones conviven siempre con su propio contador ("N pedidos"),
-           mismo orden Hormigón → Asfalto confirmado en vivo. -->
+           mismo orden Hormigón → Asfalto confirmado en vivo.
+           Protagonismo del CTA en mobile (2026-09-07, pedido de Federico:
+           con los KPI/filtros de arriba ocultos, este botón queda como lo
+           primero que se ve — ancho completo + tamaño md para que se note). -->
       <div class="mb-3 flex justify-end">
-        <VButton size="sm" @click="abrirNuevo">+ Nuevo pedido</VButton>
+        <VButton class="w-full md:w-auto" size="md" @click="abrirNuevo">+ Nuevo pedido</VButton>
       </div>
 
       <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
