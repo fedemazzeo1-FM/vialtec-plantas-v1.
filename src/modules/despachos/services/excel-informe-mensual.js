@@ -179,8 +179,14 @@ function armarHojaResumenAnual(workbook, datos) {
   header.values = ['Mes', 'Hormigón (m³)', 'Asfalto (tn)']
   header.eachCell((cell) => estiloHeaderTabla(cell))
 
+  // Orden 2026-09-07 (pedido de Federico): más reciente arriba, enero al
+  // final — al revés del orden cronológico en que arma las filas
+  // fetchResumenAnual() (ene->mes elegido, necesario ahí para que el
+  // acumulado corrido tenga sentido). Se invierte solo para mostrar, no
+  // afecta el cálculo de datos.resumenAnual.totalAcumulado (ya viene sumado
+  // de antes, no depende del orden de iteración).
   let fila = 3
-  datos.resumenAnual.filas.forEach((f) => {
+  ;[...datos.resumenAnual.filas].reverse().forEach((f) => {
     const row = ws.getRow(fila)
     row.values = [f.mes, M3(f.hormigonM3), TN(f.asfaltoTn)]
     row.getCell(1).font = { color: { argb: GRIS_SUAVE }, size: 10 }
