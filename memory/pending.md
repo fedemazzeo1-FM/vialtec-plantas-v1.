@@ -1,5 +1,20 @@
 # pending.md — Pendientes
 
+## ✅ Vale: más margen en la línea de corte (2026-09-07) — CÓDIGO listo, falta prueba de impresión real
+
+Federico reportó que al cortar la hoja del vale exactamente a la mitad
+(troquelado vertical, Original/Duplicado lado a lado, A4 landscape — la
+orientación está confirmada correcta, no se tocó) se cortaba parte de un
+vale. Diagnóstico con un harness fuera de la app (sin login, mismo
+criterio de sesiones anteriores): el centrado ya era matemáticamente
+exacto, el problema era el margen de seguridad (`gap-6` ≈ 3.17mm de aire
+a cada lado, poco para la imprecisión real de imprimir/cortar). Fix:
+`gap-[14mm]` — duplica el margen a 7mm de cada lado, reverificado
+perfectamente centrado. Ver commit `abca204`. **Falta que Federico lo
+pruebe con una impresión/corte real** antes de darlo por cerrado — si 7mm
+todavía no alcanza, agrandar el mismo valor (`gap-[14mm]` en
+`ValeImprimible.vue`).
+
 ## ✅ Mobile: prioridad de módulos operativos + menos ruido en listados (2026-09-07) — CÓDIGO listo, sin verificación visual
 
 Pedido explícito de Federico, roadmap Mobile: nav inferior reordenada
