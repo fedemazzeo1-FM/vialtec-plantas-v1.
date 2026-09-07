@@ -1,5 +1,20 @@
 # pending.md — Pendientes
 
+## ✅ Home: gráfico de producción mensual replicado del Informe Mensual (2026-09-07)
+
+Pedido de Federico ("ese gráfico replicalo en Home"). A diferencia del
+Excel (imagen fija), acá es un componente Vue vivo (`VBarraMensual.vue`,
+nuevo en `src/components/shared/`) — reusa el mismo dato exacto que
+"Resumen anual" del Informe Mensual (`fetchResumenAnual()`, sin duplicar
+el cálculo). Un gráfico dentro de "Producción de asfalto" (azul, tn) y
+otro dentro de "Producción de hormigón" (naranja, m³) — nunca comparten
+eje (dataviz skill), mismos 2 colores que ya distinguían Asfalto/Hormigón
+en el Gantt de la misma página. Tooltip por barra (hover + teclado) y
+toggle "Ver tabla" como alternativa accesible. Verificado con SSR real
+(`@vue/server-renderer`, sin necesitar navegador): estructura y alturas de
+barras correctas. Build limpio. **Falta la prueba visual real en el
+navegador** — no hay sesión logueada disponible esta sesión.
+
 ## ✅ Informe Mensual — orden del Resumen Anual + gráfico de barras (2026-09-07)
 
 Dos pedidos más de Federico sobre el Informe Mensual (viendo el Excel ya
