@@ -1,22 +1,19 @@
 // Service de Home/Dashboard — réplica del "Panel de control" del sistema
 // legado (memory/pending.md, 2026-09-04: relevado en vivo contra
-// produccion.vialtec.app a pedido de Federico). Consultas propias de este
-// módulo; reusa calcularConsumoTotalKg (formulas.service.js) en vez de
-// duplicar el cálculo de consumo (memory/conventions.md — mismo patrón que
-// useAlertaStockSemana.js, pero histórico semana a semana en vez de
-// proyectado a la semana en curso).
+// produccion.vialtec.app a pedido de Federico), extendido 2026-09-06 con la
+// producción anual por planta y el Gantt de despachos por fórmula (ver
+// memory/pending.md).
 //
-// Todas las consultas acá están acotadas a una semana o a un puñado de
-// pedidos confirmados — no aplica la regla de paginación (memory/architecture.md,
-// mismo criterio que fetchPedidosSemana()/fetchTotalesSemana() de
-// pedidos.service.js).
+// Todas las consultas acá están acotadas a una semana, 8 semanas o un
+// puñado de pedidos confirmados — no aplica la regla de paginación
+// (memory/architecture.md, mismo criterio que fetchPedidosSemana()/
+// fetchTotalesSemana() de pedidos.service.js).
 
 import { supabase } from '@/config/supabase'
 import { obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
-import { fetchFormulas, calcularConsumoTotalKg } from '@/modules/maestros/services/formulas.service'
+import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 
 const TABLA_PEDIDOS = 'plantas_pedidos'
-const MATERIALES_SIN_DESCUENTO = ['agua', 'purgue'] // memory/business-rules.md
 
 function aFechaISO(date) {
   return date.toISOString().slice(0, 10)
@@ -81,19 +78,90 @@ export async function fetchProximosDespachos(limite = 5) {
   return data ?? []
 }
 
+// ---------------------------------------------------------------------------
+// Producción anual de asfalto por planta (2026-09-06, pedido de Federico:
+// "diferenciar las plantas" — VialTec operó la planta asfáltica Ammann 140
+// hasta abril/2026 y migró a la Marini 180 desde mayo/2026 en adelante).
+//
+// AMMANN_2026_TN es una constante histórica FIJA, no una consulta — sale de
+// un resumen manual en Excel (ene-abr/2026, filas "Carpeta Asf" por mes,
+// planilla que Federico compartió por WhatsApp) porque ese período nunca se
+// cargó en ningún sistema (ni el legado ni este). No cambia nunca, así que
+// no tiene sentido una tabla para un solo número — si en el futuro aparece
+// una corrección de ese Excel, se actualiza este valor a mano.
+// Desglose verificado (suma de la columna "SUMA (Tn/m3)" filtrada a
+// material que empieza con "Carpeta Asf", por hoja): ene 3813.76 + feb
+// 2973.06 + mar 2701.88 + abr 2428.01 = 11916.71 tn.
+const AMMANN_2026_TN = 11916.71
+
+// Hormigón pre-mayo/2026 (2026-09-06, pedido de Federico): mismo Excel que
+// Ammann, pero sin diferenciar por planta ("el hormigón va todo junto") —
+// un solo número que se suma al acumulado en vivo de este sistema. Suma de
+// filas "H-xx"/"Mezcla Cemento" por hoja: ene 1371.5 + feb 1325.3 + mar
+// 544.8 + abr 380.1 = 3621.7 m³. Confirmado con Federico: las filas
+// "Salida 0/6" (549.6) y "Salida Arena" (10) del mismo Excel NO se cuentan
+// (no son producción de mezcla, quedan afuera de todos los totales).
+export const HORMIGON_PRE_MAYO_2026_M3 = 3621.7
+
 /**
- * Consumo real semanal (últimas `cantidadSemanas` semanas, hoy incluida)
- * por material, a partir de los pedidos DESPACHADOS de cada semana
- * (cantidad_despachada × fórmula — mismo cálculo que
- * useAlertaStockSemana.js, pero histórico semana a semana en vez de
- * proyectado a la semana en curso). Semanas sin despacho de un material
- * quedan en 0 (no se omiten — el gráfico del legado no salta semanas).
- *
- * @returns {Promise<{ semanas: string[], porMaterial: Record<string, number[]> }>}
- *   `semanas` son las etiquetas en orden cronológico (más vieja primero);
- *   `porMaterial[nombre]` es un array del mismo largo, kg por semana.
+ * Marini 180 SÍ es una consulta en vivo (no una constante): es la planta que
+ * usa este sistema desde mayo/2026, así que su acumulado sigue creciendo con
+ * cada despacho nuevo — a diferencia de Ammann, que ya cerró. Nota: hasta
+ * que se corra la migración final del corte (memory/pending.md "Paso 4"),
+ * este número no incluye los despachos de asfalto que todavía viven solo en
+ * el legado (kv_store) sin migrar a plantas_pedidos — crece solo,
+ * automáticamente, a medida que se despachan o se migran.
  */
-export async function fetchConsumoSemanalPorMaterial(cantidadSemanas = 8, fechaReferencia = new Date()) {
+export async function fetchProduccionAnualAsfalto() {
+  const { data, error } = await supabase
+    .from(TABLA_PEDIDOS)
+    .select('cantidad_despachada')
+    .eq('tipo', 'asfalto')
+    .eq('estado', 'despachado')
+    .gte('fecha_programada', '2026-05-01')
+
+  if (error) throw error
+
+  const mariniTn = (data ?? []).reduce((acc, p) => acc + (Number(p.cantidad_despachada) || 0), 0)
+
+  return {
+    ammannTn: AMMANN_2026_TN,
+    mariniTn,
+    totalTn: AMMANN_2026_TN + mariniTn,
+  }
+}
+
+/**
+ * Producción anual de hormigón (2026-09-06, pedido de Federico: card nueva
+ * en Home, mismo criterio que fetchProduccionAnualAsfalto() pero SIN
+ * diferenciar por planta — "el hormigón va todo junto" — un solo total.
+ */
+export async function fetchProduccionAnualHormigon() {
+  const { data, error } = await supabase
+    .from(TABLA_PEDIDOS)
+    .select('cantidad_despachada')
+    .eq('tipo', 'hormigon')
+    .eq('estado', 'despachado')
+    .gte('fecha_programada', '2026-05-01')
+
+  if (error) throw error
+
+  const enSistemaM3 = (data ?? []).reduce((acc, p) => acc + (Number(p.cantidad_despachada) || 0), 0)
+
+  return { totalM3: HORMIGON_PRE_MAYO_2026_M3 + enSistemaM3 }
+}
+
+// ---------------------------------------------------------------------------
+// Gantt de despachos por fórmula (2026-09-06, pedido de Federico: reemplaza
+// la card "Consumo de material" que había antes — "qué fórmula sale más,
+// cantidades, algo copado con respecto a la producción"). DESPACHOS reales
+// por fórmula en su propia unidad (tn asfalto / m³ hormigón) — asfalto y
+// hormigón nunca comparten un mismo eje (cada fórmula se normaliza contra
+// su propio máximo en el Gantt, ver useDashboardHome.js). Mismo patrón de
+// ventana de 8 semanas que el resto de este archivo.
+//
+// @returns {Promise<{ semanas: string[], porFormula: { nombre: string, tipo: string, valores: number[] }[] }>}
+export async function fetchDespachosPorFormulaSemana(cantidadSemanas = 8, fechaReferencia = new Date()) {
   const semanas = []
   for (let i = cantidadSemanas - 1; i >= 0; i--) {
     const ref = new Date(fechaReferencia)
@@ -104,7 +172,7 @@ export async function fetchConsumoSemanalPorMaterial(cantidadSemanas = 8, fechaR
 
   const { data, error } = await supabase
     .from(TABLA_PEDIDOS)
-    .select('fecha_programada, cantidad_despachada, formula_id')
+    .select('fecha_programada, cantidad_despachada, formula_id, tipo')
     .eq('estado', 'despachado')
     .eq('archivado', false)
     .gte('fecha_programada', aFechaISO(semanas[0].lunes))
@@ -116,7 +184,7 @@ export async function fetchConsumoSemanalPorMaterial(cantidadSemanas = 8, fechaR
   const formulasPorId = Object.fromEntries(formulas.map((f) => [f.id, f]))
   const semanasISO = semanas.map((s) => ({ desde: aFechaISO(s.lunes), hasta: aFechaISO(s.domingo) }))
 
-  const consumoPorMaterial = new Map() // nombre -> number[cantidadSemanas]
+  const porFormula = new Map() // formula_id -> { nombre, tipo, valores: number[] }
 
   for (const pedido of data ?? []) {
     const formula = pedido.formula_id ? formulasPorId[pedido.formula_id] : null
@@ -126,16 +194,14 @@ export async function fetchConsumoSemanalPorMaterial(cantidadSemanas = 8, fechaR
     const idxSemana = semanasISO.findIndex((s) => pedido.fecha_programada >= s.desde && pedido.fecha_programada <= s.hasta)
     if (idxSemana === -1) continue
 
-    for (const insumo of calcularConsumoTotalKg(formula, cantidad)) {
-      const clave = (insumo.material || '').trim()
-      if (!clave || MATERIALES_SIN_DESCUENTO.includes(clave.toLowerCase())) continue
-      if (!consumoPorMaterial.has(clave)) consumoPorMaterial.set(clave, new Array(cantidadSemanas).fill(0))
-      consumoPorMaterial.get(clave)[idxSemana] += insumo.kg
+    if (!porFormula.has(formula.id)) {
+      porFormula.set(formula.id, { nombre: formula.nombre, tipo: pedido.tipo, valores: new Array(cantidadSemanas).fill(0) })
     }
+    porFormula.get(formula.id).valores[idxSemana] += cantidad
   }
 
   return {
     semanas: semanas.map((s) => s.label),
-    porMaterial: Object.fromEntries(consumoPorMaterial),
+    porFormula: [...porFormula.values()],
   }
 }

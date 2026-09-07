@@ -48,12 +48,18 @@ supabase/scripts/migracion_final_corte.sql   -- tal cual está, termina en `roll
       trae camiones propios, se resuelven dentro de la misma transacción).
 - [ ] `secuencia_actual` (última columna del chequeo de totales) tiene que
       quedar en `max_vale_real` — confirma que el `setval()` corrió bien.
-- [ ] **Verificado en dry-run 2026-09-06** (referencia, va a cambiar el día
-      real si el legado sigue vivo entre medio): +4 pedidos, +18 eventos de
-      historial, +5 cargas de hormigón, +23 vales (20 asfalto + 3
-      ingreso_arido), +3 ingresos, +3 movimientos de stock. 0 colisiones de
-      `numero_vale`, 0 duplicados, 0 huérfanos. Rollback limpio verificado
-      (conteos volvieron exactos al valor previo).
+- [ ] **Verificado en dry-run 2026-09-06 y re-verificado 2026-09-07**
+      (idéntico en ambas corridas — el legado no acumuló actividad nueva
+      entre medio, buena señal de que el equipo ya está operando sobre el
+      sistema nuevo): +4 pedidos, +18 eventos de historial, +5 cargas de
+      hormigón, +23 vales (20 asfalto + 3 ingreso_arido), +3 ingresos, +3
+      movimientos de stock. 0 colisiones de `numero_vale`, 0 duplicados, 0
+      huérfanos. Rollback limpio verificado ambas veces (conteos volvieron
+      exactos al valor previo: 184/543/114/885/500/786). `secuencia_actual`
+      quedó en 10016 = `max_vale_real` esperado en ambas corridas — el
+      `setval()` no es transaccional (comportamiento de Postgres, no un
+      bug) así que ya quedó aplicado de la corrida del 06, y el dry-run del
+      07 solo confirmó que sigue en el valor correcto.
 
 ## 3. Decisión de Federico — balance final de `plantas_stock` (NO automatizado)
 

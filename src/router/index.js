@@ -76,7 +76,7 @@ const routes = [
   {
     path: '/usuarios',
     name: 'usuarios',
-    component: () => import('@/views/UsuariosPermisosView.vue'),
+    component: () => import('@/views/AdministracionView.vue'),
     meta: { tab: 'usuarios' },
   },
   // TODO: /backup — a medida que se implemente (ver memory/modules-status.md).

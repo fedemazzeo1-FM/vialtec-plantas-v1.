@@ -12,15 +12,21 @@
 import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import logoVialtec from '@/assets/img/logo-vialtec.png'
-import { SECCIONES, ICONOS } from '@/layouts/nav'
+import { SECCIONES, SECCION_ADMINISTRACION, ICONOS } from '@/layouts/nav'
 
 const auth = useAuthStore()
 const menuAbierto = ref(false)
 
 const TABS_INFERIOR = ['pedidos', 'bascula', 'despachos', 'stock']
 
+// SECCION_ADMINISTRACION no tiene tratamiento especial de "pinneado abajo"
+// acá (2026-09-06) — a diferencia de DesktopLayout, "Más" ya es una hoja
+// aparte del flujo principal, así que Administración entra como una sección
+// más de esa hoja (al final de TODAS_LAS_SECCIONES).
+const TODAS_LAS_SECCIONES = [...SECCIONES, SECCION_ADMINISTRACION]
+
 const todosLosLinks = computed(() =>
-  SECCIONES.flatMap((s) => s.links).filter((l) => auth.puedeVerTab(l.tab))
+  TODAS_LAS_SECCIONES.flatMap((s) => s.links).filter((l) => auth.puedeVerTab(l.tab))
 )
 
 const linksNavInferior = computed(() =>
@@ -30,7 +36,7 @@ const linksNavInferior = computed(() =>
 // El resto de los módulos visibles para el rol (los que no entran en la nav
 // inferior) — se listan en la hoja "Más", agrupados igual que en Desktop.
 const seccionesMas = computed(() =>
-  SECCIONES.map((s) => ({
+  TODAS_LAS_SECCIONES.map((s) => ({
     ...s,
     links: s.links.filter((l) => auth.puedeVerTab(l.tab) && !TABS_INFERIOR.includes(l.tab)),
   })).filter((s) => s.links.length)

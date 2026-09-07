@@ -14,11 +14,11 @@
 defineProps({
   open: { type: Boolean, default: false },
   title: { type: String, default: '' },
-  size: { type: String, default: 'md' }, // 'md' (max-w-lg) | 'xl' (max-w-4xl)
+  size: { type: String, default: 'md' }, // 'md' (max-w-lg) | 'xl' (max-w-4xl) | '2xl' (max-w-6xl)
 })
 defineEmits(['update:open'])
 
-const anchoClase = { md: 'max-w-lg', xl: 'max-w-4xl' }
+const anchoClase = { md: 'max-w-lg', xl: 'max-w-4xl', '2xl': 'max-w-6xl' }
 </script>
 
 <template>

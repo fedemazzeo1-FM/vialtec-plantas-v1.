@@ -3,7 +3,13 @@
 // puro (memory/conventions.md): toda la carga/cálculo vive acá.
 
 import { computed, reactive, ref } from 'vue'
-import { fetchResumenSemanaHome, fetchProximosDespachos, fetchConsumoSemanalPorMaterial } from '@/modules/dashboard/services/dashboard.service'
+import {
+  fetchResumenSemanaHome,
+  fetchProximosDespachos,
+  fetchProduccionAnualAsfalto,
+  fetchProduccionAnualHormigon,
+  fetchDespachosPorFormulaSemana,
+} from '@/modules/dashboard/services/dashboard.service'
 import { fetchStockActual } from '@/services/stock.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
@@ -108,41 +114,101 @@ export function useDashboardHome() {
   }
 
   // -------------------------------------------------------------------------
-  // Consumo de material — últimas 8 semanas, selector de material
+  // Producción anual de asfalto — 3 cards (2026-09-06, pedido de Federico):
+  // total del año, planta Ammann 140 (constante histórica, hasta abril/2026)
+  // y planta Marini 180 (en vivo, desde mayo/2026 — ver dashboard.service.js).
   // -------------------------------------------------------------------------
 
-  const cargandoConsumo = ref(false)
-  const consumo = ref({ semanas: [], porMaterial: {} })
-  const materialSeleccionado = ref('')
+  const cargandoProduccionAnual = ref(false)
+  const produccionAnual = reactive({ ammannTn: 0, mariniTn: 0, totalTn: 0 })
 
-  const materialesConsumo = computed(() => Object.keys(consumo.value.porMaterial).sort((a, b) => a.localeCompare(b, 'es')))
-
-  const valoresMaterialSeleccionado = computed(() => consumo.value.porMaterial[materialSeleccionado.value] ?? [])
-
-  /** [{ semana, valorTn, valorLabel }] para la lista + el sparkline del material elegido. */
-  const filasConsumo = computed(() =>
-    consumo.value.semanas.map((semana, i) => {
-      const kg = valoresMaterialSeleccionado.value[i] ?? 0
-      return {
-        semana,
-        kg,
-        valorLabel: kg >= 1000 ? `${(kg / 1000).toFixed(2)} t` : `${kg.toFixed(0)} kg`,
-      }
-    })
-  )
-
-  async function cargarConsumo() {
-    cargandoConsumo.value = true
+  async function cargarProduccionAnual() {
+    cargandoProduccionAnual.value = true
     error.value = null
     try {
-      consumo.value = await fetchConsumoSemanalPorMaterial(8)
-      if (!materialSeleccionado.value || !consumo.value.porMaterial[materialSeleccionado.value]) {
-        materialSeleccionado.value = materialesConsumo.value[0] ?? ''
-      }
+      Object.assign(produccionAnual, await fetchProduccionAnualAsfalto())
     } catch (e) {
       error.value = e.message
     } finally {
-      cargandoConsumo.value = false
+      cargandoProduccionAnual.value = false
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Producción anual de hormigón — 1 card (2026-09-06, pedido de Federico):
+  // mismo criterio que produccionAnual (asfalto) pero sin plantas, un solo
+  // total ("el hormigón va todo junto").
+  // -------------------------------------------------------------------------
+
+  const cargandoProduccionHormigon = ref(false)
+  const produccionHormigon = reactive({ totalM3: 0 })
+
+  async function cargarProduccionHormigon() {
+    cargandoProduccionHormigon.value = true
+    error.value = null
+    try {
+      Object.assign(produccionHormigon, await fetchProduccionAnualHormigon())
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      cargandoProduccionHormigon.value = false
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Gantt de despachos por fórmula — reemplaza "Consumo de material"
+  // (2026-09-06, pedido de Federico: "qué fórmula sale más, cantidades, algo
+  // copado"). Cada fila (fórmula) se normaliza contra su PROPIO máximo de
+  // las 8 semanas — asfalto (tn) y hormigón (m³) nunca comparten una escala
+  // común (memory: "un solo eje", ver dataviz skill), el ancho de cada barra
+  // solo dice "cuánto respecto a la semana más fuerte de esta misma fórmula".
+  // El orden de filas (por total desc) sí responde "qué fórmula sale más".
+  // -------------------------------------------------------------------------
+
+  const cargandoGantt = ref(false)
+  const ganttSemanas = ref([])
+  const ganttFilasRaw = ref([])
+
+  const COLOR_TIPO = {
+    asfalto: { barra: 'bg-[#2a78d6]', texto: 'text-[#2a78d6]', punto: 'bg-[#2a78d6]' },
+    hormigon: { barra: 'bg-[#eb6834]', texto: 'text-[#eb6834]', punto: 'bg-[#eb6834]' },
+  }
+
+  const ganttFilas = computed(() =>
+    ganttFilasRaw.value
+      .map((f) => {
+        const total = f.valores.reduce((a, b) => a + b, 0)
+        const max = Math.max(...f.valores, 0)
+        const unidad = f.tipo === 'hormigon' ? 'm³' : 'tn'
+        return {
+          nombre: f.nombre,
+          tipo: f.tipo,
+          unidad,
+          total,
+          totalLabel: `${total.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${unidad}`,
+          color: COLOR_TIPO[f.tipo] ?? COLOR_TIPO.asfalto,
+          celdas: f.valores.map((valor) => ({
+            valor,
+            pct: max > 0 ? Math.max(Math.round((valor / max) * 100), valor > 0 ? 10 : 0) : 0,
+            label: `${valor.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${unidad}`,
+          })),
+        }
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8)
+  )
+
+  async function cargarGantt() {
+    cargandoGantt.value = true
+    error.value = null
+    try {
+      const { semanas, porFormula } = await fetchDespachosPorFormulaSemana(8)
+      ganttSemanas.value = semanas
+      ganttFilasRaw.value = porFormula
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      cargandoGantt.value = false
     }
   }
 
@@ -153,7 +219,9 @@ export function useDashboardHome() {
   function iniciar() {
     cargarKpisYStock()
     cargarProximos()
-    cargarConsumo()
+    cargarProduccionAnual()
+    cargarProduccionHormigon()
+    cargarGantt()
   }
 
   return {
@@ -167,10 +235,13 @@ export function useDashboardHome() {
     materialesCriticos,
     cargandoProximos,
     filasProximos,
-    cargandoConsumo,
-    materialesConsumo,
-    materialSeleccionado,
-    filasConsumo,
+    cargandoProduccionAnual,
+    produccionAnual,
+    cargandoProduccionHormigon,
+    produccionHormigon,
+    cargandoGantt,
+    ganttSemanas,
+    ganttFilas,
     iniciar,
   }
 }

@@ -2,7 +2,7 @@
 // la vista es solo template (memory/conventions.md).
 
 import { reactive, ref } from 'vue'
-import { fetchUsuarios, guardarUsuario, ROLES_DISPONIBLES } from '@/modules/usuarios/services/usuarios.service'
+import { fetchUsuarios, guardarUsuario, fetchRolesAsignables } from '@/modules/usuarios/services/usuarios.service'
 import { fetchObras } from '@/services/flota.service'
 
 function usuarioVacio() {
@@ -12,6 +12,7 @@ function usuarioVacio() {
 export function useUsuariosRoles() {
   const usuarios = ref([])
   const obras = ref([])
+  const rolesDisponibles = ref([]) // [{id, nombre}] — dinámico desde plantas_roles (migración 26)
   const cargando = ref(false)
   const error = ref(null)
 
@@ -24,9 +25,10 @@ export function useUsuariosRoles() {
     cargando.value = true
     error.value = null
     try {
-      const [listaUsuarios, listaObras] = await Promise.all([fetchUsuarios(), fetchObras()])
+      const [listaUsuarios, listaObras, listaRoles] = await Promise.all([fetchUsuarios(), fetchObras(), fetchRolesAsignables()])
       usuarios.value = listaUsuarios
       obras.value = listaObras
+      rolesDisponibles.value = listaRoles
     } catch (e) {
       error.value = e.message
     } finally {
@@ -97,7 +99,7 @@ export function useUsuariosRoles() {
     guardando,
     editandoId,
     formData,
-    rolesDisponibles: ROLES_DISPONIBLES,
+    rolesDisponibles,
     cargar,
     abrirNuevo,
     abrirEdicion,

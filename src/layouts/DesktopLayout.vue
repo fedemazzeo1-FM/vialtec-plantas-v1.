@@ -9,7 +9,7 @@
 import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import logoVialtec from '@/assets/img/logo-vialtec.png'
-import { SECCIONES, ICONOS } from '@/layouts/nav'
+import { SECCIONES, SECCION_ADMINISTRACION, ICONOS } from '@/layouts/nav'
 
 const auth = useAuthStore()
 
@@ -20,6 +20,15 @@ const seccionesVisibles = computed(() =>
     (s) => s.links.length
   )
 )
+
+// Sección "Administración" pinneada abajo del sidebar, separada de
+// seccionesVisibles (2026-09-06, pedido de Federico — réplica de Flota):
+// se renderiza en su propio <nav> con `mt-auto`, arriba del bloque de
+// usuario/"Cerrar sesión", en vez de scrollear junto con el resto.
+const seccionAdministracionVisible = computed(() => {
+  const links = SECCION_ADMINISTRACION.links.filter((l) => auth.puedeVerTab(l.tab))
+  return links.length ? { ...SECCION_ADMINISTRACION, links } : null
+})
 
 const iniciales = computed(() =>
   (auth.nombre || '')
@@ -34,7 +43,7 @@ const iniciales = computed(() =>
 <template>
   <div class="flex min-h-screen">
     <aside
-      class="flex flex-col border-r border-gray-200 bg-gray-50 text-gray-600 transition-all duration-200"
+      class="sticky top-0 flex h-screen shrink-0 flex-col self-start overflow-y-auto border-r border-gray-200 bg-gray-50 text-gray-600 transition-all duration-200"
       :class="colapsado ? 'w-[52px]' : 'w-[216px]'"
     >
       <div class="relative flex items-center justify-between px-3 py-4">
@@ -90,6 +99,35 @@ const iniciales = computed(() =>
             </li>
           </ul>
         </div>
+      </nav>
+
+      <nav v-if="seccionAdministracionVisible" class="mt-auto space-y-1 border-t border-gray-200 px-2 pt-3">
+        <p v-if="!colapsado" class="mb-1 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          {{ seccionAdministracionVisible.titulo }}
+        </p>
+        <ul class="space-y-1">
+          <li v-for="link in seccionAdministracionVisible.links" :key="link.to">
+            <router-link
+              :to="link.to"
+              class="flex items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold transition-colors duration-150"
+              :class="colapsado ? 'justify-center' : ''"
+              active-class="bg-vialtec/10 text-vialtec"
+              :title="colapsado ? link.label : null"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="h-5 w-5 shrink-0"
+                v-html="ICONOS[link.icon]"
+              />
+              <span v-if="!colapsado">{{ link.label }}</span>
+            </router-link>
+          </li>
+        </ul>
       </nav>
 
       <div class="border-t border-gray-200 px-2 py-3">

@@ -2038,6 +2038,145 @@ se imprimen 6" (que entiendo como demasiadas hojas por remito hoy).
    Chrome, así que no lo disparé) — si al imprimirlo en papel algo no entra
    bien en la hoja, avisame y lo ajusto.
 
+## ✅ Re-verificación pre-corte — 2026-09-07 (dry-run del día anterior a la corrida real)
+
+Pedido de Federico ("avanzamos directamente con la MIGRACIÓN GRANDE"): re-
+correr auditoría + dry-run del script de corte, hoy, para confirmar que
+sigue vigente antes de la corrida real. Nada tocó producción (todo
+lectura + una transacción con `rollback`).
+
+**1) Auditoría del delta** (`supabase/scripts/auditoria_delta_desde_01_09.sql`,
+re-ejecutada completa): **resultado IDÉNTICO al de 2026-09-06** — 4 pedidos
+pendientes, 18 eventos de historial, 4 cargas de hormigón, 20 vales de
+asfalto, 0 egreso_arido, 3 ingresos de áridos, 1 relevamiento nuevo sin
+reconciliar (2026-09-03, el mismo de siempre). El legado no acumuló
+actividad nueva en el día que pasó — señal de que el equipo ya no está
+cargando en `produccion.vialtec.app`. Chequeo crítico de colisión de
+`numero_vale`: **0 filas**, igual que ayer.
+
+**2) Dry-run del script de migración** (`supabase/scripts/migracion_final_corte.sql`,
+transacción completa con `rollback` al final): baseline pre-corrida
+184/543/114/885/500/786 (pedidos/historial/cargas hormigón/vales/
+ingresos/stock movimientos) — **exactamente igual al baseline de ayer**.
+Resultado del dry-run: 188/561/119/908/503/789 (mismos deltas: +4/+18/+5/
++23/+3/+3). `setval()`: `secuencia_actual` = `max_vale_real` = 10016 en
+ambos casos (el `setval` de ayer no se revirtió con el `rollback` —
+comportamiento no-transaccional de Postgres para sequences, esperado, no
+es un bug). 3 chequeos de integridad: 0 duplicados de `numero_vale`, 0
+`id_legado` duplicado, 0 ingresos huérfanos. Post-rollback verificado:
+conteos volvieron exactos a 184/543/114/885/500/786, `max_vale_real`
+volvió a 9993 (el número real más alto YA migrado, sin contar el delta
+pendiente).
+
+**3) Auditoría de consistencia — recuento final por tabla** (a migrar en
+la corrida real): Pedidos +4, Pedidos_historial +18, Cargas_hormigón +5
+(4 del legado + 1 que es el propio pedido de hormigón recién migrado
+trayendo su camión, resuelto dentro de la misma transacción), Vales +23
+(20 asfalto + 3 ingreso_arido, numeración real preservada vía
+`overriding system value`), Ingresos +3, Stock_movimientos +3.
+`plantas_stock` (balance final) sigue **excluido a propósito** — decisión
+de Federico pendiente para el día del corte (Opción A: confiar en el
+ledger nuevo / Opción B: relevamiento físico fresco, ver
+`CHECKLIST_CORTE_FINAL.md` punto 3).
+
+**4) Checklist de deploy final** — ya existía completo desde el 06 en
+`supabase/scripts/CHECKLIST_CORTE_FINAL.md` (9 secciones: re-auditar en
+vivo, dry-run, decisión de stock, corrida real con commit, `npx vercel
+--prod` manual, cambio de DNS de `produccion.vialtec.app` — lo hace
+Federico, Claude no tiene acceso al proveedor —, verificación post-corte,
+baja del legado, y recién ahí cerrar la RLS abierta de `kv_store`).
+Actualizado hoy solo con la nota de esta re-verificación (punto 2 del
+checklist).
+
+**Conclusión**: el script y el plan estaban **estables y listos** — dos
+corridas de dry-run en días distintos dieron resultados idénticos, sin
+ninguna colisión ni inconsistencia.
+
+**Archivos tocados**: solo `supabase/scripts/CHECKLIST_CORTE_FINAL.md`
+(nota actualizada) y este archivo. `auditoria_delta_desde_01_09.sql` y
+`migracion_final_corte.sql` no necesitaron cambios — se re-ejecutaron tal
+cual (el archivo del script sigue terminando en `rollback;` en el repo,
+a propósito — la corrida real de abajo se ejecutó pasando la misma
+consulta con `commit;` directo, sin modificar el archivo, para que quede
+disponible como herramienta de dry-run segura por default si hiciera
+falta re-auditar algo más adelante).
+
+## 🎯 MIGRACIÓN REAL EJECUTADA — 2026-09-07, confirmada por Federico
+
+Federico aprobó explícitamente los 3 puntos pendientes y dio la orden de
+ejecución real: *"1. Opción de Stock: Seleccionamos la OPCIÓN A... 2.
+Ejecución Definitiva: Procede a correr el script de migración final
+definitivo (impacto real, sin rollback)... 3. Registro de Git..."*
+
+**1) Decisión de stock — Opción A confirmada**: `plantas_stock` NO se
+tocó. El balance final sigue siendo el que el sistema nuevo viene
+calculando de forma independiente desde el 01/09 (despachos, báscula,
+movimientos manuales) — no se sobreescribió con el snapshot del legado,
+tal como estaba planteado en `migracion_final_corte.sql`. El relevamiento
+del 2026-09-03 en el legado queda sin reconciliar contra el sistema nuevo
+(decisión consciente, no un olvido).
+
+**2) Migración ejecutada con `commit` real** (mismo query que los dos
+dry-runs anteriores, palabra por palabra, solo cambiando `rollback;` por
+`commit;` al final — ninguna otra diferencia de lógica):
+
+| Tabla | Antes | Después | Delta |
+|---|---|---|---|
+| `plantas_pedidos` | 184 | **188** | +4 |
+| `plantas_pedidos_historial` | 543 | **561** | +18 |
+| `plantas_cargas_hormigon` | 114 | **119** | +5 |
+| `plantas_vales` | 885 | **908** | +23 (20 asfalto + 3 ingreso_arido) |
+| `plantas_ingresos` | 500 | **503** | +3 |
+| `plantas_stock_movimientos` | 786 | **789** | +3 |
+
+`setval()` ejecutado: `secuencia_actual` = `max_vale_real` = **10016** —
+sincronizado, sin colisión con el bloque sintético 90000001-90000500.
+3 chequeos de integridad post-commit: **0** `numero_vale` duplicado,
+**0** `id_legado` duplicado en pedidos, **0** ingresos huérfanos.
+**Verificado con una consulta independiente después del commit** (no
+solo dentro de la misma transacción) — los conteos de arriba persisten:
+la migración quedó aplicada de verdad, no es un resultado de dry-run.
+
+Esto captura el delta completo acumulado en el legado desde el 01/09 —
+el sistema nuevo ahora tiene el historial completo de pedidos, vales de
+báscula (asfalto + áridos) y movimientos de stock hasta el momento del
+corte.
+
+**3) Commit de Git**: ver el commit inmediatamente siguiente a esta
+entrada en el log — incluye esta actualización de `pending.md` +
+`CHECKLIST_CORTE_FINAL.md` (los únicos archivos con cambios pendientes,
+la migración en sí vive en Supabase, no en el repo de código).
+
+**Pendiente inmediato** (checklist, secciones 5-9 de
+`CHECKLIST_CORTE_FINAL.md`, en orden): `npx vercel --prod` (manual,
+Federico lo dispara), cambio de DNS de `produccion.vialtec.app` (lo hace
+Federico, sin acceso de Claude al proveedor), smoke test post-corte contra
+el dominio real, dar de baja el legado como fuente de escritura, y
+**recién ahí** cerrar la RLS abierta de `kv_store` (hallazgo de seguridad
+conocido, seguro de resolver solo con el legado ya apagado).
+
+## 2026-09-06 — Hormigón pre-mayo/2026 del Excel sumado al acumulado
+
+Federico preguntó si el hormigón del Excel (ene-abr/2026, mismo archivo que
+Ammann 140) ya estaba sumado — no lo estaba, solo había tomado las filas
+"Carpeta Asf" para el total de asfalto Ammann. Corregido: `HORMIGON_PRE_MAYO_2026_M3
+= 3621.7` (suma de filas "H-xx"/"Mezcla Cemento" del Excel, ene 1371.5 + feb
+1325.3 + mar 544.8 + abr 380.1) agregada en
+`src/services/despachos.service.js#fetchAcumuladoHistorico()`, sumada al
+acumulado en vivo del sistema — sin diferenciar por planta (Federico: "el
+hormigón va todo junto"). Afecta el KPI "Total hormigón acumulado" de
+Despachos.
+
+**Resuelto** — le pregunté a Federico por "Salida 0/6" (549.6) y "Salida
+Arena" (10) del mismo Excel: confirmó que esas dos NO se cuentan en ningún
+total (no son producción de mezcla). `AMMANN_2026_TN` queda como estaba
+(11916.71 tn, solo "Carpeta Asf").
+
+También agregada la card "Producción de hormigón — año 2026" en Home (1 sola
+card, sin diferenciar planta) vía `fetchProduccionAnualHormigon()` en
+`dashboard.service.js` — mismo total (histórico Excel + en vivo desde mayo)
+que ahora ve Despachos en su KPI "Total hormigón acumulado".
+
 ## Otros pendientes
 
 - Definir el mapeo de los 7 roles del sistema anterior (`admin`, `plantista`,

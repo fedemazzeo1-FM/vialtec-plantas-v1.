@@ -33,12 +33,19 @@ const {
   materialesCriticos,
   cargandoProximos,
   filasProximos,
-  cargandoConsumo,
-  materialesConsumo,
-  materialSeleccionado,
-  filasConsumo,
+  cargandoProduccionAnual,
+  produccionAnual,
+  cargandoProduccionHormigon,
+  produccionHormigon,
+  cargandoGantt,
+  ganttSemanas,
+  ganttFilas,
   iniciar: iniciarPanelControl,
 } = useDashboardHome()
+
+function formatearTn(valor) {
+  return valor.toLocaleString('es-AR', { maximumFractionDigits: 1 })
+}
 
 // ---------------------------------------------------------------------------
 // Alerta de stock proyectado (semana en curso) — banner 🔴/🟡, sin bloqueo
@@ -121,27 +128,89 @@ iniciarPanelControl()
         </div>
       </div>
 
-      <!-- Consumo de material (8 semanas) + Próximos despachos -->
+      <!-- Producción de asfalto — año 2026 (2026-09-06, pedido de Federico:
+           diferenciar la planta Ammann 140 —histórico ene-abr, sin sistema,
+           sale de un Excel manual— de la Marini 180 —en uso desde mayo,
+           calculada en vivo desde los despachos reales—). -->
+      <div class="mb-6">
+        <h3 class="mb-2 text-sm font-bold text-text">Producción de asfalto — año 2026</h3>
+        <p v-if="cargandoProduccionAnual" class="text-sm text-text-soft">Cargando…</p>
+        <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <VCard>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Total acumulado en el año</p>
+            <p class="mt-2 text-2xl font-extrabold text-text">{{ formatearTn(produccionAnual.totalTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
+            <p class="text-xs text-text-soft">Ammann 140 (ene-abr) + Marini 180 (mayo en adelante)</p>
+          </VCard>
+          <VCard>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Planta asfáltica Ammann 140</p>
+            <p class="mt-2 text-2xl font-extrabold text-[#2a78d6]">{{ formatearTn(produccionAnual.ammannTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
+            <p class="text-xs text-text-soft">Enero — abril 2026 (histórico, planilla manual)</p>
+          </VCard>
+          <VCard>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Planta asfáltica Marini 180</p>
+            <p class="mt-2 text-2xl font-extrabold text-[#eb6834]">{{ formatearTn(produccionAnual.mariniTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
+            <p class="text-xs text-text-soft">Mayo 2026 en adelante (en uso — este sistema)</p>
+          </VCard>
+        </div>
+      </div>
+
+      <!-- Producción de hormigón — año 2026 (2026-09-06, pedido de Federico:
+           acá SIN diferenciar por planta — "el hormigón va todo junto" — un
+           solo total: histórico ene-abr/2026 del Excel + en vivo desde
+           mayo/2026, ver dashboard.service.js#fetchProduccionAnualHormigon). -->
+      <div class="mb-6">
+        <h3 class="mb-2 text-sm font-bold text-text">Producción de hormigón — año 2026</h3>
+        <p v-if="cargandoProduccionHormigon" class="text-sm text-text-soft">Cargando…</p>
+        <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <VCard>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Total acumulado en el año</p>
+            <p class="mt-2 text-2xl font-extrabold text-text">{{ formatearTn(produccionHormigon.totalM3) }} <span class="text-base font-semibold text-text-soft">m³</span></p>
+            <p class="text-xs text-text-soft">Enero 2026 en adelante — sin diferenciar por planta</p>
+          </VCard>
+        </div>
+      </div>
+
+      <!-- Gantt de despachos por fórmula (8 semanas) + Próximos despachos.
+           Reemplaza la vieja card "Consumo de material" (2026-09-06, pedido
+           de Federico: "qué fórmula sale más, cantidades, algo copado").
+           Cada fila es una fórmula, ordenadas por total despachado desc —
+           el orden ya responde "qué fórmula sale más". Las barras de cada
+           fila se normalizan contra el propio máximo semanal de ESA fórmula
+           (asfalto en tn y hormigón en m³ nunca comparten escala). -->
       <div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
         <VCard>
-          <h3 class="mb-3 text-sm font-bold text-text">Consumo de material</h3>
-          <p v-if="cargandoConsumo" class="text-sm text-text-soft">Cargando…</p>
-          <template v-else-if="materialesConsumo.length">
-            <select
-              v-model="materialSeleccionado"
-              class="mb-3 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            >
-              <option v-for="m in materialesConsumo" :key="m" :value="m">{{ m }}</option>
-            </select>
-            <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-text-soft">Últimas 8 semanas</p>
-            <ul class="divide-y divide-border">
-              <li v-for="fila in filasConsumo" :key="fila.semana" class="flex items-center justify-between py-1.5 text-sm">
-                <span class="text-text-soft">{{ fila.semana }}</span>
-                <span class="font-medium text-text">{{ fila.valorLabel }}</span>
-              </li>
-            </ul>
+          <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-text">Producción por fórmula — últimas 8 semanas</h3>
+            <div class="flex items-center gap-3 text-xs text-text-soft">
+              <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-[#2a78d6]"></span>Asfalto</span>
+              <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-[#eb6834]"></span>Hormigón</span>
+            </div>
+          </div>
+          <p v-if="cargandoGantt" class="text-sm text-text-soft">Cargando…</p>
+          <template v-else-if="ganttFilas.length">
+            <div v-for="fila in ganttFilas" :key="fila.nombre" class="border-b border-border py-2.5 last:border-0">
+              <div class="mb-1.5 flex items-center justify-between gap-2">
+                <span class="flex min-w-0 items-center gap-1.5 text-sm font-medium text-text">
+                  <span class="h-2 w-2 shrink-0 rounded-full" :class="fila.color.punto"></span>
+                  <span class="truncate">{{ fila.nombre }}</span>
+                </span>
+                <span class="shrink-0 text-sm font-bold" :class="fila.color.texto">{{ fila.totalLabel }}</span>
+              </div>
+              <div class="flex items-end gap-1">
+                <div v-for="(celda, i) in fila.celdas" :key="i" class="flex flex-1 flex-col items-center gap-0.5" :title="`${ganttSemanas[i]}: ${celda.label}`">
+                  <div class="flex h-8 w-full items-end rounded-sm bg-gray-50">
+                    <div
+                      class="w-full rounded-sm transition-all"
+                      :class="[fila.color.barra, celda.pct === 0 ? '' : 'min-h-[3px]']"
+                      :style="{ height: celda.pct + '%' }"
+                    ></div>
+                  </div>
+                  <span class="text-[9px] text-text-soft">{{ ganttSemanas[i].replace('S', '') }}</span>
+                </div>
+              </div>
+            </div>
           </template>
-          <p v-else class="text-sm text-text-soft">Sin despachos en las últimas 8 semanas para graficar consumo.</p>
+          <p v-else class="text-sm text-text-soft">Sin despachos en las últimas 8 semanas.</p>
         </VCard>
 
         <VCard>

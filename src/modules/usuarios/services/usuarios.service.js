@@ -17,21 +17,23 @@
 //     (no error, pero lista incompleta para un admin).
 //   - guardarUsuario() va a fallar con "function admin_upsert_usuario_rol
 //     does not exist" (la RPC todavía no existe en la base).
-// La pantalla (UsuariosPermisosView.vue) ya queda armada y lista para
+// La pantalla (AdministracionView.vue) ya queda armada y lista para
 // funcionar apenas se aplique — no hace falta tocar este service de nuevo.
 
 import { supabase } from '@/config/supabase'
 
-/** Los 7 roles de VialTec Plantas — memory/business-rules.md, mismo set que PERMISOS_POR_ROL de auth.store.js. */
-export const ROLES_DISPONIBLES = [
-  'admin',
-  'plantista',
-  'encargado',
-  'supervisor',
-  'balancero',
-  'gerencia',
-  'plantista_hormigon',
-]
+/**
+ * Roles asignables a un usuario — DINÁMICO desde 2026-09-06 (migración 26):
+ * antes era un array hardcodeado de los 7 roles fijos; ahora sale de
+ * `plantas_roles` (activos), así que un rol nuevo creado en la tab "Roles"
+ * de Administración aparece acá automáticamente, sin tocar código.
+ * @returns {Promise<{id: string, nombre: string}[]>}
+ */
+export async function fetchRolesAsignables() {
+  const { data, error } = await supabase.from('plantas_roles').select('id, nombre').eq('activo', true).order('nombre')
+  if (error) throw error
+  return data
+}
 
 export async function fetchUsuarios() {
   const { data, error } = await supabase

@@ -25,23 +25,31 @@ export const SECCIONES = [
       { to: '/bascula', label: 'Báscula', tab: 'bascula', icon: 'balanza' },
       { to: '/stock', label: 'Stock', tab: 'stock', icon: 'caja' },
       { to: '/simulador', label: 'Simulador', tab: 'simulador', icon: 'capas' },
-    ],
-  },
-  {
-    titulo: 'Administración',
-    links: [
       { to: '/formulas', label: 'Fórmulas', tab: 'formulas', icon: 'matraz' },
-      { to: '/maestros', label: 'Maestros', tab: 'maestros', icon: 'base-datos' },
-      // Solo aparece para admin: PERMISOS_POR_ROL['admin'].tabs === 'todas'
-      // es el único rol que matchea 'usuarios' (memory/business-rules.md,
-      // auth.store.js#puedeVerTab) — el resto de los roles no tiene
-      // 'usuarios' en su array de tabs, así que el link se filtra solo acá
-      // y el router bloquea el acceso directo por URL igual (mismo guard
-      // genérico de siempre, sin código especial para este módulo).
-      { to: '/usuarios', label: 'Usuarios y Permisos', tab: 'usuarios', icon: 'usuarios' },
     ],
   },
 ]
+
+// Sección "Administración" — separada del array de arriba a propósito
+// (2026-09-06, pedido de Federico, réplica visual del sidebar de Flota/
+// equipos2.vialtec.app): en DesktopLayout.vue se renderiza pegada abajo del
+// todo, justo arriba de "Cerrar sesión" (con `mt-auto` empujándola), no
+// mezclada con el resto de las secciones que scrollean arriba.
+export const SECCION_ADMINISTRACION = {
+  titulo: 'Administración',
+  links: [
+    // Antes "Usuarios y Permisos" — renombrado a "Administración" (tab
+    // "usuarios" sin cambios a propósito, es la clave que ya usa
+    // PERMISOS_POR_ROL/auth.store.js#puedeVerTab en todos lados; cambiar el
+    // string rompería esos chequeos sin ganar nada). Solo aparece para
+    // admin: PERMISOS_POR_ROL['admin'].tabs === 'todas' es el único rol que
+    // matchea 'usuarios' — el resto no tiene 'usuarios' en su array de
+    // tabs, el link se filtra solo y el router bloquea el acceso directo
+    // por URL igual (mismo guard genérico de siempre).
+    { to: '/usuarios', label: 'Administración', tab: 'usuarios', icon: 'engranaje' },
+    { to: '/maestros', label: 'Maestros', tab: 'maestros', icon: 'base-datos' },
+  ],
+}
 
 // Set mínimo de íconos outline (24x24, stroke-only) — reemplazable por una
 // librería de verdad (ej. Heroicons) si en algún momento se agrega como
@@ -66,6 +74,8 @@ export const ICONOS = {
     '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
   usuarios:
     '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="8" r="2.5"/><path d="M15.5 12.5a5 5 0 0 1 5.8 4.9"/>',
+  engranaje:
+    '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   salir: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
   cerrar: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',

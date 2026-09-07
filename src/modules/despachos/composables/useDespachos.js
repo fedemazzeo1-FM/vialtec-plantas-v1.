@@ -23,6 +23,11 @@ import {
 } from '@/services/despachos.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+// Reuso de Home (memory/conventions.md: no duplicar lógica compartida entre
+// módulos) — 2026-09-06, pedido de Federico: las cards de producción anual
+// de asfalto de Despachos tienen que mostrar exactamente lo mismo que las
+// 3 cards de Home (Total año / Ammann 140 / Marini 180), mismo cálculo.
+import { fetchProduccionAnualAsfalto } from '@/modules/dashboard/services/dashboard.service'
 import { patentesService } from '@/modules/maestros/services/maestros.service'
 // Reuso de Báscula (memory/conventions.md: no duplicar lógica compartida
 // entre módulos) — el acumulado dinámico del día y el formato de N° de vale
@@ -94,6 +99,26 @@ export function useDespachos() {
       kpisHistorico.value = historico
     } catch (e) {
       error.value = e.message
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Producción anual de asfalto por planta — mismas 3 cards que Home
+  // (Total año 2026 / Ammann 140 / Marini 180), ver dashboard.service.js.
+  // -------------------------------------------------------------------------
+
+  const cargandoProduccionAnual = ref(false)
+  const produccionAnual = reactive({ ammannTn: 0, mariniTn: 0, totalTn: 0 })
+
+  async function cargarProduccionAnual() {
+    cargandoProduccionAnual.value = true
+    error.value = null
+    try {
+      Object.assign(produccionAnual, await fetchProduccionAnualAsfalto())
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      cargandoProduccionAnual.value = false
     }
   }
 
@@ -388,6 +413,7 @@ export function useDespachos() {
       cargarResumenPorObra()
     })
     cargarKpis()
+    cargarProduccionAnual()
   }
 
   return {
@@ -399,6 +425,8 @@ export function useDespachos() {
     formulasPorId,
     kpisMes,
     kpisHistorico,
+    cargandoProduccionAnual,
+    produccionAnual,
     filas: filasConNombres,
     totalDespachos,
     paginaActual,

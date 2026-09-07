@@ -18,47 +18,21 @@ import { supabase } from '@/config/supabase'
 // en vuelo entre llamadas concurrentes.
 let promesaRestaurarSesion = null
 
-// Matriz de permisos por rol — "Logica sis. plantas v1.rtf" §3 (7 roles).
-// Es la fuente para mostrar/ocultar UI. El enforcement real y no salteable
-// vive en las RPC (registrar_pesada_bascula, registrar_carga_hormigon) y,
-// cuando se definan, en RLS — esto solo evita que la UI ofrezca acciones que
-// el server va a rechazar igual.
-export const PERMISOS_POR_ROL = {
-  admin: { tabs: 'todas', crearPedido: true, confirmar: true, despachar: true, stock: 'editar', verVentas: true },
-  // simulador: solo admin/plantista lo tienen explícito en ambos .rtf y en
-  // el relevamiento en vivo (menú real de produccion.vialtec.app) — el
-  // resto de los roles no lo lista ninguno de los dos documentos.
-  plantista: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'stock', 'simulador', 'bascula', 'formulas', 'maestros'],
-    crearPedido: true,
-    confirmar: true,
-    despachar: true,
-    stock: 'editar',
-    verVentas: true,
-  },
-  // encargado/supervisor: "ver Despachos" acá solo controla si el TAB
-  // aparece — el filtrado real a "solo sus despachos" (memory/business-
-  // rules.md, v1.rtf §257) es de la etapa de RLS fina/visibilidad por obra,
-  // todavía PENDIENTE (memory/pending.md, P0.2). Hoy ambos roles ven todos.
-  encargado: { tabs: ['dashboard', 'pedidos', 'despachos'], crearPedido: true, confirmar: false, despachar: false, stock: false, verVentas: true },
-  supervisor: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos'],
-    crearPedido: true,
-    confirmar: false,
-    despachar: false,
-    stock: false,
-    verVentas: false,
-  },
-  balancero: { tabs: ['bascula', 'stock', 'maestros'], crearPedido: false, confirmar: false, despachar: false, stock: 'ver', verVentas: false },
-  gerencia: {
-    tabs: ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'stock', 'formulas'],
-    crearPedido: false,
-    confirmar: false,
-    despachar: false,
-    stock: 'ver',
-    verVentas: true,
-  },
-  plantista_hormigon: { tabs: ['pedidos'], crearPedido: false, confirmar: false, despachar: false, stock: false, verVentas: false },
+// Mapeo tab (router meta / nav.js) -> modulo de plantas_permisos. 'dashboard'
+// no está: es visible para cualquier usuario activo, sin togglable en la
+// matriz (siempre fue así — Home es la pantalla de aterrizaje). 'usuarios'
+// tampoco: el módulo "Administración" es SIEMPRE admin-only, fijo, no pasa
+// por la matriz (migración 26 — mismo piso de seguridad que
+// plantas_tiene_permiso() del lado del servidor, ver ese archivo).
+const TAB_A_MODULO = {
+  pedidos: 'pedidos',
+  'plan-semanal': 'plan_semanal',
+  despachos: 'despachos',
+  stock: 'stock',
+  simulador: 'simulador',
+  bascula: 'bascula',
+  formulas: 'formulas',
+  maestros: 'maestros',
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -69,17 +43,24 @@ export const useAuthStore = defineStore('auth', {
     verTodasObras: false,
     verVentas: false,
     obraIds: [],
+    // Set de módulos con permiso "ver" habilitado (2026-09-06, migración 26
+    // — matriz real de permisos, ver plantas_permisos/plantas_tiene_permiso
+    // en supabase/migrations/26_matriz_permisos_roles.sql). Vacío para
+    // admin: admin tiene bypass total, no se calcula desde acá.
+    modulosVer: new Set(),
     cargando: false,
     listo: false, // true cuando ya se resolvió la sesión inicial (evita parpadeo en los guards)
   }),
 
   getters: {
     estaLogueado: (state) => !!state.user,
-    permisos: (state) => (state.rol ? PERMISOS_POR_ROL[state.rol] : null),
     puedeVerTab: (state) => (tab) => {
-      const p = state.rol ? PERMISOS_POR_ROL[state.rol] : null
-      if (!p) return false
-      return p.tabs === 'todas' || p.tabs.includes(tab)
+      if (!state.rol) return false
+      if (state.rol === 'admin') return true
+      if (tab === 'dashboard') return true
+      if (tab === 'usuarios') return false // Administración: siempre admin-only, fijo
+      const modulo = TAB_A_MODULO[tab]
+      return modulo ? state.modulosVer.has(modulo) : false
     },
   },
 
@@ -103,6 +84,24 @@ export const useAuthStore = defineStore('auth', {
       this.verTodasObras = rolRow.ver_todas_obras
       this.verVentas = rolRow.ver_ventas
       this.obraIds = rolRow.obra_ids ?? []
+
+      // Matriz real de "ver" por módulo (migración 26) — admin no la
+      // necesita (bypass total en el getter de arriba), así nos ahorramos
+      // el request para el rol más frecuente en el día a día del admin.
+      if (rolRow.rol === 'admin') {
+        this.modulosVer = new Set()
+      } else {
+        const { data: filasVer, error: errorVer } = await supabase
+          .from('plantas_permisos')
+          .select('modulo')
+          .eq('rol_id', rolRow.rol)
+          .eq('accion', 'ver')
+          .eq('habilitado', true)
+        // No tumba el login si falla — degradación segura: sin filas, el
+        // usuario no ve ninguna pestaña más que Home (mismo criterio de
+        // "seguro por default" que plantas_tiene_permiso() del servidor).
+        this.modulosVer = new Set(errorVer ? [] : (filasVer ?? []).map((f) => f.modulo))
+      }
 
       // Nombre para mostrar — lectura best-effort desde flota_usuarios_email,
       // no bloquea el login si falla (memory/architecture.md: solo lectura

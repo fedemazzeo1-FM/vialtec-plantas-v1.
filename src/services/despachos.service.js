@@ -19,6 +19,7 @@
 
 import { supabase } from '@/config/supabase'
 import { fetchPaginado, fetchPagina } from '@/services/fetch-paginado'
+import { HORMIGON_PRE_MAYO_2026_M3 } from '@/modules/dashboard/services/dashboard.service'
 
 const TABLA_PEDIDOS = 'plantas_pedidos'
 const TABLA_HISTORIAL = 'plantas_pedidos_historial'
@@ -59,7 +60,9 @@ export async function fetchDespachos(filtros = {}, { pagina = 1, tamanoPagina = 
 // KPIs: acumulado histórico completo (memory/relevamiento-sistema-viejo.md
 // §3 — "Total asfalto acumulado"/"Total hormigón acumulado", sin límite de
 // fecha, a diferencia del KPI del mes que ya tiene el Dashboard).
-// ---------------------------------------------------------------------------
+//
+// HORMIGON_PRE_MAYO_2026_M3 vive en dashboard.service.js (memory/conventions.md:
+// no duplicar — Home también la usa para su card "Producción de hormigón").
 
 export async function fetchAcumuladoHistorico() {
   const filas = await fetchPaginado(() =>
@@ -67,7 +70,7 @@ export async function fetchAcumuladoHistorico() {
   )
 
   let asfaltoTn = 0
-  let hormigonM3 = 0
+  let hormigonM3 = HORMIGON_PRE_MAYO_2026_M3
   for (const p of filas) {
     const cantidad = Number(p.cantidad_despachada) || 0
     if (p.tipo === 'hormigon') hormigonM3 += cantidad

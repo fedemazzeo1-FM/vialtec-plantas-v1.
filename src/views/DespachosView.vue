@@ -37,6 +37,8 @@ const {
   patentes,
   kpisMes,
   kpisHistorico,
+  cargandoProduccionAnual,
+  produccionAnual,
   filas,
   totalDespachos,
   paginaActual,
@@ -90,6 +92,10 @@ iniciar()
 function unidadDe(tipo) {
   return tipo === 'hormigon' ? 'm³' : 'tn'
 }
+
+function formatearTn(valor) {
+  return valor.toLocaleString('es-AR', { maximumFractionDigits: 1 })
+}
 </script>
 
 <template>
@@ -100,11 +106,36 @@ function unidadDe(tipo) {
       </div>
 
       <!-- KPIs: mes en curso + acumulado histórico completo -->
-      <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
         <VKpiCard :label="`Asfalto ${mesActualLabel}`" :value="kpisMes.asfaltoTn.toFixed(1)" unidad="tn" />
         <VKpiCard :label="`Hormigón ${mesActualLabel}`" :value="kpisMes.hormigonM3.toFixed(1)" unidad="m³" />
-        <VKpiCard label="Total asfalto acumulado" :value="kpisHistorico.asfaltoTn.toFixed(1)" unidad="tn" />
         <VKpiCard label="Total hormigón acumulado" :value="kpisHistorico.hormigonM3.toFixed(1)" unidad="m³" />
+      </div>
+
+      <!-- Producción de asfalto — año 2026 (2026-09-06, pedido de Federico:
+           mismas 3 cards que Home, mismo cálculo — reemplaza acá el antiguo
+           KPI "Total asfalto acumulado", que quedaba redundante con este
+           desglose por planta Ammann 140 / Marini 180). -->
+      <div class="mb-4">
+        <h3 class="mb-2 text-sm font-bold text-text">Producción de asfalto — año 2026</h3>
+        <p v-if="cargandoProduccionAnual" class="text-sm text-text-soft">Cargando…</p>
+        <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <VCard>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Total acumulado en el año</p>
+            <p class="mt-2 text-2xl font-extrabold text-text">{{ formatearTn(produccionAnual.totalTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
+            <p class="text-xs text-text-soft">Ammann 140 (ene-abr) + Marini 180 (mayo en adelante)</p>
+          </VCard>
+          <VCard>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Planta asfáltica Ammann 140</p>
+            <p class="mt-2 text-2xl font-extrabold text-[#2a78d6]">{{ formatearTn(produccionAnual.ammannTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
+            <p class="text-xs text-text-soft">Enero — abril 2026 (histórico, planilla manual)</p>
+          </VCard>
+          <VCard>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Planta asfáltica Marini 180</p>
+            <p class="mt-2 text-2xl font-extrabold text-[#eb6834]">{{ formatearTn(produccionAnual.mariniTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
+            <p class="text-xs text-text-soft">Mayo 2026 en adelante (en uso — este sistema)</p>
+          </VCard>
+        </div>
       </div>
 
       <!-- Filtros -->
