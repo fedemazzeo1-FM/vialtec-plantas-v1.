@@ -113,8 +113,22 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
 <template>
   <!-- ============================== MODO VALE ============================== -->
   <!-- Landscape, 2 columnas lado a lado (Original / Duplicado) — línea de
-       corte VERTICAL al medio del ancho de la hoja (2026-09-03 tarde). -->
-  <div v-if="modo === 'vale'" class="relative grid h-full grid-cols-2 gap-6">
+       corte VERTICAL al medio del ancho de la hoja (2026-09-03 tarde).
+       Ajuste 2026-09-07 (pedido de Federico: "corto la hoja exactamente a
+       la mitad y corto parte de un vale"): verificado con un harness fuera
+       de la app (mismo criterio de medición que sesiones anteriores) que el
+       centrado en sí ya es matemáticamente exacto (grid de 2 columnas
+       iguales, línea de corte a `left-1/2` del mismo contenedor) — lo que
+       faltaba era MARGEN DE SEGURIDAD real: con `gap-6` (24px ≈ 6.35mm)
+       quedaban solo ~3.17mm de aire a cada lado de la línea antes de tocar
+       el borde de cada vale, insuficiente para la imprecisión real de
+       imprimir/cortar a mano. `gap-[14mm]` (valor en mm, no en rem, para no
+       depender de ningún font-size) duplica eso a 7mm de cada lado —
+       verificado que sigue perfectamente centrado (7.00mm y 7.00mm exactos)
+       y que ninguna columna se achica lo suficiente como para desbordar
+       contenido (pierde <4mm de ancho útil cada una, sigue sobrando lugar
+       de sobra para los campos del vale). -->
+  <div v-if="modo === 'vale'" class="relative grid h-full grid-cols-2 gap-[14mm]">
     <!-- Línea de corte entre copias: visual de "cortar acá" en el medio del
          ancho, mismo criterio que un talonario físico con duplicado, ahora
          vertical en vez de horizontal. -->
