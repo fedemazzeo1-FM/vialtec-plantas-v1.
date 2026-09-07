@@ -14,6 +14,7 @@ import { RouterLink } from 'vue-router'
 import VCard from '@/components/shared/VCard.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VSemaforo from '@/components/shared/VSemaforo.vue'
+import VBarraMensual from '@/components/shared/VBarraMensual.vue'
 import { useAlertaStockSemana } from '@/modules/dashboard/composables/useAlertaStockSemana'
 import { useDashboardHome } from '@/modules/dashboard/composables/useDashboardHome'
 
@@ -37,6 +38,9 @@ const {
   produccionAnual,
   cargandoProduccionHormigon,
   produccionHormigon,
+  cargandoProduccionMensual,
+  produccionMensualAsfalto,
+  produccionMensualHormigon,
   cargandoGantt,
   ganttSemanas,
   ganttFilas,
@@ -152,6 +156,13 @@ iniciarPanelControl()
             <p class="text-xs text-text-soft">Mayo 2026 en adelante (en uso — este sistema)</p>
           </VCard>
         </div>
+        <!-- Gráfico mensual (2026-09-07, pedido de Federico: "ese gráfico
+             [del Informe Mensual] replicalo en Home") — mismo dato que la
+             hoja "Resumen anual" del Informe Mensual, mismo color que ya
+             identifica Asfalto en esta página (Gantt/cards de arriba). -->
+        <VCard v-if="!cargandoProduccionMensual" class="mt-3">
+          <VBarraMensual titulo="Asfalto por mes" :filas="produccionMensualAsfalto" color="#2a78d6" unidad="tn" />
+        </VCard>
       </div>
 
       <!-- Producción de hormigón — año 2026 (2026-09-06, pedido de Federico:
@@ -168,6 +179,9 @@ iniciarPanelControl()
             <p class="text-xs text-text-soft">Enero 2026 en adelante — sin diferenciar por planta</p>
           </VCard>
         </div>
+        <VCard v-if="!cargandoProduccionMensual" class="mt-3">
+          <VBarraMensual titulo="Hormigón por mes" :filas="produccionMensualHormigon" color="#eb6834" unidad="m³" />
+        </VCard>
       </div>
 
       <!-- Gantt de despachos por fórmula (8 semanas) + Próximos despachos.

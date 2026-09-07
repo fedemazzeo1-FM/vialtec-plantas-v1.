@@ -15,6 +15,13 @@ import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
 import { hoyISO } from '@/services/fecha'
+// Mismo cálculo mes a mes que ya usa el Informe Mensual (Despachos →
+// Resumen anual) — no se duplica acá (memory/conventions.md). Cruzado a
+// nivel composable, no de service-a-service: dashboard.service.js ya lo
+// importa `informe-mensual.service.js` en sentido contrario
+// (PRODUCCION_PRE_MAYO_2026), así que importarlo también desde acá abajo
+// crearía un ciclo — a este nivel (composable, no service) no hay ciclo.
+import { fetchResumenAnual } from '@/modules/despachos/services/informe-mensual.service'
 
 export function useDashboardHome() {
   const error = ref(null)
@@ -156,6 +163,34 @@ export function useDashboardHome() {
   }
 
   // -------------------------------------------------------------------------
+  // Producción mensual del año — 2 gráficos de barras (2026-09-07, pedido de
+  // Federico: "ese gráfico [el del Informe Mensual] replicalo en Home").
+  // Mismo dato que "Resumen anual" del Informe Mensual (fetchResumenAnual),
+  // reusado tal cual — no se vuelve a calcular. Asfalto (tn) y Hormigón (m³)
+  // quedan en 2 arrays separados a propósito: nunca comparten eje (dataviz
+  // skill, VBarraMensual.vue es de una sola serie).
+  // -------------------------------------------------------------------------
+
+  const cargandoProduccionMensual = ref(false)
+  const produccionMensualAsfalto = ref([])
+  const produccionMensualHormigon = ref([])
+
+  async function cargarProduccionMensual() {
+    cargandoProduccionMensual.value = true
+    error.value = null
+    try {
+      const mesActual = new Date().toISOString().slice(0, 7)
+      const { filas } = await fetchResumenAnual(mesActual)
+      produccionMensualAsfalto.value = filas.map((f) => ({ mes: f.mes, valor: f.asfaltoTn }))
+      produccionMensualHormigon.value = filas.map((f) => ({ mes: f.mes, valor: f.hormigonM3 }))
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      cargandoProduccionMensual.value = false
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Gantt de despachos por fórmula — reemplaza "Consumo de material"
   // (2026-09-06, pedido de Federico: "qué fórmula sale más, cantidades, algo
   // copado"). Cada fila (fórmula) se normaliza contra su PROPIO máximo de
@@ -221,6 +256,7 @@ export function useDashboardHome() {
     cargarProximos()
     cargarProduccionAnual()
     cargarProduccionHormigon()
+    cargarProduccionMensual()
     cargarGantt()
   }
 
@@ -239,6 +275,9 @@ export function useDashboardHome() {
     produccionAnual,
     cargandoProduccionHormigon,
     produccionHormigon,
+    cargandoProduccionMensual,
+    produccionMensualAsfalto,
+    produccionMensualHormigon,
     cargandoGantt,
     ganttSemanas,
     ganttFilas,
