@@ -31,7 +31,7 @@ import {
 } from '@/modules/bascula/services/bascula.service'
 import { fetchObras, fetchNombresPorEmail } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
-import { getPedido } from '@/modules/pedidos/services/pedidos.service'
+import { getPedido, obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
 import { patentesService, proveedoresService } from '@/modules/maestros/services/maestros.service'
 // Excel con formato corporativo (2026-09-03, pedido de Federico: logo +
 // estilo de colores + pie institucional en todos los exports) — reemplaza
@@ -345,13 +345,23 @@ export function useBascula() {
   const totalHistorial = ref(0)
   const paginaHistorial = ref(1)
   const cargandoHistorial = ref(false)
-  // Sin default de fecha (2026-09-04, override explícito de Federico esta
-  // sesión — antes prellenaba "Hoy", réplica del legado confirmada
-  // 2026-09-02): arranca sin filtro de fecha, mostrando el historial
-  // completo más reciente primero (paginado). Los filtros ahora se aplican
-  // en vivo a medida que se eligen (ver aplicarFiltrosHistorial() más abajo
-  // y los @change en BasculaView.vue) — ya no hace falta un botón "Filtrar".
+  // Default: semana en curso (2026-09-07, pedido de Federico — override de
+  // la decisión anterior de arrancar sin filtro de fecha: con el historial
+  // creciendo sin límite, listar todo de golpe volvió a ser el mismo
+  // problema de performance que ya se resolvió para Pedidos el 2026-09-01,
+  // ver usePedidos.js/obtenerRangoSemana()). Se recalcula en cada `iniciar()`
+  // (carga de la vista), así que se "renueva" solo cada lunes sin código
+  // extra — el usuario sigue pudiendo tocar Desde/Hasta o "Limpiar"
+  // libremente, los filtros siguen aplicándose en vivo (ver
+  // aplicarFiltrosHistorial() más abajo y los @change en BasculaView.vue).
   const filtros = reactive({ tipoVale: '', obraId: '', patente: '', desde: '', hasta: '' })
+
+  function aplicarFiltroSemanaActual() {
+    const { lunes, domingo } = obtenerRangoSemana(new Date())
+    const aISO = (d) => d.toISOString().slice(0, 10)
+    filtros.desde = aISO(lunes)
+    filtros.hasta = aISO(domingo)
+  }
 
   // Nombres de responsable (2026-09-02, réplica exacta del cuadro del
   // legado, migración 20): `responsable_email` viene crudo en cada vale —
@@ -636,6 +646,7 @@ export function useBascula() {
   // -------------------------------------------------------------------------
 
   function iniciar() {
+    aplicarFiltroSemanaActual()
     cargarBase()
     cargarHistorial()
     cargarProximoNumero()
@@ -667,6 +678,10 @@ export function useBascula() {
     cargarHistorial,
     aplicarFiltrosHistorial,
     limpiarFiltrosHistorial,
+    aplicarFiltroSemanaActual: () => {
+      aplicarFiltroSemanaActual()
+      aplicarFiltrosHistorial()
+    },
     cambiarPaginaHistorial,
     TAMANO_PAGINA_HISTORIAL,
     exportandoHistorial,

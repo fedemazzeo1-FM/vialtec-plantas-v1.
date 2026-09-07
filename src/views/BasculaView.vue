@@ -48,6 +48,7 @@ const {
   filtros,
   aplicarFiltrosHistorial,
   limpiarFiltrosHistorial,
+  aplicarFiltroSemanaActual,
   cambiarPaginaHistorial,
   TAMANO_PAGINA_HISTORIAL,
   exportandoHistorial,
@@ -366,7 +367,14 @@ iniciar()
             />
           </label>
         </div>
+        <!-- Default: semana en curso (2026-09-07) — Desde/Hasta siguen
+             editables/limpiables libremente arriba, esto solo ofrece volver
+             al recorte por defecto sin tener que tipear las fechas a mano. -->
+        <p class="mt-2 text-xs text-text-soft">
+          Por defecto se muestra la semana en curso — cambiá Desde/Hasta o usá "Limpiar" para ver otro rango.
+        </p>
         <div class="mt-3 flex gap-2">
+          <VButton variant="ghost" size="sm" @click="aplicarFiltroSemanaActual">Semana actual</VButton>
           <VButton variant="ghost" size="sm" @click="limpiarFiltrosHistorial">Limpiar</VButton>
           <VButton variant="secondary" size="sm" class="ml-auto" :disabled="exportandoHistorial" @click="exportarHistorialExcel">
             {{ exportandoHistorial ? 'Exportando…' : '⬇ Excel' }}
