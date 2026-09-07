@@ -195,50 +195,62 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
     <div
       v-for="(_, i) in [0, 1]"
       :key="i"
-      class="flex h-full w-full flex-col p-4"
+      class="flex h-full w-full flex-col p-6"
       :class="i === 0 ? 'break-after-page' : ''"
     >
-      <!-- Fix 2026-09-04 (memory/pending.md — bug real reportado por
-           Federico: "salen copias [de más]"): esta sección medía ~1013px de
-           alto de contenido contra los ~794px reales de una hoja A4
-           landscape (210mm) — desbordaba cada copia a una SEGUNDA hoja física
-           (4 hojas en vez de las 2 esperadas). Reducidos paddings/márgenes y
-           las filas en blanco de la tabla (4 -> 2) para que cada copia entre
-           en su única hoja — medido con el mismo harness de JS de sesiones
-           anteriores (clonar a un contenedor 297×210mm real), ya no desborda. -->
-      <div class="mx-auto flex h-full w-full max-w-3xl flex-col border border-gray-400 p-5 text-base text-gray-800">
-        <div class="mb-3 flex items-start justify-between border-b-2 border-gray-800 pb-2">
+      <!-- Reajuste 2026-09-07 (pedido de Federico, ya confirmado imprimiendo
+           de verdad en portrait: "aprovechá más el espacio de la hoja,
+           firmas con más lugar, logo más grande, CUIT/IERIC apilados").
+           El ajuste de 2026-09-04 de acá abajo comprimió todo esto para
+           entrar en los ~210mm de una hoja LANDSCAPE — ya no aplica, ahora
+           es una hoja PORTRAIT real de 297mm de alto (ver main.css/
+           useBascula.js#imprimir(), 2026-09-07) con casi 90mm más de
+           margen. Se agranda paddings/espaciados/logo, se vuelve a 4 filas
+           en blanco en la tabla (como el papel real, el motivo original de
+           que fueran 4 antes de recortarlas a 2 por el desborde en
+           landscape) y las firmas pasan a tener una caja en blanco real
+           arriba de la línea (antes solo el guión bajo, sin espacio físico
+           para firmar) — medido con el mismo harness de sesiones
+           anteriores (clonar a un contenedor 210×297mm real): entra
+           holgado en la hoja, sin desbordar a una segunda. -->
+      <div class="mx-auto flex h-full w-full max-w-3xl flex-col border border-gray-400 p-8 text-base text-gray-800">
+        <div class="mb-4 flex items-start justify-between border-b-2 border-gray-800 pb-3">
           <div>
-            <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-12 w-auto" />
-            <div class="mt-1 space-y-0 text-xs leading-tight text-gray-600">
+            <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-16 w-auto" />
+            <div class="mt-1.5 space-y-0 text-xs leading-tight text-gray-600">
               <p>{{ EMPRESA.direccion1 }} — {{ EMPRESA.direccion3 }}</p>
               <p>Tel.: {{ EMPRESA.telefono }} — {{ EMPRESA.condicionIva }}</p>
             </div>
           </div>
           <div class="text-right">
             <p class="text-xl font-bold uppercase tracking-wide">Remito {{ i === 0 ? 'original' : 'duplicado' }}</p>
-            <div class="mt-1 text-xs leading-tight text-gray-600">
-              <p>C.U.I.T.: {{ EMPRESA.cuit }} — I.E.R.I.C.: {{ EMPRESA.ieric }}</p>
-              <p>II.BB.CM: {{ EMPRESA.iibb }} — Inicio act.: {{ EMPRESA.inicioActividad }}</p>
+            <!-- Datos impositivos apilados, uno abajo del otro (2026-09-07,
+                 pedido explícito de Federico) — antes iban de a 2 por
+                 renglón separados por guión. -->
+            <div class="mt-1.5 space-y-0 text-xs leading-tight text-gray-600">
+              <p>C.U.I.T.: {{ EMPRESA.cuit }}</p>
+              <p>I.E.R.I.C.: {{ EMPRESA.ieric }}</p>
+              <p>II.BB.CM: {{ EMPRESA.iibb }}</p>
+              <p>Inicio de actividad: {{ EMPRESA.inicioActividad }}</p>
             </div>
           </div>
         </div>
 
-        <div class="mb-2 grid grid-cols-2 gap-4">
-          <div class="rounded border border-gray-400 px-4 py-1.5">
+        <div class="mb-3 grid grid-cols-2 gap-5">
+          <div class="rounded border border-gray-400 px-4 py-2.5">
             <span class="text-[11px] font-semibold uppercase text-gray-500">Remito N°:</span>
             <span class="ml-1 font-semibold">{{ pedido?.nro_remito_global || '—' }}</span>
           </div>
-          <div class="rounded border border-gray-400 px-4 py-1.5">
+          <div class="rounded border border-gray-400 px-4 py-2.5">
             <span class="text-[11px] font-semibold uppercase text-gray-500">Fecha:</span>
             <span class="ml-1 font-semibold">{{ formatFecha(vale.fecha_pesada).fecha }}</span>
           </div>
         </div>
-        <div class="mb-2 rounded border border-gray-400 px-4 py-1.5">
+        <div class="mb-3 rounded border border-gray-400 px-4 py-2.5">
           <span class="text-[11px] font-semibold uppercase text-gray-500">Desde:</span>
           <span class="ml-1 font-semibold">{{ EMPRESA.deposito }}</span>
         </div>
-        <div class="mb-3 rounded border border-gray-400 px-4 py-1.5">
+        <div class="mb-4 rounded border border-gray-400 px-4 py-2.5">
           <span class="text-[11px] font-semibold uppercase text-gray-500">Destino:</span>
           <span class="ml-1 font-semibold">{{ obraNombre || '—' }}</span>
         </div>
@@ -249,16 +261,16 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
         <table class="w-full table-fixed border border-gray-400 text-left">
           <thead>
             <tr class="border-b border-gray-400 bg-gray-50">
-              <th class="w-32 border-r border-gray-400 px-4 py-1.5 text-xs uppercase tracking-wide text-gray-500">Cantidad</th>
-              <th class="px-4 py-1.5 text-xs uppercase tracking-wide text-gray-500">Detalle</th>
+              <th class="w-32 border-r border-gray-400 px-4 py-2 text-xs uppercase tracking-wide text-gray-500">Cantidad</th>
+              <th class="px-4 py-2 text-xs uppercase tracking-wide text-gray-500">Detalle</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td class="border-r border-gray-400 px-4 py-2 align-top text-lg font-bold">
+              <td class="border-r border-gray-400 px-4 py-3 align-top text-lg font-bold">
                 {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn
               </td>
-              <td class="px-4 py-2 align-top">
+              <td class="px-4 py-3 align-top">
                 <p class="font-semibold">{{ detalleMezcla }}</p>
                 <p v-if="rangoVales?.valeDesde != null" class="mt-1 text-xs text-gray-600">
                   S/Vale de báscula N° {{ formatearNumeroVale(rangoVales.valeDesde) }}
@@ -271,15 +283,17 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
             </tr>
             <!-- Filas en blanco (como el papel real): deja lugar para anotaciones
                  a mano, mismo criterio que la foto de referencia de Federico.
-                 Bajado de 4 a 2 filas (fix de desborde de arriba). -->
-            <tr v-for="n in 2" :key="n">
-              <td class="border-r border-t border-gray-300 px-4 py-2">&nbsp;</td>
-              <td class="border-t border-gray-300 px-4 py-2">&nbsp;</td>
+                 Vuelve a 4 (estaban en 2 desde 2026-09-04 por el desborde en
+                 landscape, ya no aplica en portrait — ver comentario de
+                 arriba). -->
+            <tr v-for="n in 4" :key="n">
+              <td class="border-r border-t border-gray-300 px-4 py-3">&nbsp;</td>
+              <td class="border-t border-gray-300 px-4 py-3">&nbsp;</td>
             </tr>
           </tbody>
         </table>
 
-        <div class="mt-3 space-y-0.5 text-sm">
+        <div class="mt-4 space-y-1 text-sm">
           <p>
             <span class="font-semibold text-gray-500">Transporte:</span>
             {{ esTransportePropio == null ? '—' : esTransportePropio ? 'Propio' : 'Tercero' }}
@@ -289,18 +303,25 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
           <p><span class="font-semibold text-gray-500">Lugar de entrega:</span> {{ pedido?.ubicacion || '—' }}</p>
         </div>
 
-        <div class="mt-auto grid grid-cols-2 gap-8 pt-4 text-sm text-gray-600">
+        <!-- Firmas con espacio real para firmar (2026-09-07, pedido
+             explícito de Federico) — antes la "línea" era solo el guión
+             bajo de un renglón de texto, sin ningún lugar en blanco arriba
+             para la firma en sí. Ahora cada una tiene una caja vacía
+             (h-20, ~21mm) con el borde de abajo como línea. -->
+        <div class="mt-auto grid grid-cols-2 gap-10 pt-6 text-sm text-gray-600">
           <div>
-            <p>Despacho: ________________________________</p>
-            <p class="mt-1 text-gray-400">{{ EMPRESA.nombre }} — Responsable de planta</p>
+            <div class="h-24 border-b border-gray-400"></div>
+            <p class="mt-1.5">Despacho</p>
+            <p class="text-gray-400">{{ EMPRESA.nombre }} — Responsable de planta</p>
           </div>
           <div>
-            <p>Recibe conforme: ________________________________</p>
-            <p class="mt-1 text-gray-400">Aclaración: ________________________________</p>
+            <div class="h-24 border-b border-gray-400"></div>
+            <p class="mt-1.5">Recibe conforme</p>
+            <p class="text-gray-400">Aclaración: ________________________________</p>
           </div>
         </div>
 
-        <div class="mt-2 border-t border-gray-300 pt-1 text-xs text-gray-500">
+        <div class="mt-3 border-t border-gray-300 pt-1.5 text-xs text-gray-500">
           <span class="font-semibold">Depósito:</span> {{ EMPRESA.deposito }}
         </div>
       </div>
