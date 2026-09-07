@@ -1,5 +1,33 @@
 # pending.md — Pendientes
 
+## 🔴 Remito de Báscula en portrait — 2do intento (2026-09-07), mecanismo distinto
+
+Federico probó el primer fix (commit `76db6bf`, named page de CSS) e
+imprimiendo de verdad reportó "sigue saliendo en la hoja horizontal" —
+confirma en la práctica el riesgo que ya estaba documentado in-situ: la
+propiedad CSS `page` (asignar un elemento a un `@page` con nombre distinto
+del default) no la respeta el diálogo real de impresión de Chrome — mismo
+tipo de falla que ya se había visto una vez antes para el vale
+(2026-09-03), ahora confirmada también en esta dirección.
+
+**Fix nuevo (commit `9934d5a`), mecanismo distinto** (no es reintentar lo
+mismo): `useBascula.js#imprimir()` inyecta un `<style>` con
+`@page { size: A4 portrait }` SIN nombre justo antes de `window.print()`
+cuando el modo es "remito" — gana por cascada sobre el `@page` landscape
+de `main.css` (última regla `@page` del documento al momento de imprimir),
+se remueve apenas termina. Se sacó la named page vieja de `main.css`
+(quedaba como CSS muerto). Build verificado.
+
+**Sigue sin poder confirmarse con una impresión real** desde esta sesión
+(sin acceso a un printer físico ni forma segura de disparar el diálogo
+nativo desde la automatización) — pedirle a Federico que lo pruebe de
+nuevo antes de darlo por cerrado. Si esto TAMPOCO funciona en la práctica,
+el problema probablemente no es de CSS sino del propio comportamiento de
+impresión del navegador/SO/impresora con `@page` dinámico — en ese caso
+la alternativa robusta sería generar el remito como PDF ya paginado en
+portrait (ej. con una librería de PDF del lado del cliente) en vez de
+depender de que el navegador respete `@page` en absoluto.
+
 ## ✅ Informe Mensual — 4 fixes + 1 hallazgo de revisión general (2026-09-07) — APLICADO y VERIFICADO (Node)
 
 Feedback de Federico sobre el Informe Mensual (Despachos → Resumen por
