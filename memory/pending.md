@@ -1,5 +1,20 @@
 # pending.md — Pendientes
 
+## ✅ Báscula: el filtro de historial ya no se resetea solo (2026-09-07)
+
+Federico reportó: filtrando "el mes pasado" en Báscula, al imprimir un
+vale/remito el filtro volvía a "semana en curso" sin que él lo pidiera.
+Revisado a fondo `useBascula.js`/`BasculaView.vue`: imprimir no toca
+`filtros` en ningún lado del código — la única forma de que se resetee es
+un remount completo de la vista (`iniciar()` vuelve a correr). No se pudo
+reproducir ni identificar la causa puntual del remount al imprimir, pero
+el fix (commit `1be3595`) no depende de eso: el filtro ahora se sincroniza
+con la URL (`?desde=&hasta=&tipo=&obra=&patente=`, mismo patrón que la tab
+activa en Stock/Maestros) — cualquiera sea la causa de un remount futuro,
+el filtro elegido sobrevive porque queda en la URL, no solo en memoria.
+Build verificado. **Falta que Federico confirme** que, imprimiendo de
+nuevo con un filtro no-default activo, ya no vuelve a "semana en curso".
+
 ## 🔴 Remito de Báscula en portrait — 2do intento (2026-09-07), mecanismo distinto
 
 Federico probó el primer fix (commit `76db6bf`, named page de CSS) e
