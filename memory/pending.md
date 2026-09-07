@@ -1,5 +1,16 @@
 # pending.md — Pendientes
 
+## ✅ Mobile, segunda pasada de simplificación (2026-09-07) — CÓDIGO listo, sin verificación visual
+
+Feedback de Federico tras revisar la primera pasada de mobile: seguir
+simplificando, "no deja de ser más de uso en campo". Ocultos en mobile
+(Desktop sin cambios): en Pedidos, los KPI de totales/estado y la card de
+filtros ("+ Nuevo pedido" pasa a protagonista, ancho completo); en
+Báscula, la card de filtros del historial ("+ Abrir puerta" mismo
+tratamiento); en Stock, la tab "Historial de ingresos". Ver commit
+`9c0490a`. Mismo caveat que el resto del roadmap mobile: falta que
+Federico lo prueba en el celular real antes de cerrarlo del todo.
+
 ## ✅ Vale: más margen en la línea de corte (2026-09-07) — CÓDIGO listo, falta prueba de impresión real
 
 Federico reportó que al cortar la hoja del vale exactamente a la mitad
