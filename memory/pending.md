@@ -1,5 +1,27 @@
 # pending.md — Pendientes
 
+## ✅ Informe Mensual — 4 fixes + 1 hallazgo de revisión general (2026-09-07) — APLICADO y VERIFICADO (Node)
+
+Feedback de Federico sobre el Informe Mensual (Despachos → Resumen por
+obra): colores verdes fuera de identidad → violeta (variante oscura nueva,
+`VIOLETA_OSCURO`); "Resumen mensual" y "Ventas Externas" sin nombres de
+obra/cliente → dos bugs reales apilados en `fetchDatosInformeMensual()`
+(`fetchObras()` traía solo activas, y `despachosPorObra.internos/.externos`
+nunca tenía el campo `nombre` que esas tablas leen); "Resumen anual" sin
+enero-abril/2026 → ese período vive solo como constante fija en
+`dashboard.service.js` (nunca se cargó en `plantas_pedidos`), se agregó el
+desglose mensual (`PRODUCCION_PRE_MAYO_2026`) y se suma cuando corresponde.
+Revisión general: encontrado y corregido que `armarHojaDestino()` mezclaba
+tn de asfalto con m³ de hormigón en un solo "TOTAL" si un destino recibía
+los dos tipos en el mes — ahora totaliza por tipo. Ver commit `7b1b014`.
+
+Verificado con un test standalone en Node (`construirWorkbookInformeMensual()`
+no depende del navegador, mismo método que sesiones anteriores) — los 5
+puntos confirmados contra las celdas reales del workbook generado con datos
+de prueba. **No se probó con el flujo real del botón en el navegador**
+(sin sesión logueada disponible esta sesión) — pedirle a Federico que
+exporte un informe real y lo revise.
+
 ## ✅ Mobile, segunda pasada de simplificación (2026-09-07) — CÓDIGO listo, sin verificación visual
 
 Feedback de Federico tras revisar la primera pasada de mobile: seguir
