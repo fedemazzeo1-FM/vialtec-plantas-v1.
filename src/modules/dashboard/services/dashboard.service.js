@@ -103,6 +103,24 @@ const AMMANN_2026_TN = 11916.71
 // (no son producción de mezcla, quedan afuera de todos los totales).
 export const HORMIGON_PRE_MAYO_2026_M3 = 3621.7
 
+// Desglose MES A MES de los dos totales fijos de arriba (2026-09-07, pedido
+// de Federico — Informe Mensual: "Resumen Anual" no incluía ene-abr/2026
+// porque fetchResumenAnual() solo consulta plantas_pedidos, y ese período
+// nunca se cargó ahí — mismo motivo por el que existen AMMANN_2026_TN/
+// HORMIGON_PRE_MAYO_2026_M3 arriba). Mismas cifras exactas, mismo Excel de
+// origen, solo desagregadas por mes en vez de sumadas en un único total —
+// ver los comentarios de arriba para la fuente y el desglose ya verificado
+// (ene 3813.76+feb 2973.06+mar 2701.88+abr 2428.01 = 11916.71;
+// ene 1371.5+feb 1325.3+mar 544.8+abr 380.1 = 3621.7). Usado por
+// informe-mensual.service.js#fetchResumenAnual() — no se declara ahí para
+// no duplicar los números (memory/conventions.md).
+export const PRODUCCION_PRE_MAYO_2026 = {
+  '2026-01': { asfaltoTn: 3813.76, hormigonM3: 1371.5 },
+  '2026-02': { asfaltoTn: 2973.06, hormigonM3: 1325.3 },
+  '2026-03': { asfaltoTn: 2701.88, hormigonM3: 544.8 },
+  '2026-04': { asfaltoTn: 2428.01, hormigonM3: 380.1 },
+}
+
 /**
  * Marini 180 SÍ es una consulta en vivo (no una constante): es la planta que
  * usa este sistema desde mayo/2026, así que su acumulado sigue creciendo con

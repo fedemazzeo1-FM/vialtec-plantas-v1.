@@ -23,10 +23,6 @@
 
 import logoVialtec from '@/assets/img/logo-vialtec.png'
 import {
-  VIOLETA,
-  VIOLETA_CLARO,
-  VERDE_BANDA,
-  VERDE_TOTAL,
   GRIS_TEXTO,
   GRIS_SUAVE,
   BLANCO,
@@ -272,23 +268,33 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasDetalle) {
   header.eachCell((cell) => estiloHeaderTabla(cell))
 
   let fila = 4
-  let totalReal = 0
-  let unidad = 'tn'
   filasDetalle.forEach((d) => {
     const row = ws.getRow(fila)
     row.values = [FECHA(d.fecha), d.mezcla, d.tipo, d.pedido, d.real, d.unidad, d.nroRemito, d.nroVale, d.encargado, d.notas]
     row.eachCell((cell) => estiloCuerpo(cell))
-    totalReal += d.real
-    unidad = d.unidad
     fila++
   })
 
-  const total = ws.getRow(fila)
-  total.getCell(1).value = 'TOTAL'
-  total.getCell(3).value = `${filasDetalle.length} desp.`
-  total.getCell(5).value = Number(totalReal.toFixed(2))
-  total.getCell(6).value = unidad
-  ;[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].forEach((c) => estiloSubtotal(total.getCell(c)))
+  // Fix 2026-09-07 (revisión general pedida por Federico): un mismo destino
+  // (obra o cliente externo) puede recibir asfalto Y hormigón en el mismo
+  // mes — antes se sumaban `real` de las dos en una sola variable, mezclando
+  // tn con m³ en un solo "TOTAL" sin sentido (y la unidad mostrada era la de
+  // la ÚLTIMA fila nomás, no la de la suma). Ahora se totaliza por tipo —
+  // una fila "TOTAL ASFALTO"/"TOTAL HORMIGÓN" por cada uno que tenga al
+  // menos un despacho ese mes (el caso más común, un solo tipo, sigue
+  // viéndose como una sola fila de total, igual que antes).
+  const tipos = [...new Set(filasDetalle.map((d) => d.tipo))]
+  tipos.forEach((tipo) => {
+    const delTipo = filasDetalle.filter((d) => d.tipo === tipo)
+    const totalReal = delTipo.reduce((acc, d) => acc + d.real, 0)
+    const total = ws.getRow(fila)
+    total.getCell(1).value = tipos.length > 1 ? `TOTAL ${tipo.toUpperCase()}` : 'TOTAL'
+    total.getCell(3).value = `${delTipo.length} desp.`
+    total.getCell(5).value = Number(totalReal.toFixed(2))
+    total.getCell(6).value = delTipo[0]?.unidad ?? ''
+    ;[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].forEach((c) => estiloSubtotal(total.getCell(c)))
+    fila++
+  })
 
   return ws
 }

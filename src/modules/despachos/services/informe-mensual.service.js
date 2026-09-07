@@ -19,6 +19,7 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 // al informe mensual) — reusa la misma función que ya usa Stock → Analítica
 // de proveedores (memory/conventions.md, no duplicar la query/agregación).
 import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
+import { PRODUCCION_PRE_MAYO_2026 } from '@/modules/dashboard/services/dashboard.service'
 
 /**
  * Despachos por obra del mes, separados interno (obra real, tipo_pedido
@@ -108,7 +109,20 @@ export async function fetchResumenAnual(mesHasta) {
   const meses = Array.from({ length: mesNum }, (_, i) => `${anio}-${String(i + 1).padStart(2, '0')}`)
   const totales = await Promise.all(meses.map((m) => fetchTotalesMes(m)))
 
-  const filas = meses.map((m, i) => ({ mes: nombreMesLargo(m), ...totales[i] }))
+  // Fix 2026-09-07 (pedido de Federico: "Resumen Anual no computa ene-abr
+  // 2026"): esos meses nunca se cargaron en plantas_pedidos (ver
+  // PRODUCCION_PRE_MAYO_2026, dashboard.service.js) — fetchTotalesMes()
+  // sola siempre iba a dar 0/casi 0 ahí. Se suma el histórico fijo de ese
+  // Excel cuando el mes corresponde (no aplica a ningún otro año/mes, el
+  // objeto solo tiene esas 4 claves).
+  const filas = meses.map((m, i) => {
+    const historico = PRODUCCION_PRE_MAYO_2026[m]
+    return {
+      mes: nombreMesLargo(m),
+      asfaltoTn: totales[i].asfaltoTn + (historico?.asfaltoTn ?? 0),
+      hormigonM3: totales[i].hormigonM3 + (historico?.hormigonM3 ?? 0),
+    }
+  })
   const totalAcumulado = {
     hormigonM3: filas.reduce((acc, f) => acc + f.hormigonM3, 0),
     asfaltoTn: filas.reduce((acc, f) => acc + f.asfaltoTn, 0),
@@ -165,8 +179,15 @@ export async function fetchDetalleDestinoDelMes(destino, mes, formulasPorId) {
  */
 export async function fetchDatosInformeMensual(mes) {
   const { desde, hasta } = rangoDelMes(mes)
+  // Fix 2026-09-07 (bug real reportado por Federico: "faltan los nombres de
+  // las obras" en el informe): fetchObras() por default trae solo obras
+  // ACTIVAS (soloActivas=true, flota.service.js) — un despacho de una obra
+  // que ya se dio de baja/renombró en flota_obras quedaba sin match acá,
+  // mostrando "Obra #N" en vez del nombre real. `soloActivas: false` trae
+  // el catálogo completo, mismo criterio que ya usaba fetchFormulas() al
+  // lado (esa sí traía inactivas, la asimetría era el bug).
   const [obras, formulas, despachosPorObra, consumoInsumos, resumenAnual, analiticaProveedores] = await Promise.all([
-    fetchObras(),
+    fetchObras({ soloActivas: false }),
     fetchFormulas({ soloActivas: false }),
     fetchDespachosPorObraDelMes(mes),
     fetchConsumoInsumosDelMes(mes),
@@ -176,20 +197,32 @@ export async function fetchDatosInformeMensual(mes) {
   const obrasPorId = Object.fromEntries(obras.map((o) => [o.id, o]))
   const formulasPorId = Object.fromEntries(formulas.map((f) => [f.id, f]))
 
-  // Detalle por destino (hojas individuales) — en paralelo, uno por obra
-  // interna + uno por cada cliente externo distinto.
-  const destinosInternos = despachosPorObra.internos.map((r) => ({
+  // Fix 2026-09-07 (bug real, segunda causa del mismo síntoma de arriba +
+  // "Ventas Externas" sin nombre de cliente): fetchDespachosPorObraDelMes()
+  // devuelve filas con `obraId`/`clienteExterno`, pero SIN `nombre` — la
+  // hoja "Resumen mensual" y la hoja "Ventas Externas" (excel-informe-
+  // mensual.js) leen `r.nombre` directo de `despachosPorObra.internos`/
+  // `.externos`, que hasta ahora quedaba `undefined` en las dos tablas (el
+  // `nombre` solo se calculaba acá abajo, en un array aparte que ni
+  // siquiera se usaba para esas tablas). Se resuelve una sola vez acá y se
+  // enriquece `despachosPorObra` in-place — un solo lugar de verdad para el
+  // nombre, reusado tanto por las tablas de resumen como por el detalle por
+  // destino de abajo (antes duplicaba la resolución del nombre en un
+  // array aparte, `destinosInternos`/`destinosExternos`).
+  despachosPorObra.internos = despachosPorObra.internos.map((r) => ({
+    ...r,
     nombre: obrasPorId[r.obraId]?.nombre ?? `Obra #${r.obraId}`,
-    obraId: r.obraId,
   }))
-  const destinosExternos = despachosPorObra.externos.map((r) => ({
+  despachosPorObra.externos = despachosPorObra.externos.map((r) => ({
+    ...r,
     nombre: r.clienteExterno,
-    clienteExterno: r.clienteExterno,
   }))
 
+  // Detalle por destino (hojas individuales) — en paralelo, uno por obra
+  // interna + uno por cada cliente externo distinto.
   const [detalleInternos, detalleExternos] = await Promise.all([
-    Promise.all(destinosInternos.map((d) => fetchDetalleDestinoDelMes(d, mes, formulasPorId))),
-    Promise.all(destinosExternos.map((d) => fetchDetalleDestinoDelMes(d, mes, formulasPorId))),
+    Promise.all(despachosPorObra.internos.map((d) => fetchDetalleDestinoDelMes(d, mes, formulasPorId))),
+    Promise.all(despachosPorObra.externos.map((d) => fetchDetalleDestinoDelMes(d, mes, formulasPorId))),
   ])
 
   return {
@@ -199,9 +232,9 @@ export async function fetchDatosInformeMensual(mes) {
     consumoInsumos,
     resumenAnual,
     analiticaProveedores,
-    hojasInternas: destinosInternos.map((d, i) => ({ ...d, detalle: detalleInternos[i] })),
+    hojasInternas: despachosPorObra.internos.map((d, i) => ({ ...d, detalle: detalleInternos[i] })),
     hojaVentasExternas: {
-      destinos: destinosExternos.map((d, i) => ({ ...d, detalle: detalleExternos[i] })),
+      destinos: despachosPorObra.externos.map((d, i) => ({ ...d, detalle: detalleExternos[i] })),
       resumen: despachosPorObra.externos,
     },
   }

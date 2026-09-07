@@ -24,8 +24,15 @@ import logoVialtec from '@/assets/img/logo-vialtec.png'
 
 export const VIOLETA = 'FF7C3AED'
 export const VIOLETA_CLARO = 'FFDDD6FE'
-export const VERDE_BANDA = 'FF92D050'
-export const VERDE_TOTAL = 'FF00B050'
+// Variante oscura del mismo violeta (2026-09-07, pedido de Federico —
+// Informe Mensual: "cambiá el verde de los títulos por tonos del acento
+// oficial de la app"). Reemplaza a VERDE_BANDA/VERDE_TOTAL, que quedaban
+// fuera de la identidad visual (verde no forma parte de la paleta de la
+// app, ver tailwind.config.js). Solo la usa el Informe Mensual
+// (estiloBandaExterna/estiloTotalGeneral) — no toca el violeta de
+// encabezado/subtotal que ya usan Stock/Báscula/el resto de los exports,
+// para no cambiarles el color sin que lo hayan pedido.
+export const VIOLETA_OSCURO = 'FF5D2CB2'
 export const GRIS_TEXTO = 'FF374151'
 export const GRIS_SUAVE = 'FF9CA3AF'
 export const BLANCO = 'FFFFFFFF'
@@ -50,12 +57,12 @@ export function estiloSubtotal(cell) {
 }
 
 export function estiloTotalGeneral(cell, size = 10) {
-  aplicarFill(cell, VERDE_TOTAL)
+  aplicarFill(cell, VIOLETA_OSCURO)
   cell.font = { bold: true, color: { argb: BLANCO }, size }
 }
 
 export function estiloBandaExterna(cell) {
-  aplicarFill(cell, VERDE_BANDA)
+  aplicarFill(cell, VIOLETA)
   cell.font = { bold: true, color: { argb: BLANCO }, size: 11 }
 }
 
