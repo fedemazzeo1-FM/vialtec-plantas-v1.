@@ -1,5 +1,22 @@
 # pending.md — Pendientes
 
+## ✅ Mobile: prioridad de módulos operativos + menos ruido en listados (2026-09-07) — CÓDIGO listo, sin verificación visual
+
+Pedido explícito de Federico, roadmap Mobile: nav inferior reordenada
+(Báscula/Pedidos/Plan semanal/Stock, Despachos baja a "Más"), flag
+`col.secundaria` nuevo en `VTable.vue` (columnas colapsadas detrás de "Ver
+más" en la card mobile, sin perder el dato) aplicado al historial de
+Báscula (14→6 columnas siempre visibles) y de Stock, y autoscroll a "hoy"
+en Plan Semanal mobile. Detalle completo en el commit `4651a91`.
+
+**No se pudo verificar visualmente con datos reales** — el navegador
+automatizado de esta sesión no tenía ninguna sesión ya logueada (a
+diferencia de sesiones anteriores que sí tenían la de Federico persistida)
+y no se van a completar credenciales para loguearse. Build limpio
+(`npm run build`) y revisión de código línea por línea de cada cambio, pero
+falta la prueba real en un celular (o el emulador del navegador con sesión
+real) antes de darlo por 100% cerrado — pedirle a Federico que lo pruebe.
+
 ## ✅ 4 mejoras pedidas por Federico (2026-09-07) — APLICADO y VERIFICADO en producción
 
 **Actualización de la sección de abajo**: las 3 acciones de producción que
