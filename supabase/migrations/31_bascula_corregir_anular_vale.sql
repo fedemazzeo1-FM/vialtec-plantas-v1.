@@ -2,11 +2,7 @@
 -- Migración 31: Báscula — corregir/anular un vale (Editar/Eliminar del
 -- historial, pedido explícito de Federico 2026-09-08).
 --
--- IMPORTANTE (memory/procedimientos.md): este archivo queda guardado para
--- revisión previa de Federico. NO se ejecutó contra Supabase todavía —
--- toca schema (columnas nuevas + un tipo de movimiento de stock nuevo) y
--- agrega 2 RPC que pueden mover stock real. Aplicar recién con el "dale"
--- explícito.
+-- APLICADA en producción 2026-09-08, autorizada explícitamente por Federico.
 --
 -- Decisión de diseño (contradice el pedido literal, documentado acá a
 -- propósito): "Eliminar" NO hace un DELETE real. memory/business-rules.md
@@ -295,8 +291,21 @@ grant execute on function anular_vale_bascula(uuid, text) to authenticated;
 -- ----------------------------------------------------------------------------
 -- 6) plantas_v_bascula_viva — agrega anulado/motivo_anulacion (false/null
 --    para filas que todavía solo viven en el legado, que nunca pueden
---    anularse desde acá). Mismo cuerpo que supabase/scripts/vistas_puente_legado_bascula_stock.sql
---    (2026-09-04) + estas 2 columnas nuevas al final de cada rama del UNION.
+--    anularse desde acá).
+--
+--    OJO: el intento original de este archivo copiaba el cuerpo de
+--    supabase/scripts/vistas_puente_legado_bascula_stock.sql (2026-09-04),
+--    que estaba DESACTUALIZADO — la vista real en producción ya tenía un
+--    CTE "combinado" + la columna `acumulado_dia_tn` (calculada con una
+--    window function) agregados en algún momento posterior, sin que ese
+--    script quedara reflejado. `create or replace view` con un `select *`
+--    que no matcheaba la posición real de columnas tiró
+--    "cannot change name of view column ... to ...". Reconstruido acá
+--    contra la definición REAL leída en vivo con
+--    `pg_get_viewdef('plantas_v_bascula_viva'::regclass, true)` antes de
+--    reintentar — anulado/motivo_anulacion quedan al final del SELECT
+--    externo (única posición válida para columnas nuevas sin tocar el
+--    orden de las existentes).
 -- ----------------------------------------------------------------------------
 create or replace view plantas_v_bascula_viva
 with (security_invoker = true) as
@@ -456,13 +465,34 @@ migrados as (
     pv.anulado,
     pv.motivo_anulacion
   from pv_base pv
+),
+combinado as (
+  select * from migrados
+  union all
+  select * from legado_asfalto
+  union all
+  select * from legado_ingreso
+  union all
+  select * from legado_egreso
 )
-select * from migrados
-union all
-select * from legado_asfalto
-union all
-select * from legado_ingreso
-union all
-select * from legado_egreso;
+select
+  id, numero_vale, tipo_vale, pedido_id, obra_id, patente, chofer,
+  peso_bruto, tara, peso_neto, unidad, fecha_pesada, material, temperatura,
+  responsable_email, responsable_texto_legado, numero_remito_ingreso,
+  cantidad_remito_ingreso, cliente_externo, acumulado_obra_tn, pendiente_migracion,
+  -- Acumulado del día por pedido/obra, recalculado en vivo con una suma
+  -- corrida (no depende de acumulado_obra_tn, que es solo una foto al
+  -- pesar) — excluye vales anulados con `and not anulado` (2026-09-08).
+  case
+    when tipo_vale = 'asfalto' then
+      sum(peso_neto) filter (where tipo_vale = 'asfalto' and not anulado) over (
+        partition by coalesce(pedido_id::text, obra_id::text, 'sin-obra'), date_trunc('day', fecha_pesada at time zone 'America/Argentina/Buenos_Aires')
+        order by fecha_pesada
+      )
+    else null::numeric
+  end as acumulado_dia_tn,
+  anulado,
+  motivo_anulacion
+from combinado c;
 
 grant select on plantas_v_bascula_viva to authenticated;

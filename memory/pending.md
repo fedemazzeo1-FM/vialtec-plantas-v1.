@@ -1,6 +1,6 @@
 # pending.md — Pendientes
 
-## 🔴 Báscula: selector de material (listo) + Editar/Eliminar de vales (código listo, MIGRACIÓN 31 PENDIENTE) — 2026-09-08
+## ✅ Báscula: selector de material + Editar/Eliminar de vales — 2026-09-08, MIGRACIÓN 31 APLICADA en producción
 
 Pedido explícito de Federico, 2 mejoras de Báscula:
 
@@ -13,9 +13,8 @@ cargado en `useBascula.js#cargarBase()`). Se dejó a propósito el campo
 pidió esta vez, y son 2 selects independientes si hiciera falta el mismo
 cambio ahí.
 
-**2) Editar/Eliminar en el historial — CÓDIGO LISTO, MIGRACIÓN 31 (`supabase/migrations/31_bascula_corregir_anular_vale.sql`)
-SIN APLICAR — necesita tu confirmación antes de correrla (memory/procedimientos.md:
-toca schema y mueve stock real).**
+**2) Editar/Eliminar en el historial — APLICADO en producción (Federico
+autorizó explícitamente aplicar la migración 31, `supabase/migrations/31_bascula_corregir_anular_vale.sql`).**
 
 Decisión de diseño que se aparta del pedido literal, documentada en el
 header de la migración: "Eliminar" **no hace un DELETE real**.
@@ -57,20 +56,36 @@ La migración también redefine `plantas_v_bascula_viva` para exponer
 `anulado`/`motivo_anulacion` (false/null en las filas que todavía solo
 viven en el legado — no se pueden anular desde acá).
 
-**⚠️ Orden obligatorio antes del próximo deploy**: el frontend ya commiteado
-consulta columnas (`anulado`) y llama RPC (`corregir_vale_bascula`/
-`anular_vale_bascula`) que no existen todavía en producción — si se
-deploya el build actual sin aplicar antes la migración 31, Báscula rompe
-(el acumulado que se imprime en cada vale filtra por `anulado`, columna
-inexistente). Aplicar la migración 31 primero, recién después `npx vercel
---prod`, igual que el protocolo ya usado con las migraciones 29/30.
+**Aplicación real (2026-09-08)**: el primer intento de aplicar la migración
+31 completa falló — la sección 6 (redefinir `plantas_v_bascula_viva`)
+copiaba el cuerpo de `supabase/scripts/vistas_puente_legado_bascula_stock.sql`
+(2026-09-04), que estaba **desactualizado**: la vista real en producción ya
+tenía un CTE `combinado` + la columna `acumulado_dia_tn` (window function)
+agregados en algún momento posterior sin quedar reflejados en ese script.
+`create or replace view` rechazó el cambio (`cannot change name of view
+column "acumulado_dia_tn" to "anulado"`) y, al fallar dentro de la misma
+transacción, **revirtió también los pasos 1-5** (verificado: 0 columnas
+nuevas en `plantas_vales` después del error) — sin dejar nada a medio
+aplicar. Se leyó la definición real con `pg_get_viewdef()`, se reconstruyó
+la vista contra ESA definición (agregando `anulado`/`motivo_anulacion` al
+final del `select` externo, única posición válida sin tocar el orden de
+columnas existentes) y se reaplicó la migración completa — esta vez
+exitosa. `supabase/migrations/31_bascula_corregir_anular_vale.sql` ya
+quedó actualizado en el repo con la versión real aplicada (no la que
+falló). Verificado post-aplicación: las 4 columnas nuevas existen, las 3
+funciones nuevas existen, la vista sigue devolviendo las 909 filas de
+siempre (0 anulados, esperado). `get_advisors` (security) no marcó nada
+nuevo más allá del mismo patrón ya esperado en todas las RPC de este
+proyecto (SECURITY DEFINER con chequeo de rol interno, expuestas a
+`anon`/`authenticated` por default de PostgREST — igual que
+`registrar_pesada_bascula`, `crear_pedido`, etc.).
 
-Build verificado (`npm run build` limpio). No probado en vivo con datos
-reales (no hay sesión logueada como admin/plantista disponible esta
-sesión) — antes de dar esto por cerrado: aplicar la migración, probar
-Editar y Eliminar con un vale real de cada tipo (asfalto/ingreso/egreso),
-confirmar que el stock revertido/recalculado da el valor esperado, y
-confirmar que un rol distinto de admin/plantista no ve los botones.
+Build verificado (`npm run build` limpio) antes y después del ajuste al
+archivo de migración. **Falta probar en vivo con datos reales** (no hay
+sesión logueada como admin/plantista disponible esta sesión): Editar y
+Eliminar con un vale real de cada tipo (asfalto/ingreso/egreso), confirmar
+que el stock revertido/recalculado da el valor esperado, y confirmar que
+un rol distinto de admin/plantista no ve los botones.
 
 ## ✅ Login rediseñado (réplica exacta del de Flota) + "¿Olvidaste tu contraseña?" nuevo (2026-09-08)
 
