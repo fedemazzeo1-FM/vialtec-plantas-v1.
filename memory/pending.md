@@ -1,5 +1,75 @@
 # pending.md — Pendientes
 
+## 🔴 Login: badge distintivo (listo) + Obras en Maestros: archivado local (código listo, MIGRACIÓN 32 PENDIENTE) — 2026-09-08
+
+**Login — aplicado, sin pendiente.** Pedido de Federico ("algo distintivo,
+lindo y profesional"): badge con ícono propio (SVG dibujado a mano, silos +
+línea de asfalto — sin librería externa ni emoji) debajo del título
+"Plantas": "🏭 Producción de Asfalto y Hormigón". Es la única pieza nueva de
+la pantalla — el resto sigue siendo la réplica exacta del login de Flota
+del mismo día. Verificado visualmente en el navegador.
+
+**Obras en Maestros — CÓDIGO LISTO, MIGRACIÓN 32
+(`supabase/migrations/32_obras_visibilidad_local.sql`) SIN APLICAR —
+necesita confirmación antes de correrla (memory/procedimientos.md: crea una
+tabla nueva).**
+
+Contexto: Federico había pedido un CRUD de Obras en Plantas (crear/pausar/
+archivar) — se investigó primero y se encontró que Flota YA tiene ese CRUD
+completo en su propio Maestros (`ESTADOS_OBRA = ['activa','pausada','finalizada']`,
+con chequeo de "en uso" antes de eliminar contra 5 tablas de flota_*).
+Federico confirmó explícitamente: no duplicar esa lógica ni escribir sobre
+`flota_obras` (tabla compartida, propiedad de Flota) — Obras se sigue
+gestionando ahí. Pidió en cambio una versión LIGERA: un tab de Obras de
+solo lectura en Maestros de Plantas, con archivado puramente LOCAL (filtro
+de visibilidad, no un estado real de la obra) que saque una obra de todos
+los desplegables operativos de Plantas.
+
+**Diseño**: tabla nueva `plantas_obras_locales` (`obra_id` FK a
+`flota_obras.id`, `archivada`/`archivada_en`/`archivada_por`) — propia de
+Plantas, dispersa (solo tiene fila para una obra si alguna vez se archivó
+acá; sin fila = visible por default). NO altera `flota_obras` en absoluto,
+ni en schema ni en datos. Vista `plantas_v_obras_visibles` (obras con
+`activo=true` de Flota Y no archivadas localmente) — `fetchObras({ soloActivas: true })`
+(`src/services/flota.service.js`, el service transversal que YA usan
+Pedidos/Báscula/Despachos/Plan Semanal/Dashboard/Usuarios para sus
+desplegables) pasa a leer de ahí en vez de `flota_obras` directo: un solo
+cambio alcanza para que todos esos módulos dejen de mostrar una obra
+archivada, sin tocar cada uno por separado. `fetchObras({ soloActivas: false })`
+(usado solo por el Informe Mensual, necesita TODAS las obras del histórico)
+sigue leyendo `flota_obras` sin ningún filtro, sin cambios.
+
+Escritura de `plantas_obras_locales` restringida a admin/plantista (RLS,
+mismo criterio que la migración 23 ya usa para el resto de los catálogos de
+Maestros) — sin RPC, un upsert directo alcanza (catálogo liviano, sin lógica
+de negocio que auditar).
+
+**Maestros → nuevo tab "Obras"** (`MaestrosView.vue`, queda afuera del
+patrón genérico ENTIDADES/crudEntidad a propósito — no es un CRUD, es
+lectura de `flota_obras` + este archivado local): sub-tabs "Activas"/
+"Archivadas" (mismo patrón visual que ya usa Flota para su propio tab de
+Obras), tabla con Nombre/Código/Cliente/Ubicación/Estado real de Flota
+(badge activa/pausada/finalizada, solo informativo)/fecha de archivado
+local, botón "Archivar acá"/"Reactivar acá" (nombrado así a propósito para
+que no se confunda con el estado real de Flota).
+
+**⚠️ Orden obligatorio antes del próximo deploy**: `fetchObras({ soloActivas: true })`
+ya consulta `plantas_v_obras_visibles`, que no existe todavía en
+producción — si se deploya el build actual sin aplicar antes la migración
+32, TODOS los desplegables de obra del sistema (Pedidos, Báscula, Despachos,
+Plan Semanal, Dashboard, Usuarios y Permisos) se rompen. Aplicar la
+migración 32 primero, recién después `npx vercel --prod` — mismo protocolo
+que ya se usó con la migración 31 el mismo día.
+
+Build verificado (`npm run build` limpio). No probado en vivo (no hay
+sesión logueada disponible esta sesión) — antes de dar esto por cerrado:
+aplicar la migración, archivar una obra de prueba y confirmar que
+desaparece de un desplegable real (ej. "Nuevo pedido"), y confirmar que un
+rol distinto de admin/plantista no puede archivar (RLS) aunque el botón
+esté visible para todos los roles (no se pidió ocultarlo, a diferencia de
+Editar/Eliminar de Báscula — si Federico lo quiere igual de restringido,
+avisar).
+
 ## ✅ Báscula: selector de material + Editar/Eliminar de vales — 2026-09-08, MIGRACIÓN 31 APLICADA en producción
 
 Pedido explícito de Federico, 2 mejoras de Báscula:
