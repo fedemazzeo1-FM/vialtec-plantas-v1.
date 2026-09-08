@@ -102,16 +102,16 @@ export async function agregarEncabezadoCorporativo(workbook, worksheet, titulo, 
   const logoBuffer = await obtenerLogoBuffer()
   const imageId = workbook.addImage({ buffer: logoBuffer, extension: 'png' })
   // Fix 2026-09-08 (reportado por Federico: "el logo está muy estirado" en
-  // todos los excel): src/assets/img/logo-vialtec.png mide 1348×583px real
-  // (ratio ≈2.31:1) — el width:160/height:30 de antes (ratio 5.33:1) lo
-  // aplastaba verticalmente bien distinto a como se ve en la app. 70×30
-  // mantiene el mismo alto de fila que ya usaba el resto del layout, con la
-  // proporción real del archivo (ratio 2.33:1, indistinguible a ojo de la
-  // real). Como esta función es EL único lugar donde se inserta el logo
-  // (agregarEncabezadoCorporativo, usado por todos los exports), corrige
-  // el problema en todos los excel de una sola vez.
-  worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 70, height: 30 } })
-  worksheet.getRow(1).height = 34
+  // todos los excel, después "un poco más grande, usando más la fila"):
+  // src/assets/img/logo-vialtec.png mide 1348×583px real (ratio ≈2.31:1).
+  // 93×40 mantiene esa proporción (ratio 2.325:1, indistinguible a ojo de
+  // la real) — más grande que el primer ajuste (70×30), fila más alta
+  // (46, antes 34) para que tenga lugar real sin recortarse. Como esta
+  // función es EL único lugar donde se inserta el logo
+  // (agregarEncabezadoCorporativo, usado por todos los exports), el cambio
+  // se ve en todos los excel de una sola vez.
+  worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 93, height: 40 } })
+  worksheet.getRow(1).height = 46
 
   const ultimaCol = String.fromCharCode(64 + columnasAnchoTotal) // 1->A, 2->B...
   worksheet.mergeCells(`A2:${ultimaCol}2`)

@@ -53,12 +53,13 @@ const FECHA = (iso) => {
 
 function agregarLogo(workbook, worksheet, logoBuffer) {
   const imageId = workbook.addImage({ buffer: logoBuffer, extension: 'png' })
-  // Fix 2026-09-08 (reportado por Federico: "el logo está muy estirado" en
-  // todos los excel) — mismo fix que excel-corporativo.js: logo-vialtec.png
-  // mide 1348×583px real (ratio ≈2.31:1), el width:180/height:34 de antes
-  // (ratio 5.29:1) lo aplastaba. 78×34 mantiene el mismo alto que ya usaba
-  // este header, con la proporción real del archivo.
-  worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 78, height: 34 } })
+  // Fix 2026-09-08 (reportado por Federico: "el logo está muy estirado",
+  // después "un poco más grande, usando más la fila") — mismo criterio que
+  // excel-corporativo.js: logo-vialtec.png mide 1348×583px real (ratio
+  // ≈2.31:1). 102×44 mantiene esa proporción, más grande que el primer
+  // ajuste (78×34) — la fila 1 de esta hoja también se agranda (ver
+  // armarHojaResumenMensual) para que entre sin recortarse.
+  worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 102, height: 44 } })
 }
 
 /**
@@ -69,7 +70,7 @@ function agregarLogo(workbook, worksheet, logoBuffer) {
 function armarHojaResumenMensual(workbook, datos) {
   const ws = workbook.addWorksheet('Resumen mensual')
   ws.columns = [{ width: 5 }, { width: 42 }, { width: 13 }, { width: 20 }, { width: 18 }]
-  ws.getRow(1).height = 40
+  ws.getRow(1).height = 50 // agrandada junto con el logo, ver agregarLogo()
 
   ws.mergeCells('A2:E2')
   ws.getCell('A2').value = `Informe mensual de producción — ${datos.mesLabel}`
