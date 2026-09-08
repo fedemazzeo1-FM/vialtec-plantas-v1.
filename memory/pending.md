@@ -1,5 +1,42 @@
 # pending.md — Pendientes
 
+## ✅ Login rediseñado (réplica exacta del de Flota) + "¿Olvidaste tu contraseña?" nuevo (2026-09-08)
+
+Pedido explícito de Federico, con capturas de referencia del login real de
+`equipos2.vialtec.app` (vialtec-flota-v2): clonar esa pantalla acá 1:1
+(fondo cuadriculado + glow, misma card/medidas/padding, mismos estilos de
+input/botón — CSS copiado literal de `vialtec-flota-v2/src/views/LoginView.vue`).
+Único cambio entre los dos: el título debajo del logo ("Plantas" acá,
+"Gestión de Flota" en el otro) — es la única distinción entre sistemas,
+tal como lo pidió. Se dejó afuera a propósito el separador "o" + botón de
+acceso mobile por PIN que tiene Flota: ese login alternativo no existe en
+Plantas.
+
+De paso, "¿Olvidaste tu contraseña?" (visible en la referencia de Flota)
+pasa a ser funcionalidad real acá — no existía antes en este sistema. Mismo
+flujo ya probado en producción en Flota: `auth.store.js` suma
+`enviarRecoveryEmail()` (`supabase.auth.resetPasswordForEmail` con
+`redirectTo: origin + '/login'`), `completarRecoveryPassword()`
+(`supabase.auth.updateUser`) y `escucharCambiosAuth()` (escucha el evento
+`PASSWORD_RECOVERY` del SDK — sin esto el link del mail no dispara nada,
+mismo hallazgo que ya había documentado Flota). `App.vue` ahora también
+muestra `LoginView` cuando `auth.isPasswordRecovery` es `true`, aunque la
+sesión temporal del link ya haya resuelto un perfil válido (si no, saltaría
+directo al dashboard sin pedir la contraseña nueva). Cuidado agregado en
+`_restaurarSesionInterna()`: el `$reset()` de una sesión inválida ya no pisa
+`isPasswordRecovery` si el flag se prendió por el link antes de que fallara
+resolver el perfil.
+
+Verificado en vivo (`npm run dev`, sin login real): pantalla de login y
+pantalla de "Restablecer contraseña" renderizan igual a la referencia de
+Flota. **No se pudo probar el flujo completo con un email real** (crear el
+link, click, pantalla "Crear nueva contraseña", `updateUser` real) — pedirle
+a Federico que lo pruebe con su usuario antes de darlo por 100% cerrado, el
+único punto no verificable sin credenciales.
+
+Build verificado (`npm run build` limpio). Archivos: `src/views/LoginView.vue`,
+`src/stores/auth.store.js`, `src/App.vue`.
+
 ## ✅ Home: gráfico de producción mensual replicado del Informe Mensual (2026-09-07)
 
 Pedido de Federico ("ese gráfico replicalo en Home"). A diferencia del
