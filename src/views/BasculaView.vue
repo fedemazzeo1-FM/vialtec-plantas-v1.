@@ -33,9 +33,11 @@ const router = useRouter()
 
 const {
   error,
+  puedeGestionarVales,
   obras,
   patentes,
   proveedores,
+  materiales,
   pedidosParaPesada,
   nombreDestinoPedido,
   proximoNumeroVale,
@@ -71,6 +73,19 @@ const {
   abrirImpresionVale,
   abrirImpresionRemito,
   imprimir,
+  modalEditarAbierto,
+  valeEditar,
+  formEditar,
+  guardandoEdicion,
+  abrirEdicion,
+  guardarEdicion,
+  modalAnularAbierto,
+  valeAnular,
+  motivoAnulacion,
+  anulandoVale,
+  errorAnulacion,
+  abrirAnulacion,
+  confirmarAnulacion,
   iniciar,
 } = useBascula()
 
@@ -240,11 +255,17 @@ watch(
             <template v-if="slot.tipo === 'egreso_arido'">
               <label class="text-sm text-text-mid">
                 Material
-                <input
+                <!-- 2026-09-08 (pedido de Federico): antes texto libre, ahora
+                     desplegable sobre el catálogo real de Maestros
+                     (plantas_materiales) — mismo criterio que
+                     Proveedor/Destino acá al lado. -->
+                <select
                   v-model="slot.form.material"
-                  type="text"
                   class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                />
+                >
+                  <option value="" disabled>Elegir material…</option>
+                  <option v-for="m in materiales" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
+                </select>
               </label>
               <label class="text-sm text-text-mid col-span-2">
                 Destino (obra)
@@ -444,7 +465,7 @@ watch(
           :page="paginaHistorial"
           :page-size="TAMANO_PAGINA_HISTORIAL"
           :total="totalHistorial"
-          :row-class="(row) => COLOR_FILA_VALE[row.tipo_vale]"
+          :row-class="(row) => [COLOR_FILA_VALE[row.tipo_vale], row.anulado ? 'opacity-50 line-through decoration-danger/60' : '']"
           @update:page="cambiarPaginaHistorial"
         >
           <template #cell-tipo_vale="{ row }">
@@ -458,6 +479,9 @@ watch(
               <VBadge v-if="row.pendiente_migracion" variant="default" title="Todavía solo está en el sistema anterior, no migrado a este sistema">
                 Legado
               </VBadge>
+              <!-- 2026-09-08: baja lógica (migración 31) — nunca se borra la
+                   fila, se marca anulada. -->
+              <VBadge v-if="row.anulado" variant="danger" :title="row.motivo_anulacion || 'Anulado'">Anulado</VBadge>
             </div>
           </template>
           <template #cell-acciones="{ row }">
@@ -467,14 +491,21 @@ watch(
                  flujo de pedido/obra de asfalto (acumulado por pedido, rango
                  de vales correlativos), egreso de áridos no tiene pedido
                  asociado. Ingreso de áridos sigue sin impresión (no pedido). -->
-            <div
-              v-if="!row.pendiente_migracion && (row.tipo_vale === 'asfalto' || row.tipo_vale === 'egreso_arido')"
-              class="flex gap-1.5"
-            >
-              <VButton variant="secondary" size="sm" @click="abrirImpresionVale(row)">Vale</VButton>
-              <VButton v-if="row.tipo_vale === 'asfalto'" variant="secondary" size="sm" @click="abrirImpresionRemito(row)">Remito</VButton>
+            <div class="flex flex-wrap gap-1.5">
+              <template v-if="!row.pendiente_migracion && (row.tipo_vale === 'asfalto' || row.tipo_vale === 'egreso_arido')">
+                <VButton variant="secondary" size="sm" @click="abrirImpresionVale(row)">Vale</VButton>
+                <VButton v-if="row.tipo_vale === 'asfalto'" variant="secondary" size="sm" @click="abrirImpresionRemito(row)">Remito</VButton>
+              </template>
+              <!-- 2026-09-08 (pedido de Federico): Editar/Eliminar, EXCLUSIVO
+                   admin/plantista (puedeGestionarVales, useBascula.js) — ni
+                   siquiera se muestran para otros roles. No aplica a filas
+                   legado (sin id real) ni a un vale ya anulado. -->
+              <template v-if="puedeGestionarVales && !row.pendiente_migracion && !row.anulado">
+                <VButton variant="secondary" size="sm" @click="abrirEdicion(row)">Editar</VButton>
+                <VButton variant="danger" size="sm" @click="abrirAnulacion(row)">Eliminar</VButton>
+              </template>
+              <span v-if="row.pendiente_migracion && row.tipo_vale !== 'asfalto' && row.tipo_vale !== 'egreso_arido'" class="text-xs text-gray-300">—</span>
             </div>
-            <span v-else class="text-xs text-gray-300">—</span>
           </template>
         </VTable>
         <p v-if="!cargandoHistorial && !filasHistorial.length" class="py-4 text-center text-sm text-text-soft">
@@ -512,5 +543,116 @@ watch(
         </div>
       </VModal>
     </Teleport>
+
+    <!-- Editar vale (2026-09-08) — no permite cambiar tipo ni material, ver
+         memory/pending.md para el porqué. -->
+    <VModal :open="modalEditarAbierto" title="Editar vale" @update:open="modalEditarAbierto = $event">
+      <form v-if="valeEditar" class="space-y-3" @submit.prevent="guardarEdicion">
+        <p class="text-sm text-text-soft">
+          Vale N° <strong>{{ formatearNumeroVale(valeEditar.numero_vale) }}</strong> — {{ ETIQUETA_TIPO_VALE[valeEditar.tipo_vale] }}
+        </p>
+
+        <div v-if="error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ error }}</div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm text-text-mid">
+            Peso bruto (tn)
+            <input
+              v-model.number="formEditar.pesoBruto"
+              type="number"
+              step="0.01"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
+          </label>
+          <label class="text-sm text-text-mid">
+            Tara (tn)
+            <input
+              v-model.number="formEditar.tara"
+              type="number"
+              step="0.01"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
+          </label>
+          <label class="text-sm text-text-mid">
+            Patente
+            <input v-model="formEditar.patente" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
+          </label>
+          <label v-if="valeEditar.tipo_vale === 'asfalto'" class="text-sm text-text-mid">
+            Chofer
+            <input v-model="formEditar.chofer" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
+          </label>
+          <label v-if="valeEditar.tipo_vale === 'asfalto'" class="text-sm text-text-mid">
+            Temperatura (°C)
+            <input v-model.number="formEditar.temperatura" type="number" step="1" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
+          </label>
+          <label v-if="valeEditar.tipo_vale === 'egreso_arido'" class="text-sm text-text-mid col-span-2">
+            Destino (obra)
+            <select v-model="formEditar.obraId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
+              <option value="" disabled>Elegir obra…</option>
+              <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
+            </select>
+          </label>
+          <template v-if="valeEditar.tipo_vale === 'ingreso_arido'">
+            <label class="text-sm text-text-mid">
+              Proveedor
+              <select v-model="formEditar.proveedor" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
+                <option value="" disabled>Elegir proveedor…</option>
+                <option v-for="p in proveedores" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
+              </select>
+            </label>
+            <label class="text-sm text-text-mid">
+              N° de remito
+              <input v-model="formEditar.numeroRemito" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
+            </label>
+            <label class="text-sm text-text-mid col-span-2">
+              Cantidad según remito (tn)
+              <input
+                v-model.number="formEditar.cantidadRemito"
+                type="number"
+                step="0.01"
+                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none md:w-1/3"
+              />
+            </label>
+          </template>
+        </div>
+
+        <label class="block text-sm text-text-mid">
+          Observaciones
+          <textarea v-model="formEditar.observaciones" rows="2" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"></textarea>
+        </label>
+
+        <p class="text-xs text-text-soft">
+          El material no se puede cambiar acá — si estaba mal, anulá este vale (con motivo) y cargá uno nuevo.
+        </p>
+
+        <div class="flex justify-end gap-2">
+          <VButton type="button" variant="secondary" @click="modalEditarAbierto = false">Cancelar</VButton>
+          <VButton type="submit" :disabled="guardandoEdicion">{{ guardandoEdicion ? 'Guardando…' : 'Guardar cambios' }}</VButton>
+        </div>
+      </form>
+    </VModal>
+
+    <!-- Anular vale ("Eliminar" en el historial) — baja lógica con motivo
+         obligatorio, nunca un DELETE real (memory/business-rules.md). -->
+    <VModal :open="modalAnularAbierto" title="Anular vale" @update:open="modalAnularAbierto = $event">
+      <form v-if="valeAnular" class="space-y-3" @submit.prevent="confirmarAnulacion">
+        <p class="text-sm text-text-mid">
+          Vale N° <strong>{{ formatearNumeroVale(valeAnular.numero_vale) }}</strong> — {{ ETIQUETA_TIPO_VALE[valeAnular.tipo_vale] }}. El vale queda anulado
+          (no se borra: memory/business-rules.md) y su efecto de stock, revertido.
+        </p>
+
+        <div v-if="errorAnulacion" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ errorAnulacion }}</div>
+
+        <label class="block text-sm text-text-mid">
+          Motivo (obligatorio)
+          <textarea v-model="motivoAnulacion" rows="2" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"></textarea>
+        </label>
+
+        <div class="flex justify-end gap-2">
+          <VButton type="button" variant="secondary" @click="modalAnularAbierto = false">Cancelar</VButton>
+          <VButton type="submit" variant="danger" :disabled="anulandoVale">{{ anulandoVale ? 'Anulando…' : 'Anular vale' }}</VButton>
+        </div>
+      </form>
+    </VModal>
   </div>
 </template>

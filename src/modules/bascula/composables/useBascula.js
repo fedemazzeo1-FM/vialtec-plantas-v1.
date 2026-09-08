@@ -24,6 +24,8 @@ import {
   fetchHistorialVales,
   fetchTodosLosVales,
   registrarPesada,
+  corregirValeBascula,
+  anularValeBascula,
   obtenerAcumuladoHastaFecha,
   obtenerProximoNumeroVale,
   calcularDiferencia,
@@ -32,7 +34,8 @@ import {
 import { fetchObras, fetchNombresPorEmail } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { getPedido, obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
-import { patentesService, proveedoresService } from '@/modules/maestros/services/maestros.service'
+import { patentesService, proveedoresService, materialesService } from '@/modules/maestros/services/maestros.service'
+import { useAuthStore } from '@/stores/auth.store'
 // Excel con formato corporativo (2026-09-03, pedido de Federico: logo +
 // estilo de colores + pie institucional en todos los exports) — reemplaza
 // a src/services/excel-export.js (SheetJS, no soporta escribir estilos).
@@ -104,18 +107,33 @@ const TAMANO_PAGINA_HISTORIAL = 50
 
 export function useBascula() {
   const error = ref(null)
+  const auth = useAuthStore()
+
+  // "Editar"/"Eliminar" del historial (migración 31, pedido de Federico
+  // 2026-09-08) — restringido a admin/plantista, más angosto que quién puede
+  // REGISTRAR una pesada (que además incluye balancero). Gate tanto acá
+  // (oculta los botones en BasculaView.vue) como server-side en las 2 RPC
+  // (corregir_vale_bascula/anular_vale_bascula) — la UI nunca es la única
+  // barrera.
+  const puedeGestionarVales = computed(() => ['admin', 'plantista'].includes(auth.rol))
 
   // -------------------------------------------------------------------------
   // Datos base (pedidos para pesar, obras, patentes/proveedores conocidos,
   // fórmulas — estas últimas solo para resolver el nombre de mezcla al
-  // imprimir un vale, ver abrirImpresion()).
-  // -------------------------------------------------------------------------
+  // imprimir un vale, ver abrirImpresion()). `materiales` (2026-09-08): antes
+  // el campo "Material" de Salida de áridos era texto libre — ahora un
+  // desplegable sobre el catálogo real de Maestros (memory/architecture.md:
+  // plantas_materiales), mismo criterio que ya usan Proveedor/Obra acá al
+  // lado. Se mantiene texto libre en Ingreso de áridos: no fue lo que pidió
+  // Federico esta vez, y son 2 selects de catálogo distintos si hiciera falta.
+  // ------------------------------------------------------------------------
 
   const cargandoBase = ref(false)
   const pedidosParaPesada = ref([])
   const obras = ref([])
   const patentes = ref([])
   const proveedores = ref([])
+  const materiales = ref([])
   const formulas = ref([])
 
   const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
@@ -144,17 +162,19 @@ export function useBascula() {
   async function cargarBase() {
     cargandoBase.value = true
     try {
-      const [listaPedidos, listaObras, listaPatentes, listaProveedores, listaFormulas] = await Promise.all([
+      const [listaPedidos, listaObras, listaPatentes, listaProveedores, listaMateriales, listaFormulas] = await Promise.all([
         fetchPedidosAsfaltoParaPesada(),
         fetchObras(),
         patentesService.fetch({ soloActivos: true }),
         proveedoresService.fetch({ soloActivos: true }),
+        materialesService.fetch({ soloActivos: true }),
         fetchFormulas({ soloActivas: true }),
       ])
       pedidosParaPesada.value = listaPedidos
       obras.value = listaObras
       patentes.value = listaPatentes
       proveedores.value = listaProveedores
+      materiales.value = listaMateriales
       formulas.value = listaFormulas
     } catch (e) {
       error.value = e.message
@@ -334,6 +354,107 @@ export function useBascula() {
       error.value = e.message
     } finally {
       slot.guardando = false
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Editar / Eliminar un vale ya guardado (migración 31, pedido de Federico
+  // 2026-09-08). "Eliminar" es una baja lógica (anulación con motivo
+  // obligatorio) — ver el header de esa migración para el porqué: el DELETE
+  // real contradice memory/business-rules.md. No se puede editar ni anular
+  // un vale `pendiente_migracion` (fila solo-legado, sin id real detrás,
+  // mismo guard que ya usa abrirImpresion()) ni uno ya `anulado`.
+  // -------------------------------------------------------------------------
+
+  const modalEditarAbierto = ref(false)
+  const valeEditar = ref(null)
+  const formEditar = reactive({
+    pesoBruto: null,
+    tara: null,
+    patente: '',
+    chofer: '',
+    observaciones: '',
+    temperatura: null,
+    proveedor: '',
+    numeroRemito: '',
+    cantidadRemito: null,
+    obraId: '',
+  })
+  const guardandoEdicion = ref(false)
+
+  function abrirEdicion(vale) {
+    error.value = null
+    valeEditar.value = vale
+    formEditar.pesoBruto = vale.peso_bruto
+    formEditar.tara = vale.tara
+    formEditar.patente = vale.patente || ''
+    formEditar.chofer = vale.chofer || ''
+    formEditar.observaciones = vale.observaciones || ''
+    formEditar.temperatura = vale.temperatura ?? null
+    formEditar.proveedor = vale.proveedor || ''
+    formEditar.numeroRemito = vale.numero_remito_ingreso || ''
+    formEditar.cantidadRemito = vale.cantidad_remito_ingreso ?? null
+    formEditar.obraId = vale.obra_id || ''
+    modalEditarAbierto.value = true
+  }
+
+  async function guardarEdicion() {
+    if (!(Number(formEditar.pesoBruto) > 0) || formEditar.tara == null || Number(formEditar.tara) < 0) {
+      error.value = 'Completá peso bruto y tara.'
+      return
+    }
+    guardandoEdicion.value = true
+    error.value = null
+    try {
+      await corregirValeBascula(valeEditar.value.id, {
+        pesoBruto: formEditar.pesoBruto,
+        tara: formEditar.tara,
+        patente: formEditar.patente,
+        chofer: formEditar.chofer,
+        observaciones: formEditar.observaciones,
+        temperatura: formEditar.temperatura,
+        proveedor: formEditar.proveedor,
+        numeroRemito: formEditar.numeroRemito,
+        cantidadRemito: formEditar.cantidadRemito,
+        obraId: formEditar.obraId || null,
+      })
+      modalEditarAbierto.value = false
+      await cargarHistorial()
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      guardandoEdicion.value = false
+    }
+  }
+
+  const modalAnularAbierto = ref(false)
+  const valeAnular = ref(null)
+  const motivoAnulacion = ref('')
+  const anulandoVale = ref(false)
+  const errorAnulacion = ref(null)
+
+  function abrirAnulacion(vale) {
+    errorAnulacion.value = null
+    valeAnular.value = vale
+    motivoAnulacion.value = ''
+    modalAnularAbierto.value = true
+  }
+
+  async function confirmarAnulacion() {
+    if (!motivoAnulacion.value.trim()) {
+      errorAnulacion.value = 'El motivo de anulación es obligatorio.'
+      return
+    }
+    anulandoVale.value = true
+    errorAnulacion.value = null
+    try {
+      await anularValeBascula(valeAnular.value.id, motivoAnulacion.value.trim())
+      modalAnularAbierto.value = false
+      await cargarHistorial()
+    } catch (e) {
+      errorAnulacion.value = e.message
+    } finally {
+      anulandoVale.value = false
     }
   }
 
@@ -692,10 +813,12 @@ export function useBascula() {
 
   return {
     error,
+    puedeGestionarVales,
     cargandoBase,
     obras,
     patentes,
     proveedores,
+    materiales,
     pedidosParaPesada,
     nombreDestinoPedido,
     proximoNumeroVale,
@@ -735,6 +858,19 @@ export function useBascula() {
     abrirImpresionVale,
     abrirImpresionRemito,
     imprimir,
+    modalEditarAbierto,
+    valeEditar,
+    formEditar,
+    guardandoEdicion,
+    abrirEdicion,
+    guardarEdicion,
+    modalAnularAbierto,
+    valeAnular,
+    motivoAnulacion,
+    anulandoVale,
+    errorAnulacion,
+    abrirAnulacion,
+    confirmarAnulacion,
     iniciar,
   }
 }

@@ -143,6 +143,9 @@ export async function obtenerAcumuladoHastaFecha({ pedidoId, obraId, fechaCorte 
     .from(TABLA_VALES)
     .select('peso_neto, unidad, numero_vale')
     .eq('tipo_vale', 'asfalto')
+    // Un vale anulado (migración 31 — "Eliminar" en el historial) no debe
+    // sumar al acumulado del día que se imprime en el próximo vale/remito.
+    .eq('anulado', false)
     .gte('fecha_pesada', inicioDia.toISOString())
     .lte('fecha_pesada', corte.toISOString())
 
@@ -201,6 +204,50 @@ export async function registrarPesada(valeData) {
     p_temperatura: valeData.temperatura ?? null,
   })
 
+  if (error) throw error
+  return data
+}
+
+// ---------------------------------------------------------------------------
+// Editar / Anular un vale ya guardado (migración 31, requiere aplicarla
+// antes de deployar este archivo — memory/pending.md).
+//
+// "Eliminar" en la UI es una baja lógica (anular_vale_bascula), NUNCA un
+// DELETE real — memory/business-rules.md: los registros de este sistema no
+// se borran, se archivan/anulan. Ambas RPC están restringidas a
+// admin/plantista server-side (además del gate en la UI, BasculaView.vue).
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {string} valeId
+ * @param {{ pesoBruto: number, tara: number, patente?: string, chofer?: string,
+ *   observaciones?: string, temperatura?: number, proveedor?: string,
+ *   numeroRemito?: string, cantidadRemito?: number, obraId?: number }} cambios
+ *   No permite cambiar tipo_vale ni material — ver header de la migración 31.
+ */
+export async function corregirValeBascula(valeId, cambios) {
+  const { data, error } = await supabase.rpc('corregir_vale_bascula', {
+    p_vale_id: valeId,
+    p_peso_bruto: Number(cambios.pesoBruto),
+    p_tara: Number(cambios.tara),
+    p_patente: cambios.patente || null,
+    p_chofer: cambios.chofer || null,
+    p_observaciones: cambios.observaciones || null,
+    p_temperatura: cambios.temperatura ?? null,
+    p_proveedor: cambios.proveedor || null,
+    p_numero_remito: cambios.numeroRemito || null,
+    p_cantidad_remito: cambios.cantidadRemito ?? null,
+    p_obra_id: cambios.obraId || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function anularValeBascula(valeId, motivo) {
+  const { data, error } = await supabase.rpc('anular_vale_bascula', {
+    p_vale_id: valeId,
+    p_motivo: motivo,
+  })
   if (error) throw error
   return data
 }
