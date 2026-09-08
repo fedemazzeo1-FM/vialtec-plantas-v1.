@@ -12,6 +12,9 @@ import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
 import { maestrosService } from '@/modules/maestros/services/maestros.service'
+import { fetchTodasLasObrasConResumen } from '@/services/flota.service'
+import { fetchEstadoLocalObras, setObraArchivadaLocal } from '@/modules/maestros/services/obras-locales.service'
+import { useAuthStore } from '@/stores/auth.store'
 
 // Config declarativa por catálogo: columnas de tabla, campos de formulario y
 // registro vacío. Evita repetir la vista 4 veces para 4 tablas casi idénticas.
@@ -135,7 +138,14 @@ const ENTIDADES = {
   },
 }
 
-const tabs = Object.keys(ENTIDADES)
+// "Obras" (2026-09-08) queda AFUERA de ENTIDADES a propósito — no es un CRUD
+// más: es de solo lectura sobre flota_obras (tabla compartida, propiedad de
+// Flota — Obras se sigue gestionando ahí, decisión explícita de Federico de
+// no duplicar esa lógica) más un archivado LOCAL de visibilidad
+// (plantas_obras_locales, migración 32). Se maneja con su propio bloque de
+// carga/template más abajo en vez de forzarlo al patrón genérico de
+// crear/editar/activar de los demás catálogos.
+const tabs = [...Object.keys(ENTIDADES), 'obras']
 
 // Persistencia de navegación (2026-09-01, memory/modules-status.md — "F5 /
 // duplicar pestaña"): la tab activa se sincroniza con `?tab=` en la URL. Sin
@@ -174,10 +184,71 @@ async function cargarRegistros() {
   }
 }
 
+// -------------------------------------------------------------------------
+// Obras (2026-09-08) — solo lectura de flota_obras + archivado local, ver
+// nota de "tabs" más arriba. `auth.user?.email` es a título informativo
+// (quién archivó), no hay auditoría server-side para este catálogo liviano.
+// -------------------------------------------------------------------------
+
+const auth = useAuthStore()
+const obrasTodas = ref([])
+const estadoLocalObras = ref({})
+const cargandoObras = ref(false)
+const vistaObras = ref('activas') // 'activas' | 'archivadas'
+
+const columnasObras = [
+  { key: 'nombre', label: 'Nombre' },
+  { key: 'codigo', label: 'Código' },
+  { key: 'cliente', label: 'Cliente' },
+  { key: 'ubicacion', label: 'Ubicación' },
+  { key: 'estado', label: 'Estado (Flota)' },
+  { key: 'archivadaEnLabel', label: 'Archivada acá el' },
+  { key: 'acciones', label: '' },
+]
+
+const obrasConEstadoLocal = computed(() =>
+  obrasTodas.value.map((o) => {
+    const local = estadoLocalObras.value[o.id]
+    return {
+      ...o,
+      archivadaLocal: local?.archivada ?? false,
+      archivadaEnLabel: local?.archivada_en ? new Date(local.archivada_en).toLocaleDateString('es-AR') : '—',
+    }
+  })
+)
+const obrasFiltradas = computed(() =>
+  obrasConEstadoLocal.value.filter((o) => (vistaObras.value === 'archivadas' ? o.archivadaLocal : !o.archivadaLocal))
+)
+
+async function cargarObras() {
+  cargandoObras.value = true
+  error.value = null
+  try {
+    const [listaObras, estadoLocal] = await Promise.all([fetchTodasLasObrasConResumen(), fetchEstadoLocalObras()])
+    obrasTodas.value = listaObras
+    estadoLocalObras.value = estadoLocal
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    cargandoObras.value = false
+  }
+}
+
+async function toggleArchivadaLocal(obra) {
+  error.value = null
+  try {
+    await setObraArchivadaLocal(obra.id, !obra.archivadaLocal, auth.user?.email)
+    await cargarObras()
+  } catch (e) {
+    error.value = e.message
+  }
+}
+
 watch(
   tabActiva,
   (nueva) => {
-    cargarRegistros()
+    if (nueva === 'obras') cargarObras()
+    else cargarRegistros()
     router.replace({ query: { ...route.query, tab: nueva } })
   },
   { immediate: true }
@@ -248,7 +319,7 @@ async function toggleActivo(registro) {
           "
           @click="tabActiva = tab"
         >
-          {{ ENTIDADES[tab].label }}
+          {{ tab === 'obras' ? 'Obras' : ENTIDADES[tab].label }}
         </button>
       </div>
 
@@ -256,31 +327,82 @@ async function toggleActivo(registro) {
         {{ error }}
       </div>
 
-      <div class="mb-3 flex justify-end">
-        <VButton size="sm" @click="abrirNuevo"> + Nuevo {{ entidadActual.nombreSingular }} </VButton>
-      </div>
-
-      <VCard>
-        <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
-        <VTable v-else :columns="columnasConAcciones" :rows="registros">
-          <template #cell-activo="{ row }">
-            <VBadge :variant="row.activo ? 'success' : 'default'">
-              {{ row.activo ? 'Activo' : 'Inactivo' }}
-            </VBadge>
-          </template>
-          <template #cell-acciones="{ row }">
-            <div class="flex gap-1.5">
-              <VButton variant="secondary" size="sm" @click="abrirEdicion(row)">Editar</VButton>
-              <VButton variant="ghost" size="sm" @click="toggleActivo(row)">
-                {{ row.activo ? 'Desactivar' : 'Activar' }}
-              </VButton>
-            </div>
-          </template>
-        </VTable>
-        <p v-if="!cargando && !registros.length" class="py-4 text-center text-sm text-text-soft">
-          No hay {{ entidadActual.label.toLowerCase() }} cargados todavía.
+      <!-- Obras: solo lectura de flota_obras + archivado LOCAL (migración
+           32) — ver nota en <script> sobre por qué queda afuera del patrón
+           genérico de abajo. -->
+      <template v-if="tabActiva === 'obras'">
+        <p class="mb-3 text-xs text-text-soft">
+          Las obras se crean y gestionan en Flota (equipos2.vialtec.app → Maestros → Obras). Acá solo podés
+          archivarlas <strong>para este sistema</strong>: dejan de aparecer en los desplegables de Pedidos, Báscula,
+          Despachos, Plan Semanal y Dashboard, sin tocar nada en Flota.
         </p>
-      </VCard>
+
+        <div class="mb-3 flex gap-1 rounded-lg border border-border p-1" style="width: fit-content">
+          <button
+            type="button"
+            class="rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-150"
+            :class="vistaObras === 'activas' ? 'bg-vialtec text-white' : 'text-text-mid hover:bg-gray-50'"
+            @click="vistaObras = 'activas'"
+          >
+            Activas
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-150"
+            :class="vistaObras === 'archivadas' ? 'bg-vialtec text-white' : 'text-text-mid hover:bg-gray-50'"
+            @click="vistaObras = 'archivadas'"
+          >
+            Archivadas
+          </button>
+        </div>
+
+        <VCard>
+          <p v-if="cargandoObras" class="text-sm text-text-soft">Cargando…</p>
+          <VTable v-else :columns="columnasObras" :rows="obrasFiltradas">
+            <template #cell-estado="{ row }">
+              <VBadge :variant="row.estado === 'activa' ? 'success' : row.estado === 'pausada' ? 'warning' : 'default'">
+                {{ row.estado }}
+              </VBadge>
+            </template>
+            <template #cell-acciones="{ row }">
+              <VButton variant="ghost" size="sm" @click="toggleArchivadaLocal(row)">
+                {{ row.archivadaLocal ? 'Reactivar acá' : 'Archivar acá' }}
+              </VButton>
+            </template>
+          </VTable>
+          <p v-if="!cargandoObras && !obrasFiltradas.length" class="py-4 text-center text-sm text-text-soft">
+            No hay obras {{ vistaObras === 'archivadas' ? 'archivadas' : 'activas' }}.
+          </p>
+        </VCard>
+      </template>
+
+      <template v-else>
+        <div class="mb-3 flex justify-end">
+          <VButton size="sm" @click="abrirNuevo"> + Nuevo {{ entidadActual.nombreSingular }} </VButton>
+        </div>
+
+        <VCard>
+          <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
+          <VTable v-else :columns="columnasConAcciones" :rows="registros">
+            <template #cell-activo="{ row }">
+              <VBadge :variant="row.activo ? 'success' : 'default'">
+                {{ row.activo ? 'Activo' : 'Inactivo' }}
+              </VBadge>
+            </template>
+            <template #cell-acciones="{ row }">
+              <div class="flex gap-1.5">
+                <VButton variant="secondary" size="sm" @click="abrirEdicion(row)">Editar</VButton>
+                <VButton variant="ghost" size="sm" @click="toggleActivo(row)">
+                  {{ row.activo ? 'Desactivar' : 'Activar' }}
+                </VButton>
+              </div>
+            </template>
+          </VTable>
+          <p v-if="!cargando && !registros.length" class="py-4 text-center text-sm text-text-soft">
+            No hay {{ entidadActual.label.toLowerCase() }} cargados todavía.
+          </p>
+        </VCard>
+      </template>
     </VSection>
 
     <VModal

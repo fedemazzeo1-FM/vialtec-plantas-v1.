@@ -5,16 +5,51 @@
 
 import { supabase } from '@/config/supabase'
 
-/** Obras (catálogo compartido, ~20 filas — no necesita fetchPaginado). */
+/**
+ * Obras (catálogo compartido, ~20 filas — no necesita fetchPaginado).
+ *
+ * `soloActivas: true` (default, usado por Pedidos/Báscula/Despachos/Plan
+ * Semanal/Dashboard/Usuarios para poblar sus desplegables) lee de
+ * `plantas_v_obras_visibles` (migración 32) en vez de `flota_obras`
+ * directo — esa vista ya excluye tanto `activo=false` (Flota) como una obra
+ * archivada LOCALMENTE en Plantas (`plantas_obras_locales.archivada`, Maestros
+ * → Obras). Un solo cambio acá alcanza para todos los módulos: ninguno lee
+ * `flota_obras` por su cuenta.
+ *
+ * `soloActivas: false` sigue leyendo `flota_obras` sin ningún filtro — lo usa
+ * el Informe Mensual (necesita TODAS las obras que tuvieron producción en el
+ * mes, aunque hoy estén inactivas o archivadas localmente).
+ */
 export async function fetchObras({ soloActivas = true } = {}) {
-  let query = supabase
+  if (soloActivas) {
+    const { data, error } = await supabase
+      .from('plantas_v_obras_visibles')
+      .select('id, nombre, codigo')
+      .order('nombre', { ascending: true })
+    if (error) throw error
+    return data
+  }
+
+  const { data, error } = await supabase
     .from('flota_obras')
     .select('id, nombre, codigo, activo')
     .order('nombre', { ascending: true })
+  if (error) throw error
+  return data
+}
 
-  if (soloActivas) query = query.eq('activo', true)
-
-  const { data, error } = await query
+/**
+ * Todas las obras con sus columnas de resumen (Maestros → Obras, 2026-09-08)
+ * — solo lectura de `flota_obras`, sin filtrar por `activo` ni por el
+ * archivado local (esa vista es la única que necesita ver TODO para poder
+ * mostrar el tab "Archivadas"). Nunca se escribe acá — para archivar/
+ * desarchivar localmente ver `src/modules/maestros/services/obras-locales.service.js`.
+ */
+export async function fetchTodasLasObrasConResumen() {
+  const { data, error } = await supabase
+    .from('flota_obras')
+    .select('id, nombre, codigo, cliente, ubicacion, fecha_inicio, estado, activo')
+    .order('nombre', { ascending: true })
   if (error) throw error
   return data
 }

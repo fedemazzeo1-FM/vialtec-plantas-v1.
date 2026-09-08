@@ -139,6 +139,20 @@ async function confirmarNuevaPassword() {
       <div class="flex flex-col items-center gap-3 text-center">
         <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-16 w-auto" />
         <h1 class="text-lg font-bold text-text">Plantas</h1>
+        <!-- 2026-09-08 (pedido de Federico: "algo distintivo, lindo y
+             profesional"): badge con un ícono propio (silos + cinta de
+             asfalto, dibujado a mano en SVG, sin librería externa) en vez de
+             un emoji — mismo criterio de sobriedad que el resto del sistema.
+             Es la única pieza nueva de esta pantalla: el resto de la card es
+             la réplica exacta del login de Flota (ver <style> más abajo). -->
+        <span class="login-badge inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-vialtec">
+          <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5 shrink-0">
+            <path d="M4 21V9.5L8 7v3l4-2.5V10l4-2.5V21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M2.5 21h19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <path d="M4 21v-3M8 21v-3M12 21v-3M16 21v-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="1.6 2.2" />
+          </svg>
+          Producción de Asfalto y Hormigón
+        </span>
       </div>
 
       <div v-if="error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
@@ -283,6 +297,11 @@ async function confirmarNuevaPassword() {
   border: 1px solid #eaecf0;
   box-shadow: 0 4px 24px rgba(16, 24, 40, 0.08);
   animation: fadeUp 0.6s ease 0.1s both;
+}
+
+.login-badge {
+  background: rgba(123, 47, 142, 0.08);
+  border: 1px solid rgba(123, 47, 142, 0.18);
 }
 
 .login-input {
