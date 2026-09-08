@@ -1,5 +1,34 @@
 # pending.md — Pendientes
 
+## ✅ WhatsApp: toast de "pedido nuevo" ahora sí apunta a Daniel Natel — 2026-09-08
+
+Federico confirmó el flujo esperado: al CREAR un pedido (sea quien sea que
+lo crea), el toast tiene que ir directo a Daniel Natel con el detalle; al
+CONFIRMAR, el toast va a quien hizo el pedido. Repasando el código,
+encontré que la segunda mitad ya estaba bien (`toastConfirmarPedido`
+resuelve `fetchTelefonoPorNombre(pedido.encargado)` — "encargado" es
+literalmente el campo "Responsable del pedido" que tipea quien lo crea,
+así que ya apuntaba a la persona correcta), pero la primera mitad NO: el
+toast de creación (`toastCrearPedido`) nunca resolvía ningún teléfono,
+siempre abría WhatsApp vacío sin destinatario.
+
+**Fix**: `toastCrearPedido()` (`whatsapp.js`) ahora acepta `telefono`
+igual que `toastConfirmarPedido()`. `usePedidos.js#guardarNuevo()` resuelve
+`fetchTelefonoPorNombre('Daniel Natel')` (constante nueva
+`NOMBRE_PLANTISTA_AVISO_CREACION`, con nota explicando que es una decisión
+de negocio puntual de Federico — hay 2 plantistas reales activos hoy,
+Daniel Natel y Felix Pereyra, y el aviso de creación va específicamente al
+primero, no "el plantista" genérico) antes de armar el toast — mismo
+patrón best-effort que ya usaba confirmar (si el lookup falla, no bloquea
+la creación del pedido, cae a wa.me sin destinatario).
+
+Verificado antes de tocar código: `daniel.natel@vialtec.com.ar` tiene
+teléfono cargado (`5491135176892`) en `flota_usuarios_email`, match exacto
+por nombre. Build verificado. No probado en vivo con el click real del
+toast (no hay sesión logueada esta sesión) — pedirle a Federico que cree
+un pedido de prueba y confirme que el botón "Avisar al plantista" abre
+directo el chat de Daniel con el mensaje ya armado.
+
 ## ✅ Stock/Báscula: fix de unidades + backfill de proveedor/remito + logo en Excel — 2026-09-08, APLICADO en producción
 
 Federico reportó, mirando Stock → Historial de ingresos: faltan proveedor
