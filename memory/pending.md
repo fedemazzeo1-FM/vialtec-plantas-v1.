@@ -1,5 +1,77 @@
 # pending.md — Pendientes
 
+## 🔴 Báscula: selector de material (listo) + Editar/Eliminar de vales (código listo, MIGRACIÓN 31 PENDIENTE) — 2026-09-08
+
+Pedido explícito de Federico, 2 mejoras de Báscula:
+
+**1) Selector de Material en Salida de áridos — APLICADO, sin pendiente.**
+`BasculaView.vue`: el campo "Material" de la puerta `egreso_arido` pasó de
+texto libre a `<select>` sobre el catálogo real de Maestros
+(`plantas_materiales`, vía `materialesService.fetch()` ya existente,
+cargado en `useBascula.js#cargarBase()`). Se dejó a propósito el campo
+"Material" de `ingreso_arido` como estaba (texto libre) — no fue lo que
+pidió esta vez, y son 2 selects independientes si hiciera falta el mismo
+cambio ahí.
+
+**2) Editar/Eliminar en el historial — CÓDIGO LISTO, MIGRACIÓN 31 (`supabase/migrations/31_bascula_corregir_anular_vale.sql`)
+SIN APLICAR — necesita tu confirmación antes de correrla (memory/procedimientos.md:
+toca schema y mueve stock real).**
+
+Decisión de diseño que se aparta del pedido literal, documentada en el
+header de la migración: "Eliminar" **no hace un DELETE real**.
+`memory/business-rules.md`/`modules-status.md` ya tenían esto anotado como
+decisión pendiente desde la Fase 2 de Báscula (2026-08-28): "botón Eliminar
+en vales/despachos — se mantiene la regla de business-rules.md (nunca se
+eliminan), no se agregó". El pedido de esta sesión ya contemplaba la
+alternativa ("o baja lógica según corresponda") — se implementó como
+**anulación**: el vale queda en la tabla para siempre
+(`plantas_vales.anulado/anulado_en/anulado_por/motivo_anulacion`, motivo
+obligatorio, mismo patrón que `cancelar_pedido`), se muestra tachado con
+badge "Anulado" en el historial, pierde sus acciones (no se puede volver a
+editar ni anular de nuevo), y si era `ingreso_arido`/`egreso_arido` su
+efecto de stock se revierte a 0.
+
+"Editar" (`corregir_vale_bascula`) permite corregir peso/tara (recalcula
+peso neto), patente, chofer, observaciones, temperatura (asfalto),
+proveedor/N° remito/cantidad de remito (ingreso) y obra de destino
+(egreso) — **no permite cambiar el material** de un ingreso/egreso ya
+pesado (simplificación deliberada: si el material estaba mal, la corrección
+real es anular ese vale con motivo y cargar uno nuevo, no reasignar
+retroactivamente a qué stock le pegó un pesaje ya hecho). El recálculo de
+stock de ambas RPC (`corregir_vale_bascula`/`anular_vale_bascula`) es
+idempotente: lee el historial REAL de `plantas_stock_movimientos` atado a
+`vale_id` (no recalcula a ciegas) y aplica solo la diferencia contra el
+objetivo — mismo patrón que la migración 22 ya usó para
+`plantas_descontar_stock_despacho()` (evita el bug de "stock fantasma" que
+esa migración corrigió). Nuevo tipo de movimiento auditable
+`recalculo_bascula` en `plantas_stock_movimientos` para estos ajustes.
+
+Permisos: **admin/plantista únicamente** (pedido explícito de Federico —
+más angosto que quién puede REGISTRAR una pesada, que además incluye
+balancero). Restringido en 2 capas: `BasculaView.vue` oculta los botones
+"Editar"/"Eliminar" a cualquier otro rol (`puedeGestionarVales`,
+`useBascula.js`), y las 2 RPC nuevas validan el rol server-side
+independientemente de la UI.
+
+La migración también redefine `plantas_v_bascula_viva` para exponer
+`anulado`/`motivo_anulacion` (false/null en las filas que todavía solo
+viven en el legado — no se pueden anular desde acá).
+
+**⚠️ Orden obligatorio antes del próximo deploy**: el frontend ya commiteado
+consulta columnas (`anulado`) y llama RPC (`corregir_vale_bascula`/
+`anular_vale_bascula`) que no existen todavía en producción — si se
+deploya el build actual sin aplicar antes la migración 31, Báscula rompe
+(el acumulado que se imprime en cada vale filtra por `anulado`, columna
+inexistente). Aplicar la migración 31 primero, recién después `npx vercel
+--prod`, igual que el protocolo ya usado con las migraciones 29/30.
+
+Build verificado (`npm run build` limpio). No probado en vivo con datos
+reales (no hay sesión logueada como admin/plantista disponible esta
+sesión) — antes de dar esto por cerrado: aplicar la migración, probar
+Editar y Eliminar con un vale real de cada tipo (asfalto/ingreso/egreso),
+confirmar que el stock revertido/recalculado da el valor esperado, y
+confirmar que un rol distinto de admin/plantista no ve los botones.
+
 ## ✅ Login rediseñado (réplica exacta del de Flota) + "¿Olvidaste tu contraseña?" nuevo (2026-09-08)
 
 Pedido explícito de Federico, con capturas de referencia del login real de
