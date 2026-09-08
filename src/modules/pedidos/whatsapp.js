@@ -32,10 +32,17 @@ export function urlWhatsapp(mensaje, telefono) {
   return telefono ? `https://wa.me/${telefono}?text=${texto}` : `https://wa.me/?text=${texto}`
 }
 
-/** Al crear un pedido (solicitado) — dirigido al plantista. */
-export function toastCrearPedido(pedido, { obraNombre }) {
+/**
+ * Al crear un pedido (solicitado) — dirigido al plantista. `telefono`
+ * (2026-09-08, pedido explícito de Federico: "todos los que hagan un
+ * pedido, el toast debe ser para Daniel Natel") resuelve el link directo a
+ * su chat — ver NOMBRE_PLANTISTA_AVISO_CREACION en usePedidos.js. Sin
+ * telefono (lookup falló o no está cargado), cae a wa.me sin destinatario,
+ * mismo criterio de respaldo que el resto de estos toasts.
+ */
+export function toastCrearPedido(pedido, { obraNombre, telefono } = {}) {
   const mensaje = `🔔 Nuevo pedido de ${pedido.tipo === 'hormigon' ? 'hormigón' : 'asfalto'}\n${destinoLabel(pedido, obraNombre)} — ${pedido.cantidad_solicitada} ${unidad(pedido)}\nFecha: ${pedido.fecha_programada}\nSolicitado por: ${pedido.encargado || '—'}`
-  return { titulo: 'Avisar al plantista', mensaje, url: urlWhatsapp(mensaje) }
+  return { titulo: 'Avisar al plantista', mensaje, url: urlWhatsapp(mensaje, telefono) }
 }
 
 /**

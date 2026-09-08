@@ -25,6 +25,17 @@ import { patentesService, choferesService } from '@/modules/maestros/services/ma
 import { useAuthStore } from '@/stores/auth.store'
 import { toastCrearPedido, toastConfirmarPedido, toastConfirmarHormigonOperador } from '@/modules/pedidos/whatsapp'
 
+// Destinatario fijo del aviso de "pedido nuevo" (2026-09-08, pedido
+// explícito de Federico — no un dato que el sistema deba adivinar). A
+// diferencia del teléfono de "confirmar" (que resuelve dinámicamente contra
+// pedido.encargado, quien haya sido), este es una decisión de negocio
+// puntual: sea quien sea que crea el pedido, el aviso siempre va a la misma
+// persona. Hay 2 plantistas reales activos hoy (Daniel Natel y Felix
+// Pereyra, plantas_usuarios_roles) — Federico eligió a Daniel puntualmente
+// para esto, no "el plantista" genérico. Si el día de mañana cambia quién
+// recibe este aviso, actualizar acá (un solo lugar).
+const NOMBRE_PLANTISTA_AVISO_CREACION = 'Daniel Natel'
+
 function formularioPedidoVacio() {
   return {
     tipo_pedido: 'obra',
@@ -298,7 +309,21 @@ export function usePedidos() {
         { usuarioLegado: auth.nombre }
       )
       modalNuevoAbierto.value = false
-      mostrarToastWhatsapp(toastCrearPedido(pedidoCreado, { obraNombre: obraNombreDe(pedidoCreado) }))
+      // Teléfono de Daniel Natel (2026-09-08, pedido explícito de Federico:
+      // "todos los que hagan un pedido, el toast debe ser para Daniel Natel
+      // avisándole que se hizo el pedido con el detalle") — mismo mecanismo
+      // best-effort que ya usa confirmarPedido() con el encargado: si el
+      // lookup falla o no tiene teléfono cargado, no bloquea la creación
+      // del pedido, el toast simplemente cae a wa.me sin destinatario.
+      let telefonoPlantista = null
+      try {
+        telefonoPlantista = await fetchTelefonoPorNombre(NOMBRE_PLANTISTA_AVISO_CREACION)
+      } catch (e) {
+        telefonoPlantista = null
+      }
+      mostrarToastWhatsapp(
+        toastCrearPedido(pedidoCreado, { obraNombre: obraNombreDe(pedidoCreado), telefono: telefonoPlantista })
+      )
       aplicarFiltros()
     } catch (e) {
       error.value = e.message
