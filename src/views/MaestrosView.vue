@@ -405,7 +405,16 @@ async function toggleActivo(registro) {
       </template>
     </VSection>
 
+    <!-- v-if="entidadActual": este modal es el de crear/editar de los
+         catálogos genéricos (ENTIDADES) — no existe para el tab "Obras"
+         (entidadActual da undefined ahí, ver comentario en <script>). Sin
+         este guard, ":title" de acá abajo tira "Cannot read properties of
+         undefined" apenas se entra a Obras — el :title de un componente
+         siempre se evalúa al crear su VNode, aunque el modal esté cerrado
+         (bug real reportado por Federico 2026-09-08: "cuando toco el tab
+         obras queda en blanco"). -->
     <VModal
+      v-if="entidadActual"
       :open="modalAbierto"
       :title="(editandoId ? 'Editar ' : 'Nuevo ') + entidadActual.nombreSingular"
       @update:open="modalAbierto = $event"
