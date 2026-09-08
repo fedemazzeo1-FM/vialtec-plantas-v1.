@@ -53,7 +53,12 @@ const FECHA = (iso) => {
 
 function agregarLogo(workbook, worksheet, logoBuffer) {
   const imageId = workbook.addImage({ buffer: logoBuffer, extension: 'png' })
-  worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 180, height: 34 } })
+  // Fix 2026-09-08 (reportado por Federico: "el logo está muy estirado" en
+  // todos los excel) — mismo fix que excel-corporativo.js: logo-vialtec.png
+  // mide 1348×583px real (ratio ≈2.31:1), el width:180/height:34 de antes
+  // (ratio 5.29:1) lo aplastaba. 78×34 mantiene el mismo alto que ya usaba
+  // este header, con la proporción real del archivo.
+  worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 78, height: 34 } })
 }
 
 /**

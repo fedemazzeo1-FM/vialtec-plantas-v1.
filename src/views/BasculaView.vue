@@ -109,6 +109,7 @@ const columnasHistorial = [
   { key: 'tipo_vale', label: 'Tipo' },
   { key: 'materialObraLabel', label: 'Material/Obra' },
   { key: 'patente', label: 'Patente' },
+  { key: 'proveedorLabel', label: 'Proveedor', secundaria: true },
   { key: 'remitoLabel', label: 'Remito', secundaria: true },
   { key: 'responsableLabel', label: 'Responsable', secundaria: true },
   { key: 'numero_vale', label: 'N° Vale', format: (v) => formatearNumeroVale(v) },

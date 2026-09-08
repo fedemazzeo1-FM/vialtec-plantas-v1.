@@ -525,6 +525,10 @@ export function useBascula() {
             : v.cliente_externo || '—'
           : v.material || '—',
       remitoLabel: numeroRemitoIngreso || '—',
+      // 2026-09-08 (pedido de Federico: "báscula también, sumale columna de
+      // proveedor") — solo tiene valor en ingreso_arido (migración 33,
+      // plantas_v_bascula_viva.proveedor viene de plantas_ingresos.proveedor).
+      proveedorLabel: v.proveedor || '—',
       // Responsable: email real si lo hay (cruzado contra flota_usuarios_email,
       // igual que antes); si la fila es solo-legado sin email, cae al texto
       // suelto que sí guardaba el legado (operador/responsable) antes de '—'.
@@ -633,6 +637,7 @@ export function useBascula() {
             { key: 'tipoCorto', label: 'Tipo' },
             { key: 'materialObraLabel', label: 'Material/Obra' },
             { key: 'patente', label: 'Patente' },
+            { key: 'proveedorLabel', label: 'Proveedor' },
             { key: 'remitoLabel', label: 'Remito' },
             { key: 'responsableLabel', label: 'Responsable' },
             { key: 'numero_vale', label: 'N° Vale', format: (v) => formatearNumeroVale(v) },
