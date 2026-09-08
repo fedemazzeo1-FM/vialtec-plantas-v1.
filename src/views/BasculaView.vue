@@ -487,12 +487,15 @@ watch(
           <template #cell-acciones="{ row }">
             <!-- 2026-09-04 (pedido de Federico): "Vale" también para egreso de
                  áridos (Salida de áridos) — antes solo asfalto tenía botón de
-                 impresión. Sigue sin "Remito": ese formato es específico del
-                 flujo de pedido/obra de asfalto (acumulado por pedido, rango
-                 de vales correlativos), egreso de áridos no tiene pedido
-                 asociado. Ingreso de áridos sigue sin impresión (no pedido). -->
+                 impresión. 2026-09-08: se suma también Ingreso de áridos
+                 (mismo botón "Vale", ver ValeImprimible.vue para los campos
+                 propios de ese tipo — Proveedor/Remito en vez de Obra).
+                 Ninguno de los 2 áridos tiene "Remito": ese formato es
+                 específico del flujo de pedido/obra de asfalto (acumulado
+                 por pedido, rango de vales correlativos), los áridos no
+                 tienen pedido asociado. -->
             <div class="flex flex-wrap gap-1.5">
-              <template v-if="!row.pendiente_migracion && (row.tipo_vale === 'asfalto' || row.tipo_vale === 'egreso_arido')">
+              <template v-if="!row.pendiente_migracion && row.tipo_vale !== 'hormigon'">
                 <VButton variant="secondary" size="sm" @click="abrirImpresionVale(row)">Vale</VButton>
                 <VButton v-if="row.tipo_vale === 'asfalto'" variant="secondary" size="sm" @click="abrirImpresionRemito(row)">Remito</VButton>
               </template>

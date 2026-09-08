@@ -156,13 +156,24 @@ const detalleMezcla = computed(() => (props.mezclaNombre || 'Mezcla asfáltica')
         <p><span class="text-gray-500">Hora:</span> {{ formatFecha(vale.fecha_pesada).hora }}</p>
         <p><span class="text-gray-500">Patente:</span> {{ vale.patente || '—' }}</p>
         <p><span class="text-gray-500">Chofer:</span> {{ vale.chofer || '—' }}</p>
-        <p class="col-span-2"><span class="text-gray-500">Obra:</span> {{ obraNombre || '—' }}</p>
+        <!-- Obra: solo tiene sentido para asfalto/egreso de áridos — un
+             ingreso de áridos (2026-09-08, pedido de Federico: sumarle el
+             botón "Vale") no tiene obra asociada, va con
+             Proveedor/Remito/Remito(cantidad) en su lugar. -->
+        <p v-if="vale.tipo_vale !== 'ingreso_arido'" class="col-span-2"><span class="text-gray-500">Obra:</span> {{ obraNombre || '—' }}</p>
         <!-- 2026-09-04 (pedido de Federico: Vale también para egreso de
-             áridos): asfalto lleva Mezcla (fórmula del pedido); egreso de
-             áridos no tiene pedido/fórmula, lleva Material (texto libre que
-             cargó el balancero en la puerta) en su lugar. -->
+             áridos): asfalto lleva Mezcla (fórmula del pedido); egreso/
+             ingreso de áridos no tienen pedido/fórmula, llevan Material
+             (texto libre que cargó el balancero en la puerta) en su lugar. -->
         <p v-if="vale.tipo_vale === 'asfalto'" class="col-span-2"><span class="text-gray-500">Mezcla:</span> {{ mezclaNombre || '—' }}</p>
         <p v-else class="col-span-2"><span class="text-gray-500">Material:</span> {{ vale.material || '—' }}</p>
+        <template v-if="vale.tipo_vale === 'ingreso_arido'">
+          <p><span class="text-gray-500">N° Remito:</span> {{ vale.numero_remito_ingreso || '—' }}</p>
+          <p>
+            <span class="text-gray-500">Cantidad s/remito:</span>
+            {{ vale.cantidad_remito_ingreso != null ? Number(vale.cantidad_remito_ingreso).toFixed(2) + ' tn' : '—' }}
+          </p>
+        </template>
         <p><span class="text-gray-500">Bruto:</span> {{ vale.peso_bruto }} {{ vale.unidad }}</p>
         <p><span class="text-gray-500">Tara:</span> {{ vale.tara }} {{ vale.unidad }}</p>
         <p><span class="text-gray-500">Neto:</span> {{ vale.peso_neto }} {{ vale.unidad }}</p>
