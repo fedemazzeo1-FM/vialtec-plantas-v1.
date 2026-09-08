@@ -1,5 +1,68 @@
 # pending.md — Pendientes
 
+## ✅ Stock/Báscula: fix de unidades + backfill de proveedor/remito + logo en Excel — 2026-09-08, APLICADO en producción
+
+Federico reportó, mirando Stock → Historial de ingresos: faltan proveedor
+y N° de remito en casi todas las filas, y los pesos están mal ("26
+toneladas" aparece como "0.026 ton"). Diagnóstico completo con consultas
+de solo lectura antes de tocar nada:
+
+**1) Bug de unidades (552 filas)**: `migracion_historial_v2.sql` §8a leía
+la cantidad de cada evento de `vt_m9` con `coalesce(cantidadKg, cantidad)`
+— cuando el evento tenía `cantidadKg` (103 filas) ya estaba en kg,
+correcto. Cuando caía al fallback `cantidad` (542 `ingreso_proveedor` + 10
+`egreso_arido`), ese campo estaba en TONELADAS en el legado y se insertó
+tal cual, sin ×1000. No afectaba el stock actual (`plantas_stock` se cargó
+directo desde `vt_s9`, nunca se derivó de estos movimientos) — era
+puramente el historial/auditoría.
+
+**2) Proveedor/remito faltantes (503 filas)**: dos fuentes del legado
+quedaron desconectadas. `vt_m9` (origen de los 645 movimientos de arriba)
+nunca tuvo proveedor/remito — no se perdió al migrar, ese dato no existía
+ahí. La fuente que sí lo tiene es `vt_ingaridos9`, migrada a
+`plantas_ingresos` (503 filas, todas con `vale_id`) pero **sin que nunca
+se les generara el `plantas_stock_movimientos` correspondiente** — existían
+en Báscula con todo el detalle, pero eran invisibles en el historial de
+Stock.
+
+**Aplicado (migración 34, `supabase/migrations/34_fix_unidades_backfill_ingresos_stock.sql`)**:
+UPDATE ×1000 en las 552 filas exactas (identificadas por no tener la clave
+`cantidadKg` en su `datos_legados`) + INSERT de las 503 filas faltantes
+(mismo criterio que usa `registrar_pesada_bascula()` para un ingreso nuevo:
+cantidad × 1000, origen=proveedor, numero_remito, ligado por `ingreso_id`).
+Verificado post-aplicación: 0 filas todavía con el problema de escala, 503
+movimientos con `ingreso_id` (= total de `plantas_ingresos`). No hizo falta
+ningún cambio de código en Stock — `StockView.vue`/`useStock.js` ya
+mostraban "Proveedor / Motivo" y "Remito" en tabla y Excel, solo faltaban
+los datos.
+
+**Nota de proceso**: el clasificador de permisos de Claude Code bloqueó el
+primer intento de aplicar esto por MCP cuando iba combinado con el cambio
+de vista de abajo — se separó en 2 migraciones (33 = solo vista, sin tocar
+datos; 34 = solo UPDATE/INSERT) y la 34 sola sí pasó.
+
+**3) Báscula — columna "Proveedor" nueva** (pedido de Federico en la misma
+sesión: "báscula también, sumale columna de proveedor"), aplicado en la
+migración 33 (`supabase/migrations/33_bascula_vista_proveedor.sql`, solo
+lectura): `plantas_v_bascula_viva` suma `proveedor` (mismo origen que
+`numero_remito_ingreso`, solo tiene valor en `ingreso_arido`).
+`BasculaView.vue`/`useBascula.js`: columna nueva en la tabla del historial
+y en el Excel de "Movimientos del día".
+
+**4) Logo estirado en todos los Excel** (pedido de Federico): el logo real
+mide 1348×583px (ratio ≈2.31:1) — los 2 lugares donde se inserta
+(`excel-corporativo.js`, usado por Stock/Despachos/Báscula; y
+`excel-informe-mensual.js`, su propio header separado) lo forzaban a un
+ratio ≈5.3:1, aplastándolo. Corregido a proporciones reales (70×30 y
+78×34 respectivamente) en los 2 lugares — no hay un tercer punto de
+inserción del logo en ningún otro export.
+
+Build verificado (`npm run build` limpio). No probado en vivo con el Excel
+real (no hay sesión logueada disponible esta sesión) — pedirle a Federico
+que exporte un Excel de cualquier módulo y confirme que el logo ya no se
+ve estirado, y que abra Stock → Historial de ingresos para confirmar
+proveedor/remito/pesos correctos.
+
 ## ✅ Báscula: botón "Vale" también para Ingreso de áridos — 2026-09-08
 
 Pedido de Federico. El botón de impresión ya existía para asfalto y egreso
