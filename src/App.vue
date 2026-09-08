@@ -5,6 +5,11 @@
 // según viewport (roadmap Mobile, memory/pending.md 2026-09-02):
 // DesktopLayout (sidebar) o MobileLayout (nav inferior + hoja "Más"),
 // mismo breakpoint (768px) que useBreakpoint()/Tailwind `md:` en toda la app.
+//
+// auth.isPasswordRecovery (2026-09-08, flujo "¿Olvidaste tu contraseña?"): la sesión
+// temporal que abre un link de recovery puede resolver un perfil válido (estaLogueado
+// pasa a true) antes de que el usuario haya elegido su nueva contraseña — sin este chequeo
+// entraría directo al dashboard salteándose el formulario de "Crear nueva contraseña".
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useBreakpoint } from '@/composables/useBreakpoint'
@@ -22,7 +27,7 @@ onMounted(() => {
 
 <template>
   <div v-if="!auth.listo" class="flex min-h-screen items-center justify-center text-sm text-gray-400">Cargando…</div>
-  <LoginView v-else-if="!auth.estaLogueado" />
+  <LoginView v-else-if="!auth.estaLogueado || auth.isPasswordRecovery" />
   <MobileLayout v-else-if="esMobile" />
   <DesktopLayout v-else />
 </template>

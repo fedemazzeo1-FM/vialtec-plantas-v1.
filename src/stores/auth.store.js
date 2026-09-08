@@ -39,6 +39,11 @@ const TAB_A_MODULO = {
   maestros: 'maestros',
 }
 
+// Evita suscribir el listener de onAuthStateChange más de una vez (restaurarSesion()
+// puede en teoría llamarse de nuevo tras un logout/remount) — mismo criterio que
+// promesaRestaurarSesion de arriba, pero para algo que solo debe engancharse 1 vez.
+let escuchandoCambiosAuth = false
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
@@ -54,6 +59,13 @@ export const useAuthStore = defineStore('auth', {
     modulosVer: new Set(),
     cargando: false,
     listo: false, // true cuando ya se resolvió la sesión inicial (evita parpadeo en los guards)
+    // true tras click en un link de recuperación de contraseña (evento PASSWORD_RECOVERY
+    // de Supabase, ver escucharCambiosAuth() más abajo) — App.vue/LoginView.vue muestran el
+    // formulario de "Crear nueva contraseña" en vez del login/dashboard normal mientras esto
+    // sea true, aunque la sesión temporal del link ya haya resuelto un perfil válido y
+    // estaLogueado dé true. Mismo patrón que vialtec-flota-v2 (2026-09-08, Federico pidió
+    // clonar el login de Flota, que ya tenía este flujo — acá no existía todavía).
+    isPasswordRecovery: false,
   }),
 
   getters: {
@@ -134,6 +146,7 @@ export const useAuthStore = defineStore('auth', {
      * arriba), para restaurar sesión tras un refresh (F5) o pestaña nueva.
      */
     async restaurarSesion() {
+      this.escucharCambiosAuth()
       if (promesaRestaurarSesion) return promesaRestaurarSesion
       promesaRestaurarSesion = this._restaurarSesionInterna().finally(() => {
         promesaRestaurarSesion = null
@@ -151,7 +164,56 @@ export const useAuthStore = defineStore('auth', {
         }
       } catch (e) {
         // Sesión inválida o usuario sin rol asignado -> queda deslogueado, sin tirar la app.
+        // $reset() no debe pisar isPasswordRecovery: si esto corre justo después de que el
+        // link de recovery ya prendió el flag (sesión temporal sin perfil resuelto todavía,
+        // o con error), LoginView tiene que seguir mostrando "Crear nueva contraseña", no
+        // volver al login vacío perdiendo el contexto del link recién clickeado.
+        const eraRecovery = this.isPasswordRecovery
         this.$reset()
+        this.isPasswordRecovery = eraRecovery
+      } finally {
+        this.cargando = false
+        this.listo = true
+      }
+    },
+
+    // Único punto que escucha onAuthStateChange — sin esto, el evento PASSWORD_RECOVERY que
+    // dispara Supabase al procesar el token del link (#access_token=...&type=recovery) se
+    // pierde siempre (no hay forma de "consultarlo" después, es un evento puntual) y la app
+    // trataría la sesión temporal del link como un login normal. Ver auth.store.js de
+    // vialtec-flota-v2, mismo patrón, ya probado en producción.
+    escucharCambiosAuth() {
+      if (escuchandoCambiosAuth) return
+      escuchandoCambiosAuth = true
+      supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') this.isPasswordRecovery = true
+      })
+    },
+
+    // "¿Olvidaste tu contraseña?" (LoginView.vue) — redirectTo explícito para que el link
+    // del mail siempre apunte a este dominio (sea cual sea), no al Site URL que tenga
+    // configurado el proyecto de Supabase compartido con flota en su Dashboard.
+    async enviarRecoveryEmail(email) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login`,
+      })
+      if (error) throw error
+    },
+
+    // Confirma la nueva contraseña durante un flujo de recovery — requiere la sesión
+    // temporal que el SDK ya estableció solo a partir del token del link (ver arriba).
+    // Reusa _cargarPerfil() para dejar el store poblado igual que un login normal.
+    async completarRecoveryPassword(nuevaPassword) {
+      this.cargando = true
+      try {
+        const { data, error } = await supabase.auth.updateUser({ password: nuevaPassword })
+        if (error) throw error
+        this.user = data.user
+        await this._cargarPerfil(data.user.email)
+        this.isPasswordRecovery = false
+      } catch (e) {
+        this.$reset()
+        throw e
       } finally {
         this.cargando = false
         this.listo = true
