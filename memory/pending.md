@@ -1,6 +1,20 @@
 # pending.md — Pendientes
 
-## 🔴 Login: badge distintivo (listo) + Obras en Maestros: archivado local (código listo, MIGRACIÓN 32 PENDIENTE) — 2026-09-08
+## ✅ Báscula: botón "Vale" también para Ingreso de áridos — 2026-09-08
+
+Pedido de Federico. El botón de impresión ya existía para asfalto y egreso
+de áridos (2026-09-04); se suma ingreso — mismo botón "Vale", sin "Remito"
+(ese formato sigue siendo exclusivo de asfalto, no aplica a ningún árido).
+`ValeImprimible.vue`: para `tipo_vale='ingreso_arido'` la línea "Obra" se
+oculta (un ingreso no tiene obra asociada) y se agregan "N° Remito" y
+"Cantidad s/remito" — datos que ya venía trayendo la vista del historial
+(`numero_remito_ingreso`/`cantidad_remito_ingreso`), no hizo falta ninguna
+migración. "Material" ya era genérico para cualquier tipo no-asfalto, sin
+cambios ahí. Puramente frontend, sin tocar `useBascula.js` (el flujo de
+"sin acumulado para no-asfalto" ya contemplaba egreso, ingreso cae en el
+mismo caso). Build verificado.
+
+## ✅ Login: badge distintivo (listo) + Obras en Maestros: archivado local, MIGRACIÓN 32 APLICADA en producción — 2026-09-08
 
 **Login — aplicado, sin pendiente.** Pedido de Federico ("algo distintivo,
 lindo y profesional"): badge con ícono propio (SVG dibujado a mano, silos +
@@ -9,10 +23,9 @@ línea de asfalto — sin librería externa ni emoji) debajo del título
 la pantalla — el resto sigue siendo la réplica exacta del login de Flota
 del mismo día. Verificado visualmente en el navegador.
 
-**Obras en Maestros — CÓDIGO LISTO, MIGRACIÓN 32
-(`supabase/migrations/32_obras_visibilidad_local.sql`) SIN APLICAR —
-necesita confirmación antes de correrla (memory/procedimientos.md: crea una
-tabla nueva).**
+**Obras en Maestros — MIGRACIÓN 32
+(`supabase/migrations/32_obras_visibilidad_local.sql`) APLICADA en
+producción, autorizada explícitamente por Federico.**
 
 Contexto: Federico había pedido un CRUD de Obras en Plantas (crear/pausar/
 archivar) — se investigó primero y se encontró que Flota YA tiene ese CRUD
@@ -53,17 +66,11 @@ Obras), tabla con Nombre/Código/Cliente/Ubicación/Estado real de Flota
 local, botón "Archivar acá"/"Reactivar acá" (nombrado así a propósito para
 que no se confunda con el estado real de Flota).
 
-**⚠️ Orden obligatorio antes del próximo deploy**: `fetchObras({ soloActivas: true })`
-ya consulta `plantas_v_obras_visibles`, que no existe todavía en
-producción — si se deploya el build actual sin aplicar antes la migración
-32, TODOS los desplegables de obra del sistema (Pedidos, Báscula, Despachos,
-Plan Semanal, Dashboard, Usuarios y Permisos) se rompen. Aplicar la
-migración 32 primero, recién después `npx vercel --prod` — mismo protocolo
-que ya se usó con la migración 31 el mismo día.
-
-Build verificado (`npm run build` limpio). No probado en vivo (no hay
+Verificado post-aplicación: `plantas_v_obras_visibles` devuelve 21 obras
+(coincide con las obras activas reales de Flota). Build verificado
+(`npm run build` limpio). No probado en vivo con el flujo completo (no hay
 sesión logueada disponible esta sesión) — antes de dar esto por cerrado:
-aplicar la migración, archivar una obra de prueba y confirmar que
+archivar una obra de prueba desde Maestros → Obras y confirmar que
 desaparece de un desplegable real (ej. "Nuevo pedido"), y confirmar que un
 rol distinto de admin/plantista no puede archivar (RLS) aunque el botón
 esté visible para todos los roles (no se pidió ocultarlo, a diferencia de
