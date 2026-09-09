@@ -21,25 +21,29 @@
 
 import { computed } from 'vue'
 import logoVialtec from '@/assets/img/logo-vialtec.png'
+import { formatearNumeroRemito } from '@/services/formato-numeros'
 
 const props = defineProps({
   numeroRemito: { type: [String, Number], default: null },
   fecha: { type: [String, Date], default: null },
   destino: { type: String, default: '' },
-  // Cantidad ya formateada por el caller (ej. "55.80 tn", "40.4 tn", o '' si
-  // no aplica — remito manual/en blanco sin cantidad predefinida).
-  cantidadLabel: { type: String, default: '' },
-  // Título de la celda "Detalle" (mezcla/fórmula, o la descripción libre de
-  // un remito manual) y una sub-línea opcional en gris debajo (ej. "S/Vale
-  // de báscula N° X al Y") — null la omite.
-  detalleTitulo: { type: String, default: '' },
-  detalleSubtexto: { type: String, default: null },
+  // Filas de la tabla Cantidad/Detalle (2026-09-09, pedido de Federico: el
+  // remito manual necesita varios renglones tipo "20 | Palets", no un solo
+  // detalle) — [{ cantidad: string, detalle: string, subtexto?: string }].
+  // Báscula/Despachos (un solo "item": el acumulado del despacho) pasan un
+  // array de 1 elemento; el remito manual puede pasar varios.
+  items: { type: Array, default: () => [] },
   // 'Propio' | 'Tercero' | null (null => "—", no se asume nada)
   transporte: { type: String, default: null },
   patente: { type: String, default: '' },
   transportista: { type: String, default: '' },
   lugarEntrega: { type: String, default: '' },
 })
+
+// Filas en blanco (como el papel real): deja lugar para anotaciones a mano.
+// Se achica a medida que hay más items reales, para no desbordar la hoja
+// con un remito manual de varios renglones — nunca menos de 1.
+const filasBlanco = computed(() => Math.max(1, 5 - props.items.length))
 
 const EMPRESA = {
   nombre: 'VIAL-TEC S.A.',
@@ -92,7 +96,7 @@ const fechaLabel = computed(() => {
         <div class="mb-3 grid grid-cols-2 gap-5">
           <div class="rounded border border-gray-400 px-4 py-2.5">
             <span class="text-[11px] font-semibold uppercase text-gray-500">Remito N°:</span>
-            <span class="ml-1 font-semibold">{{ numeroRemito || '—' }}</span>
+            <span class="ml-1 font-semibold">{{ numeroRemito != null ? formatearNumeroRemito(numeroRemito) : '—' }}</span>
           </div>
           <div class="rounded border border-gray-400 px-4 py-2.5">
             <span class="text-[11px] font-semibold uppercase text-gray-500">Fecha:</span>
@@ -116,18 +120,20 @@ const fechaLabel = computed(() => {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td class="border-r border-gray-400 px-4 py-3 align-top text-lg font-bold">{{ cantidadLabel || '' }}</td>
-              <td class="px-4 py-3 align-top">
-                <p class="font-semibold">{{ detalleTitulo }}</p>
-                <p v-if="detalleSubtexto" class="mt-1 text-xs text-gray-600">{{ detalleSubtexto }}</p>
+            <tr v-for="(item, idx) in items" :key="idx">
+              <td class="border-r border-gray-400 px-4 py-3 align-top text-lg font-bold" :class="idx > 0 ? 'border-t border-gray-300' : ''">
+                {{ item.cantidad || '' }}
+              </td>
+              <td class="px-4 py-3 align-top" :class="idx > 0 ? 'border-t border-gray-300' : ''">
+                <p class="font-semibold">{{ item.detalle }}</p>
+                <p v-if="item.subtexto" class="mt-1 text-xs text-gray-600">{{ item.subtexto }}</p>
               </td>
             </tr>
             <!-- Filas en blanco (como el papel real): deja lugar para anotaciones
                  a mano — mismo criterio para las 3 fuentes que usan este
                  componente (incluido el remito manual, que puede necesitar
-                 completar acá el detalle a mano si no se cargó descripción). -->
-            <tr v-for="n in 4" :key="n">
+                 completar/agregar algo a mano además de los items cargados). -->
+            <tr v-for="n in filasBlanco" :key="`blanco-${n}`">
               <td class="border-r border-t border-gray-300 px-4 py-3">&nbsp;</td>
               <td class="border-t border-gray-300 px-4 py-3">&nbsp;</td>
             </tr>

@@ -34,7 +34,11 @@ import { patentesService } from '@/modules/maestros/services/maestros.service'
 // son exactamente los mismos que usa ValeImprimible.vue desde BasculaView.
 import { obtenerAcumuladoHastaFecha, formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
 import { fetchDatosInformeMensual } from '@/modules/despachos/services/informe-mensual.service'
-import { generarRemitoManual, fetchRemitosManuales } from '@/modules/despachos/services/remitos-manuales.service'
+import {
+  generarRemitoManual,
+  fetchRemitosManuales,
+  fetchItemsDeRemitoManual,
+} from '@/modules/despachos/services/remitos-manuales.service'
 
 const TAMANO_PAGINA = 20
 
@@ -341,9 +345,11 @@ export function useDespachos() {
   }
 
   // -------------------------------------------------------------------------
-  // "Remito Manual/Blanco" (migración 36, 2026-09-09, pedido de Federico):
-  // remito oficial sin pedido asociado — envío de materiales a obra u otro
-  // movimiento interno. N° de remito automático, misma secuencia que los
+  // "Remito Manual/Blanco" (migración 36+37, 2026-09-09, pedido de
+  // Federico): remito oficial sin pedido asociado — envío de materiales a
+  // obra u otro movimiento interno, con N items (cantidad/descripción,
+  // "+ Agregar item" — mismo patrón multi-fila que useDespachoAsfalto.js/
+  // useCargaHormigon.js). N° de remito automático, misma secuencia que los
   // remitos de asfalto (RemitoImprimible.vue es el mismo componente único
   // que usa el resto del sistema, ver DespachoImprimible.vue).
   // -------------------------------------------------------------------------
@@ -362,8 +368,18 @@ export function useDespachos() {
     }
   }
 
+  function itemVacio() {
+    return { cantidad: null, descripcion: '' }
+  }
+
   function formRemitoManualVacio() {
-    return { descripcion: '', destino: '', patente: '', transportista: '', fecha: new Date().toISOString().slice(0, 10) }
+    return {
+      items: [itemVacio()],
+      destino: '',
+      patente: '',
+      transportista: '',
+      fecha: new Date().toISOString().slice(0, 10),
+    }
   }
 
   const modalRemitoManualAbierto = ref(false)
@@ -377,23 +393,54 @@ export function useDespachos() {
     modalRemitoManualAbierto.value = true
   }
 
+  function agregarItemRemitoManual() {
+    formRemitoManual.items.push(itemVacio())
+  }
+
+  function quitarItemRemitoManual(index) {
+    if (formRemitoManual.items.length <= 1) return
+    formRemitoManual.items.splice(index, 1)
+  }
+
   // Impresión: reusa el mismo modal/mecanismo que el remito de un despacho
   // (modalRemitoAbierto/imprimir()) — es el mismo documento (RemitoImprimible.vue),
-  // solo cambia qué props le arma la vista (ver DespachosView.vue).
+  // solo cambia qué props le arma la vista (ver DespachosView.vue). Forma:
+  // { remito: {...fila de plantas_remitos_manuales}, items: [{cantidad, descripcion}] }.
   const remitoManualParaImprimir = ref(null)
 
+  // Props genéricos para RemitoImprimible.vue — mismo mapeo que useBascula.js/
+  // DespachoImprimible.vue, acá armado desde plantas_remitos_manuales (sin
+  // pedido/obra detrás).
+  const remitoManualProps = computed(() => {
+    if (!remitoManualParaImprimir.value) return null
+    const { remito, items } = remitoManualParaImprimir.value
+    return {
+      numeroRemito: remito.numero_remito,
+      fecha: remito.fecha,
+      destino: remito.destino,
+      items: items.map((i) => ({
+        cantidad: i.cantidad != null ? String(i.cantidad) : '',
+        detalle: i.descripcion,
+      })),
+      patente: remito.patente || '',
+      transportista: remito.transportista || '',
+      lugarEntrega: remito.destino || '',
+    }
+  })
+
   async function guardarRemitoManual() {
-    if (!formRemitoManual.descripcion.trim()) {
-      errorRemitoManual.value = 'La descripción es obligatoria.'
+    const itemsValidos = formRemitoManual.items.filter((i) => i.descripcion.trim())
+    if (!itemsValidos.length) {
+      errorRemitoManual.value = 'Agregá al menos un item con descripción.'
       return
     }
     generandoRemitoManual.value = true
     errorRemitoManual.value = null
     try {
-      const remito = await generarRemitoManual(formRemitoManual)
+      const resultado = await generarRemitoManual({ ...formRemitoManual, items: itemsValidos })
       modalRemitoManualAbierto.value = false
       pedidoRemito.value = null
-      remitoManualParaImprimir.value = remito
+      remitoManualParaImprimir.value = resultado
       modalRemitoAbierto.value = true
       await cargarRemitosManuales()
     } catch (e) {
@@ -403,10 +450,19 @@ export function useDespachos() {
     }
   }
 
-  function verRemitoManual(remito) {
-    pedidoRemito.value = null
-    remitoManualParaImprimir.value = remito
-    modalRemitoAbierto.value = true
+  // "Reimprimir" desde el listado: ese registro no trae los items (el
+  // listado solo pide la fila de plantas_remitos_manuales, liviano) — se
+  // buscan acá recién cuando hace falta imprimir de nuevo.
+  async function verRemitoManual(remito) {
+    error.value = null
+    try {
+      const items = await fetchItemsDeRemitoManual(remito.id)
+      pedidoRemito.value = null
+      remitoManualParaImprimir.value = { remito, items }
+      modalRemitoAbierto.value = true
+    } catch (e) {
+      error.value = e.message
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -541,8 +597,11 @@ export function useDespachos() {
     generandoRemitoManual,
     errorRemitoManual,
     abrirRemitoManual,
+    agregarItemRemitoManual,
+    quitarItemRemitoManual,
     guardarRemitoManual,
     remitoManualParaImprimir,
+    remitoManualProps,
     verRemitoManual,
     modalSeleccionValeAbierto,
     pedidoParaSeleccionVale,

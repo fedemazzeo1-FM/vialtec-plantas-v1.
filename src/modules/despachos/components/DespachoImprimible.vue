@@ -69,6 +69,16 @@ const transporte = computed(() => {
   const match = props.patentes.find((p) => p.patente === patentesUnicas.value[0])
   return match ? (match.es_externa ? 'Tercero' : 'Propio') : null
 })
+
+// Un solo "item" (mismo criterio que Báscula: solo el acumulado total del
+// despacho, nunca desglose de cargas individuales — ver RemitoImprimible.vue).
+const items = computed(() => [
+  {
+    cantidad: `${props.pedido.cantidad_despachada} ${unidad(props.pedido.tipo)}`,
+    detalle: (props.formulaNombre || '').toUpperCase(),
+    subtexto: detalleSubtexto.value,
+  },
+])
 </script>
 
 <template>
@@ -76,9 +86,7 @@ const transporte = computed(() => {
     :numero-remito="numeroRemito"
     :fecha="pedido.fecha_programada"
     :destino="obraNombre"
-    :cantidad-label="`${pedido.cantidad_despachada} ${unidad(pedido.tipo)}`"
-    :detalle-titulo="(formulaNombre || '').toUpperCase()"
-    :detalle-subtexto="detalleSubtexto"
+    :items="items"
     :transporte="transporte"
     :patente="patenteLabel"
     :lugar-entrega="pedido.ubicacion"

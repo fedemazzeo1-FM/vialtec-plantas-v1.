@@ -700,12 +700,18 @@ export function useBascula() {
       numeroRemito: pedidoParaImprimir.value?.nro_remito_global || null,
       fecha: valeParaImprimir.value?.fecha_pesada || null,
       destino: obraNombreParaImprimir.value,
-      cantidadLabel: acumuladoParaImprimir.value != null ? `${acumuladoParaImprimir.value.toFixed(2)} tn` : '',
-      detalleTitulo: (mezclaNombreParaImprimir.value || 'Mezcla asfáltica').toUpperCase(),
-      detalleSubtexto:
-        valeDesde != null
-          ? `S/Vale de báscula N° ${formatearNumeroVale(valeDesde)}${valeHasta !== valeDesde ? ` al ${formatearNumeroVale(valeHasta)}` : ''} (correlativos${cantidadVales ? ` — ${cantidadVales} pesada${cantidadVales === 1 ? '' : 's'}` : ''})`
-          : null,
+      // Un solo "item" (Báscula siempre imprime el acumulado total, nunca
+      // desglose de cargas individuales) — ver RemitoImprimible.vue.
+      items: [
+        {
+          cantidad: acumuladoParaImprimir.value != null ? `${acumuladoParaImprimir.value.toFixed(2)} tn` : '',
+          detalle: (mezclaNombreParaImprimir.value || 'Mezcla asfáltica').toUpperCase(),
+          subtexto:
+            valeDesde != null
+              ? `S/Vale de báscula N° ${formatearNumeroVale(valeDesde)}${valeHasta !== valeDesde ? ` al ${formatearNumeroVale(valeHasta)}` : ''} (correlativos${cantidadVales ? ` — ${cantidadVales} pesada${cantidadVales === 1 ? '' : 's'}` : ''})`
+              : null,
+        },
+      ],
       transporte: esTransportePropio == null ? null : esTransportePropio ? 'Propio' : 'Tercero',
       patente: valeParaImprimir.value?.patente || '',
       transportista: valeParaImprimir.value?.chofer || '',

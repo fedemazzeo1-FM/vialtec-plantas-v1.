@@ -17,6 +17,7 @@ import { useDespachos } from '@/modules/despachos/composables/useDespachos'
 import DespachoImprimible from '@/modules/despachos/components/DespachoImprimible.vue'
 import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
+import { formatearNumeroRemito } from '@/services/formato-numeros'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const mesActualLabel = MESES[new Date().getMonth()]
@@ -80,8 +81,11 @@ const {
   generandoRemitoManual,
   errorRemitoManual,
   abrirRemitoManual,
+  agregarItemRemitoManual,
+  quitarItemRemitoManual,
   guardarRemitoManual,
   remitoManualParaImprimir,
+  remitoManualProps,
   verRemitoManual,
   modalSeleccionValeAbierto,
   pedidoParaSeleccionVale,
@@ -243,16 +247,14 @@ function formatearTn(valor) {
               <tr class="border-b border-border text-xs uppercase tracking-wide text-text-soft">
                 <th class="py-1.5 pr-3">N°</th>
                 <th class="py-1.5 pr-3">Fecha</th>
-                <th class="py-1.5 pr-3">Descripción</th>
                 <th class="py-1.5 pr-3">Destino</th>
                 <th class="py-1.5"></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="r in remitosManuales.slice(0, 10)" :key="r.id" class="border-b border-border/60">
-                <td class="py-1.5 pr-3 font-semibold text-text">{{ r.numero_remito }}</td>
+                <td class="py-1.5 pr-3 font-semibold text-text">{{ formatearNumeroRemito(r.numero_remito) }}</td>
                 <td class="py-1.5 pr-3">{{ r.fecha }}</td>
-                <td class="py-1.5 pr-3">{{ r.descripcion }}</td>
                 <td class="py-1.5 pr-3 text-text-soft">{{ r.destino || '—' }}</td>
                 <td class="py-1.5">
                   <VButton variant="ghost" size="sm" @click="verRemitoManual(r)">Reimprimir</VButton>
@@ -408,18 +410,9 @@ function formatearTn(valor) {
             :cargas="cargasRemito"
             :patentes="patentes"
           />
-          <!-- Remito manual/en blanco: sin pedido detrás, arma los props
-               genéricos directo desde plantas_remitos_manuales. -->
-          <RemitoImprimible
-            v-else-if="remitoManualParaImprimir"
-            :numero-remito="remitoManualParaImprimir.numero_remito"
-            :fecha="remitoManualParaImprimir.fecha"
-            :destino="remitoManualParaImprimir.destino"
-            :detalle-titulo="remitoManualParaImprimir.descripcion"
-            :patente="remitoManualParaImprimir.patente"
-            :transportista="remitoManualParaImprimir.transportista"
-            :lugar-entrega="remitoManualParaImprimir.destino"
-          />
+          <!-- Remito manual/en blanco: sin pedido detrás, remitoManualProps
+               (useDespachos.js) ya arma los props genéricos con sus items. -->
+          <RemitoImprimible v-else-if="remitoManualProps" v-bind="remitoManualProps" />
         </div>
         <div class="mt-4 flex justify-end gap-2">
           <VButton variant="secondary" @click="modalRemitoAbierto = false">Cerrar</VButton>
@@ -438,15 +431,45 @@ function formatearTn(valor) {
           Para envío de materiales a obra u otro movimiento interno sin pedido asociado. El N° de remito lo asigna el
           sistema automáticamente (misma numeración correlativa que los remitos de asfalto).
         </p>
-        <label class="block text-sm text-text-mid">
-          Descripción / Observaciones *
-          <textarea
-            v-model="formRemitoManual.descripcion"
-            rows="2"
-            placeholder="Qué material o ítem sale hacia la obra…"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          ></textarea>
-        </label>
+
+        <div class="space-y-2">
+          <p class="text-xs font-semibold uppercase tracking-wide text-text-soft">Items del remito</p>
+          <div
+            v-for="(item, idx) in formRemitoManual.items"
+            :key="idx"
+            class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_2fr_auto]"
+          >
+            <label class="text-xs text-text-mid">
+              Cantidad (opcional)
+              <input
+                v-model="item.cantidad"
+                type="text"
+                placeholder="Ej.: 20"
+                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
+              />
+            </label>
+            <label class="text-xs text-text-mid">
+              Descripción *
+              <input
+                v-model="item.descripcion"
+                type="text"
+                placeholder="Ej.: Palets"
+                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
+              />
+            </label>
+            <VButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              :disabled="formRemitoManual.items.length <= 1"
+              @click="quitarItemRemitoManual(idx)"
+            >
+              ✕ Quitar
+            </VButton>
+          </div>
+          <VButton type="button" variant="secondary" size="sm" @click="agregarItemRemitoManual">+ Agregar item</VButton>
+        </div>
+
         <label class="block text-sm text-text-mid">
           Fecha
           <input
