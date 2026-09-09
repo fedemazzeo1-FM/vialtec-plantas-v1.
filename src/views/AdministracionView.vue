@@ -47,6 +47,7 @@ function irATab(tab) {
 const {
   usuarios,
   obras,
+  obrasTodas,
   cargando,
   error,
   modalAbierto,
@@ -71,8 +72,12 @@ const columnas = [
   { key: 'acciones', label: '' },
 ]
 
+// obrasTodas (no `obras`, que es solo activas/no archivadas — ver
+// useUsuariosRoles.js): resuelve el nombre de una obra YA asignada aunque
+// hoy esté inactiva/archivada. Fix 2026-09-09, bug real reportado por
+// Federico ("Obra #17", "Obra #19" en la columna "Obras visibles").
 function nombreObra(id) {
-  return obras.value.find((o) => o.id === id)?.nombre ?? `Obra #${id}`
+  return obrasTodas.value.find((o) => o.id === id)?.nombre ?? `Obra #${id}`
 }
 function nombreRol(rolId) {
   return rolesDisponibles.value.find((r) => r.id === rolId)?.nombre ?? rolId

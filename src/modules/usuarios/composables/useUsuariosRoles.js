@@ -11,7 +11,17 @@ function usuarioVacio() {
 
 export function useUsuariosRoles() {
   const usuarios = ref([])
+  // `obras` (solo activas/no archivadas): para el selector de "qué obras
+  // puede ver" al asignar — no tiene sentido ofrecer una obra archivada.
   const obras = ref([])
+  // `obrasTodas`: para RESOLVER el nombre de obras YA asignadas a un
+  // usuario (fix 2026-09-09, bug real reportado por Federico: "Obra #17",
+  // "Obra #19" en la columna "Obras visibles" — un usuario asignado a una
+  // obra que después se desactivó en Flota o se archivó acá, mismo patrón
+  // ya resuelto para el Informe Mensual en informe-mensual.service.js). Una
+  // asignación histórica no tiene que "desaparecer" solo porque la obra ya
+  // no está activa hoy.
+  const obrasTodas = ref([])
   const rolesDisponibles = ref([]) // [{id, nombre}] — dinámico desde plantas_roles (migración 26)
   const cargando = ref(false)
   const error = ref(null)
@@ -25,9 +35,15 @@ export function useUsuariosRoles() {
     cargando.value = true
     error.value = null
     try {
-      const [listaUsuarios, listaObras, listaRoles] = await Promise.all([fetchUsuarios(), fetchObras(), fetchRolesAsignables()])
+      const [listaUsuarios, listaObras, listaObrasTodas, listaRoles] = await Promise.all([
+        fetchUsuarios(),
+        fetchObras(),
+        fetchObras({ soloActivas: false }),
+        fetchRolesAsignables(),
+      ])
       usuarios.value = listaUsuarios
       obras.value = listaObras
+      obrasTodas.value = listaObrasTodas
       rolesDisponibles.value = listaRoles
     } catch (e) {
       error.value = e.message
@@ -93,6 +109,7 @@ export function useUsuariosRoles() {
   return {
     usuarios,
     obras,
+    obrasTodas,
     cargando,
     error,
     modalAbierto,
