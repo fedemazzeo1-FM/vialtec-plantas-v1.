@@ -50,6 +50,22 @@ function crudEntidad(tabla, columnaOrden = 'nombre', filtroFijo = null) {
     async setActivo(id, activo) {
       return this.actualizar(id, { activo })
     },
+
+    // Borrado real (2026-09-09, pedido explícito de Federico solo para
+    // Camiones propios/externos — "que sea eliminar en serio", hay mucha
+    // rotación de camiones, sobre todo externos). A diferencia del resto de
+    // Maestros (que usan setActivo, nunca DELETE), esta tabla no tiene
+    // ninguna FK real desde el resto del sistema — plantas_vales.patente,
+    // plantas_cargas_asfalto.patente y plantas_cargas_hormigon.patente_mixer
+    // son texto libre, no referencian plantas_patentes.id — así que borrar
+    // una patente del catálogo no rompe ni afecta ningún vale/carga
+    // histórico ya guardado. RLS ya lo permite (plantas_tiene_permiso
+    // ('maestros', 'eliminar'), migración 26) — MaestrosView.vue es quien
+    // decide en qué tabs mostrar el botón.
+    async eliminar(id) {
+      const { error } = await supabase.from(tabla).delete().eq('id', id)
+      if (error) throw error
+    },
   }
 }
 

@@ -57,6 +57,14 @@ const ENTIDADES = {
     // "Camiones propios" — mismo catálogo/service, solo la etiqueta visible.
     label: 'Camiones propios',
     nombreSingular: 'camión propio',
+    // Único catálogo de Maestros con borrado REAL (2026-09-09, pedido
+    // explícito de Federico: "que sea eliminar en serio" — mucha rotación
+    // de camiones, sobre todo externos, "si llega a ser un error es tan
+    // simple como volver a crearlo"). El resto de los catálogos sigue con
+    // Activar/Desactivar (setActivo) nomás — ver comentario en
+    // maestros.service.js#eliminar() sobre por qué es seguro acá
+    // puntualmente (patente es texto libre en vales/cargas, sin FK real).
+    permiteEliminar: true,
     columnas: [
       { key: 'patente', label: 'Patente' },
       { key: 'tipo_camion', label: 'Tipo camión' },
@@ -76,6 +84,8 @@ const ENTIDADES = {
     // "Camiones externos" — mismo catálogo/service, solo la etiqueta visible.
     label: 'Camiones externos',
     nombreSingular: 'camión externo',
+    // Ver nota en vehiculosPropios de arriba — mismo criterio acá.
+    permiteEliminar: true,
     columnas: [
       { key: 'patente', label: 'Patente' },
       { key: 'tipo_camion', label: 'Tipo camión' },
@@ -322,6 +332,34 @@ async function toggleActivo(registro) {
     error.value = e.message
   }
 }
+
+// Borrado real de Camiones (2026-09-09, ver nota en ENTIDADES.vehiculosPropios
+// más arriba) — confirmación simple de un paso, sin motivo (a diferencia de
+// "Anular vale" en Báscula): Federico lo pidió explícitamente rápido, "si
+// llega a ser un error es tan simple como volver a crearlo".
+const modalEliminarAbierto = ref(false)
+const registroEliminar = ref(null)
+const eliminando = ref(false)
+
+function abrirEliminar(registro) {
+  registroEliminar.value = registro
+  error.value = null
+  modalEliminarAbierto.value = true
+}
+
+async function confirmarEliminar() {
+  eliminando.value = true
+  error.value = null
+  try {
+    await maestrosService[tabActiva.value].eliminar(registroEliminar.value.id)
+    modalEliminarAbierto.value = false
+    await cargarRegistros()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    eliminando.value = false
+  }
+}
 </script>
 
 <template>
@@ -411,10 +449,13 @@ async function toggleActivo(registro) {
               </VBadge>
             </template>
             <template #cell-acciones="{ row }">
-              <div class="flex gap-1.5">
+              <div class="flex flex-wrap gap-1.5">
                 <VButton variant="secondary" size="sm" @click="abrirEdicion(row)">Editar</VButton>
                 <VButton variant="ghost" size="sm" @click="toggleActivo(row)">
                   {{ row.activo ? 'Desactivar' : 'Activar' }}
+                </VButton>
+                <VButton v-if="entidadActual.permiteEliminar" variant="danger" size="sm" @click="abrirEliminar(row)">
+                  Eliminar
                 </VButton>
               </div>
             </template>
@@ -484,6 +525,22 @@ async function toggleActivo(registro) {
           <VButton type="submit" :disabled="guardando">{{ guardando ? 'Guardando…' : 'Guardar' }}</VButton>
         </div>
       </form>
+    </VModal>
+
+    <!-- Confirmación de borrado real (2026-09-09) — solo Camiones propios/externos,
+         ver ENTIDADES.vehiculosPropios/permiteEliminar más arriba. -->
+    <VModal :open="modalEliminarAbierto" title="Eliminar" @update:open="modalEliminarAbierto = $event">
+      <p class="text-sm text-text-mid">
+        ¿Eliminar {{ entidadActual?.nombreSingular }}
+        <strong>{{ registroEliminar?.patente || registroEliminar?.nombre }}</strong>? Esta acción no se puede
+        deshacer — si fue un error, hay que volver a crearlo a mano.
+      </p>
+      <div class="mt-4 flex justify-end gap-2">
+        <VButton variant="secondary" @click="modalEliminarAbierto = false">Cancelar</VButton>
+        <VButton variant="danger" :disabled="eliminando" @click="confirmarEliminar">
+          {{ eliminando ? 'Eliminando…' : 'Eliminar' }}
+        </VButton>
+      </div>
     </VModal>
   </div>
 </template>
