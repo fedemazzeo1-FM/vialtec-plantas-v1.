@@ -687,6 +687,32 @@ export function useBascula() {
   const pedidoParaImprimir = ref(null)
   const rangoValesParaImprimir = ref({ valeDesde: null, valeHasta: null, cantidadVales: 0 })
 
+  // Props genéricos para el remito ÚNICO y compartido con Despachos
+  // (src/components/shared/RemitoImprimible.vue, 2026-09-09 — antes el modo
+  // "remito" vivía adentro de ValeImprimible.vue, específico de acá).
+  // Transporte propio/tercero se deduce de plantas_patentes.es_externa
+  // buscando la patente del vale — el vale en sí no guarda esta distinción.
+  const remitoParaImprimir = computed(() => {
+    const patenteCatalogo = patentes.value.find((p) => p.patente === valeParaImprimir.value?.patente)
+    const esTransportePropio = patenteCatalogo ? !patenteCatalogo.es_externa : null
+    const { valeDesde, valeHasta, cantidadVales } = rangoValesParaImprimir.value
+    return {
+      numeroRemito: pedidoParaImprimir.value?.nro_remito_global || null,
+      fecha: valeParaImprimir.value?.fecha_pesada || null,
+      destino: obraNombreParaImprimir.value,
+      cantidadLabel: acumuladoParaImprimir.value != null ? `${acumuladoParaImprimir.value.toFixed(2)} tn` : '',
+      detalleTitulo: (mezclaNombreParaImprimir.value || 'Mezcla asfáltica').toUpperCase(),
+      detalleSubtexto:
+        valeDesde != null
+          ? `S/Vale de báscula N° ${formatearNumeroVale(valeDesde)}${valeHasta !== valeDesde ? ` al ${formatearNumeroVale(valeHasta)}` : ''} (correlativos${cantidadVales ? ` — ${cantidadVales} pesada${cantidadVales === 1 ? '' : 's'}` : ''})`
+          : null,
+      transporte: esTransportePropio == null ? null : esTransportePropio ? 'Propio' : 'Tercero',
+      patente: valeParaImprimir.value?.patente || '',
+      transportista: valeParaImprimir.value?.chofer || '',
+      lugarEntrega: pedidoParaImprimir.value?.ubicacion || '',
+    }
+  })
+
   async function abrirImpresion(vale, modo) {
     // Guarda defensiva (2026-09-04): una fila `pendiente_migracion` (todavía
     // solo en el legado, VISTA_BASCULA_VIVA) no tiene un vale real de
@@ -860,6 +886,7 @@ export function useBascula() {
     acumuladoParaImprimir,
     pedidoParaImprimir,
     rangoValesParaImprimir,
+    remitoParaImprimir,
     abrirImpresionVale,
     abrirImpresionRemito,
     imprimir,

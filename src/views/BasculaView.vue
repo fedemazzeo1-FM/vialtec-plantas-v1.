@@ -12,6 +12,7 @@ import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
+import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import {
   useBascula,
   ETIQUETA_TIPO_VALE,
@@ -70,6 +71,7 @@ const {
   acumuladoParaImprimir,
   pedidoParaImprimir,
   rangoValesParaImprimir,
+  remitoParaImprimir,
   abrirImpresionVale,
   abrirImpresionRemito,
   imprimir,
@@ -536,16 +538,16 @@ watch(
       >
         <div class="imprimible" :class="{ 'modo-remito': modoImpresion === 'remito' }">
           <ValeImprimible
-            v-if="valeParaImprimir"
+            v-if="modoImpresion === 'vale' && valeParaImprimir"
             :vale="valeParaImprimir"
             :obra-nombre="obraNombreParaImprimir"
             :mezcla-nombre="mezclaNombreParaImprimir"
-            :modo="modoImpresion"
             :acumulado-tn="acumuladoParaImprimir"
-            :pedido="pedidoParaImprimir"
-            :rango-vales="rangoValesParaImprimir"
-            :patentes="patentes"
           />
+          <!-- Remito: mismo componente único que usa Despachos (2026-09-09,
+               pedido explícito de Federico — antes era un modo aparte de
+               ValeImprimible.vue, ver comentario ahí). -->
+          <RemitoImprimible v-else-if="modoImpresion === 'remito'" v-bind="remitoParaImprimir" />
         </div>
         <div class="mt-4 flex justify-end gap-2">
           <VButton variant="secondary" @click="modalImpresionAbierto = false">Cerrar</VButton>
