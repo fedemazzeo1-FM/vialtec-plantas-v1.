@@ -30,6 +30,7 @@ const {
   obras,
   formulas,
   patentes,
+  clientes,
   cargando,
   filtros,
   conteoEstados,
@@ -306,11 +307,22 @@ iniciar()
         </label>
         <label v-else class="block text-sm text-text-mid">
           Cliente externo
-          <input
+          <select
             v-model="formNuevo.cliente_externo"
-            type="text"
             class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          />
+          >
+            <option value="" disabled>Elegir cliente…</option>
+            <option v-for="c in clientes" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
+            <!-- Fallback: un cliente cargado como texto libre antes de que existiera
+                 este catálogo (Maestros → Clientes, 2026-09-09) no debe desaparecer
+                 del select solo por no estar todavía en la lista. -->
+            <option
+              v-if="formNuevo.cliente_externo && !clientes.some((c) => c.nombre === formNuevo.cliente_externo)"
+              :value="formNuevo.cliente_externo"
+            >
+              {{ formNuevo.cliente_externo }} (no está en el catálogo)
+            </option>
+          </select>
         </label>
 
         <label class="block text-sm text-text-mid">
@@ -401,11 +413,19 @@ iniciar()
         </label>
         <label v-else class="block text-sm text-text-mid">
           Cliente externo
-          <input
+          <select
             v-model="formEditar.cliente_externo"
-            type="text"
             class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          />
+          >
+            <option value="" disabled>Elegir cliente…</option>
+            <option v-for="c in clientes" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
+            <option
+              v-if="formEditar.cliente_externo && !clientes.some((c) => c.nombre === formEditar.cliente_externo)"
+              :value="formEditar.cliente_externo"
+            >
+              {{ formEditar.cliente_externo }} (no está en el catálogo)
+            </option>
+          </select>
         </label>
 
         <label class="block text-sm text-text-mid">

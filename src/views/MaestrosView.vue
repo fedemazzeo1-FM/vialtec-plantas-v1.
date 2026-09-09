@@ -136,6 +136,27 @@ const ENTIDADES = {
       activo: true,
     }),
   },
+  // Clientes de venta externa (migración 35, 2026-09-09, pedido de Federico):
+  // `nombre` es lo que alimenta el <select> de "Cliente externo" en el alta/
+  // edición de Pedidos (usePedidos.js) — plantas_pedidos.cliente_externo
+  // sigue siendo texto libre, no hay FK nueva.
+  clientes: {
+    label: 'Clientes',
+    nombreSingular: 'cliente',
+    columnas: [
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'cuit', label: 'CUIT' },
+      { key: 'contacto', label: 'Contacto' },
+      { key: 'telefono', label: 'Teléfono' },
+    ],
+    campos: [
+      { key: 'nombre', label: 'Nombre', type: 'text', required: true },
+      { key: 'cuit', label: 'CUIT (opcional)', type: 'text' },
+      { key: 'contacto', label: 'Contacto (opcional)', type: 'text' },
+      { key: 'telefono', label: 'Teléfono (opcional)', type: 'text' },
+    ],
+    vacio: () => ({ nombre: '', cuit: '', contacto: '', telefono: '', activo: true }),
+  },
 }
 
 // "Obras" (2026-09-08) queda AFUERA de ENTIDADES a propósito — no es un CRUD

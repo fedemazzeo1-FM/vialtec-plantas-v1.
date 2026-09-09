@@ -71,6 +71,10 @@ export const choferesService = crudEntidad('plantas_choferes')
 // Vive acá como cualquier otro maestro; stock.service.js lo importa para leer
 // el catálogo, no lo duplica.
 export const materialesService = crudEntidad('plantas_materiales')
+// Catálogo de clientes de venta externa (migración 35, 2026-09-09, pedido de
+// Federico). usePedidos.js lo importa para el <select> de "Cliente externo"
+// del alta/edición de Pedidos, no lo duplica.
+export const clientesService = crudEntidad('plantas_clientes')
 
 /** Acceso agrupado, útil para vistas con tabs (ej. MaestrosView). */
 // Fix 2026-09-02 (roadmap Mobile, auditoría de Maestros — pedido explícito
@@ -94,4 +98,5 @@ export const maestrosService = {
   vehiculosExternos: patentesExternasService,
   choferes: choferesService,
   materiales: materialesService,
+  clientes: clientesService,
 }

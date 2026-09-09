@@ -21,7 +21,7 @@ import {
 } from '@/modules/pedidos/services/pedidos.service'
 import { fetchObras, fetchTelefonoPorNombre } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
-import { patentesService, choferesService } from '@/modules/maestros/services/maestros.service'
+import { patentesService, choferesService, clientesService } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { toastCrearPedido, toastConfirmarPedido, toastConfirmarHormigonOperador } from '@/modules/pedidos/whatsapp'
 
@@ -63,6 +63,9 @@ export function usePedidos() {
   const formulas = ref([])
   const patentes = ref([])
   const choferes = ref([])
+  // Clientes de venta externa (migración 35, 2026-09-09, pedido de Federico:
+  // "Cliente externo" pasa de texto libre a <select> sobre este catálogo).
+  const clientes = ref([])
 
   const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
   const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
@@ -80,16 +83,18 @@ export function usePedidos() {
     // del error real. Mismo patrón que ya usan cargarBase() en
     // useBascula.js/useSimulador.js.
     try {
-      const [listaObras, listaFormulas, listaPatentes, listaChoferes] = await Promise.all([
+      const [listaObras, listaFormulas, listaPatentes, listaChoferes, listaClientes] = await Promise.all([
         fetchObras(),
         fetchFormulas({ soloActivas: true }),
         patentesService.fetch({ soloActivos: true }),
         choferesService.fetch({ soloActivos: true }),
+        clientesService.fetch({ soloActivos: true }),
       ])
       obras.value = listaObras
       formulas.value = listaFormulas
       patentes.value = listaPatentes
       choferes.value = listaChoferes
+      clientes.value = listaClientes
     } catch (e) {
       error.value = e.message
     }
@@ -532,6 +537,7 @@ export function usePedidos() {
     formulas,
     patentes,
     choferes,
+    clientes,
     obrasPorId,
     formulasPorId,
     obraNombreDe,
