@@ -1,9 +1,11 @@
 // Composable del modal "Registrar despacho" de asfalto: multi-camión con
 // vale por carga (memory/relevamiento-sistema-viejo.md §1 — el sistema
-// legado soporta N cargas con N° de vale obligatorio por carga y un N° de
-// remito único opcional para todo el despacho). Cada carga se persiste con
-// una llamada independiente a registrarCargaAsfalto (RPC atómica con lock de
-// fila) — ver pedidos.service.js.
+// legado soporta N cargas con N° de vale obligatorio por carga). Cada carga
+// se persiste con una llamada independiente a registrarCargaAsfalto (RPC
+// atómica con lock de fila) — ver pedidos.service.js. El N° de remito del
+// despacho ya NO se tipea acá: desde 2026-09-09 (pedido de Federico) se
+// asigna automáticamente y una sola vez, dentro de la RPC, en la primera
+// carga del pedido (mismo número para todas las cargas/pesadas).
 //
 // Cierre del pedido (Logica sis. plantas v1.rtf §2.2, migración 11): al
 // terminar de cargar, SIEMPRE se llama a finalizarDespacho() — el pedido
@@ -27,7 +29,6 @@ export function useDespachoAsfalto(onGuardado) {
   const abierto = ref(false)
   const pedido = ref(null)
   const cargas = ref([])
-  const numeroRemitoGlobal = ref('')
   const dividirPedido = ref(false)
   const fechaResidual = ref('')
   const guardando = ref(false)
@@ -45,7 +46,6 @@ export function useDespachoAsfalto(onGuardado) {
   function abrir(pedidoAsfalto) {
     pedido.value = pedidoAsfalto
     cargas.value = [cargaVacia(saldoPendiente.value)]
-    numeroRemitoGlobal.value = ''
     dividirPedido.value = false
     fechaResidual.value = ''
     error.value = null
@@ -90,7 +90,6 @@ export function useDespachoAsfalto(onGuardado) {
           numero_vale: carga.numero_vale.trim(),
           cantidad_tn: carga.cantidad_tn,
           patente: carga.patente || null,
-          numero_remito_global: numeroRemitoGlobal.value.trim() || null,
         })
       }
       // Cierra el pedido con lo cargado (parcial o completo) y, si se pidió,
@@ -118,7 +117,6 @@ export function useDespachoAsfalto(onGuardado) {
     abierto,
     pedido,
     cargas,
-    numeroRemitoGlobal,
     dividirPedido,
     fechaResidual,
     guardando,

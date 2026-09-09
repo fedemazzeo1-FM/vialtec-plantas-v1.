@@ -546,15 +546,9 @@ iniciar()
         </div>
 
         <p class="text-sm font-semibold text-text">Total: {{ despacho.totalCargas.toFixed(2) }} tn</p>
-
-        <label class="block text-sm text-text-mid">
-          N° de remito (opcional, uno solo para todo el despacho)
-          <input
-            v-model="despacho.numeroRemitoGlobal"
-            type="text"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          />
-        </label>
+        <!-- N° de remito: automático desde 2026-09-09 (pedido de Federico) —
+             ya no se tipea acá, lo asigna el sistema en la primera carga y
+             se muestra en el remito imprimible. -->
 
         <!-- Cierre parcial + pedido residual (Logica sis. plantas v1.rtf §2.2) -->
         <div v-if="despacho.residualEstimado > 0" class="rounded-lg border border-warning/30 bg-warning-light/40 p-3">

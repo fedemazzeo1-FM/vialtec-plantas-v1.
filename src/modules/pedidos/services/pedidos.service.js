@@ -479,11 +479,11 @@ export async function registrarCargaHormigon(cargaData) {
  * Báscula).
  *
  * @param {{ pedido_id: string, numero_vale: string, cantidad_tn: number,
- *   patente?: string, fecha_carga?: string|Date, observaciones?: string,
- *   numero_remito_global?: string }} cargaData
- *   numero_remito_global es el remito único opcional de todo el despacho
- *   (plantas_pedidos.nro_remito_global) — se completa una sola vez, no se
- *   pisa si ya lo trae una carga anterior del mismo despacho.
+ *   patente?: string, fecha_carga?: string|Date, observaciones?: string }} cargaData
+ *   El N° de remito del despacho (plantas_pedidos.nro_remito_global) ya NO
+ *   se recibe acá — desde la migración 36 (2026-09-09, pedido de Federico)
+ *   se asigna automáticamente y una sola vez, dentro de la RPC, en la
+ *   primera carga del pedido (mismo número para todas las cargas/pesadas).
  */
 export async function registrarCargaAsfalto(cargaData) {
   const fechaCarga = cargaData.fecha_carga ? new Date(cargaData.fecha_carga) : new Date()
@@ -495,7 +495,6 @@ export async function registrarCargaAsfalto(cargaData) {
     p_patente: cargaData.patente || null,
     p_fecha_carga: fechaCarga.toISOString(),
     p_observaciones: cargaData.observaciones || null,
-    p_numero_remito_global: cargaData.numero_remito_global || null,
   })
 
   if (error) throw error
