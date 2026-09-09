@@ -89,13 +89,13 @@ function formatFecha(iso) {
 }
 
 // Cada copia del vale lleva UNA sola firma, distinta según a quién le queda
-// esa copia (ajuste pedido por Federico, 2026-08-28; texto de las firmas
-// ajustado 2026-09-03 tarde a pedido textual de Federico: "Firma del
-// responsable en balanza" / "Firma del chofer") — no las dos firmas
-// genéricas de antes repetidas en ambas copias.
+// esa copia (ajuste pedido por Federico, 2026-08-28). Corregido 2026-09-09
+// (pedido explícito de Federico: la asignación había quedado invertida
+// desde el ajuste de texto de 2026-09-03 tarde) — asignación correcta:
+// ORIGINAL "Firma del chofer" / DUPLICADO "Firma del responsable en balanza".
 const copiasVale = [
-  { titulo: 'Original', firma: 'Firma del responsable en balanza' },
-  { titulo: 'Duplicado', firma: 'Firma del chofer' },
+  { titulo: 'Original', firma: 'Firma del chofer' },
+  { titulo: 'Duplicado', firma: 'Firma del responsable en balanza' },
 ]
 
 // Transporte propio/tercero (columna "Transporte" del remito real): se
