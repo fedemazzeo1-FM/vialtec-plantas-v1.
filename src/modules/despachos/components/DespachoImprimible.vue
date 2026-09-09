@@ -15,6 +15,7 @@
 // DespachosView.vue (modal aparte, no impreso) — no se perdió el dato, solo
 // se sacó de este documento imprimible.
 
+import { computed } from 'vue'
 import logoVialtec from '@/assets/img/logo-vialtec.png'
 
 const props = defineProps({
@@ -32,6 +33,23 @@ function formatFecha(iso) {
 function unidad(tipo) {
   return tipo === 'hormigon' ? 'm³' : 'tn'
 }
+
+// Fix (Federico, 2026-09-09): el remito salía siempre "—". `pedido.nro_remito_global`
+// es un campo ÚNICO opcional para todo el despacho (solo asfalto lo pide, ver
+// PedidosView.vue "N° de remito (opcional)") — nunca existió para hormigón:
+// ahí el remito es OBLIGATORIO pero se carga por carga/mixer
+// (`plantas_cargas_hormigon.numero_remito`, uno por camión), y esta vista
+// nunca leía el prop `cargas` (lo recibía, pero el template no lo usaba en
+// ningún lado). Fallback solo para hormigón — en asfalto `numeroRemitoOVale`
+// de una carga es el N° DE VALE (ya se muestra aparte, línea de abajo), no
+// un remito, así que no corresponde usarlo acá. Si hay más de un mixer con
+// remito distinto en el mismo despacho, se listan todos separados por coma.
+const numeroRemitoMostrar = computed(() => {
+  if (props.pedido.nro_remito_global) return props.pedido.nro_remito_global
+  if (props.pedido.tipo !== 'hormigon') return null
+  const deCargas = [...new Set(props.cargas.map((c) => c.numeroRemitoOVale).filter(Boolean))]
+  return deCargas.length ? deCargas.join(', ') : null
+})
 </script>
 
 <template>
@@ -40,7 +58,7 @@ function unidad(tipo) {
       <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-12 w-auto" />
       <div class="text-right">
         <p class="text-lg font-bold">Remito de despacho</p>
-        <p class="text-gray-500">N° remito: {{ pedido.nro_remito_global || '—' }}</p>
+        <p class="text-gray-500">N° remito: {{ numeroRemitoMostrar || '—' }}</p>
         <p v-if="pedido.tipo === 'asfalto'" class="text-gray-500">N° vale: {{ pedido.nro_vale_global || '—' }}</p>
       </div>
     </div>
