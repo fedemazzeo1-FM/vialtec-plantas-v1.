@@ -15,6 +15,7 @@ import VButton from '@/components/shared/VButton.vue'
 import VKpiCard from '@/components/shared/VKpiCard.vue'
 import { useDespachos } from '@/modules/despachos/composables/useDespachos'
 import DespachoImprimible from '@/modules/despachos/components/DespachoImprimible.vue'
+import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -72,6 +73,16 @@ const {
   cargandoRemito,
   abrirRemito,
   imprimir,
+  remitosManuales,
+  cargandoRemitosManuales,
+  modalRemitoManualAbierto,
+  formRemitoManual,
+  generandoRemitoManual,
+  errorRemitoManual,
+  abrirRemitoManual,
+  guardarRemitoManual,
+  remitoManualParaImprimir,
+  verRemitoManual,
   modalSeleccionValeAbierto,
   pedidoParaSeleccionVale,
   valesDisponibles,
@@ -216,6 +227,46 @@ function formatearTn(valor) {
         <p v-else class="text-sm text-text-soft">No hay despachos en el mes seleccionado.</p>
       </VCard>
 
+      <!-- Remitos manuales/en blanco (2026-09-09, pedido de Federico): remito
+           oficial sin pedido asociado, para envío de materiales a obra u
+           otro movimiento interno — N° automático, misma numeración que los
+           remitos de asfalto (memory/pending.md). -->
+      <VCard class="mb-4">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm font-bold text-text">Remitos manuales</p>
+          <VButton size="sm" @click="abrirRemitoManual">+ Generar remito manual</VButton>
+        </div>
+        <p v-if="cargandoRemitosManuales" class="text-sm text-text-soft">Cargando…</p>
+        <div v-else-if="remitosManuales.length" class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead>
+              <tr class="border-b border-border text-xs uppercase tracking-wide text-text-soft">
+                <th class="py-1.5 pr-3">N°</th>
+                <th class="py-1.5 pr-3">Fecha</th>
+                <th class="py-1.5 pr-3">Descripción</th>
+                <th class="py-1.5 pr-3">Destino</th>
+                <th class="py-1.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in remitosManuales.slice(0, 10)" :key="r.id" class="border-b border-border/60">
+                <td class="py-1.5 pr-3 font-semibold text-text">{{ r.numero_remito }}</td>
+                <td class="py-1.5 pr-3">{{ r.fecha }}</td>
+                <td class="py-1.5 pr-3">{{ r.descripcion }}</td>
+                <td class="py-1.5 pr-3 text-text-soft">{{ r.destino || '—' }}</td>
+                <td class="py-1.5">
+                  <VButton variant="ghost" size="sm" @click="verRemitoManual(r)">Reimprimir</VButton>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-if="remitosManuales.length > 10" class="mt-2 text-xs text-text-soft">
+            Mostrando los 10 más recientes de {{ remitosManuales.length }}.
+          </p>
+        </div>
+        <p v-else class="text-sm text-text-soft">Todavía no se generó ningún remito manual.</p>
+      </VCard>
+
       <VCard>
         <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
         <VTable
@@ -341,7 +392,12 @@ function formatearTn(valor) {
     <!-- Modal: Ver remito imprimible — Teleport a <body> (2026-09-04, mismo
          fix que Báscula: ver comentario en src/assets/main.css). -->
     <Teleport to="body">
-      <VModal :open="modalRemitoAbierto" title="Remito de despacho" size="xl" @update:open="modalRemitoAbierto = $event">
+      <VModal
+        :open="modalRemitoAbierto"
+        :title="pedidoRemito ? 'Remito de despacho' : 'Remito manual'"
+        size="xl"
+        @update:open="modalRemitoAbierto = $event"
+      >
         <p v-if="cargandoRemito" class="text-sm text-text-soft">Cargando…</p>
         <div v-else class="imprimible">
           <DespachoImprimible
@@ -350,6 +406,19 @@ function formatearTn(valor) {
             :obra-nombre="destinoDe(pedidoRemito)"
             :formula-nombre="formulas.find((f) => f.id === pedidoRemito.formula_id)?.nombre"
             :cargas="cargasRemito"
+            :patentes="patentes"
+          />
+          <!-- Remito manual/en blanco: sin pedido detrás, arma los props
+               genéricos directo desde plantas_remitos_manuales. -->
+          <RemitoImprimible
+            v-else-if="remitoManualParaImprimir"
+            :numero-remito="remitoManualParaImprimir.numero_remito"
+            :fecha="remitoManualParaImprimir.fecha"
+            :destino="remitoManualParaImprimir.destino"
+            :detalle-titulo="remitoManualParaImprimir.descripcion"
+            :patente="remitoManualParaImprimir.patente"
+            :transportista="remitoManualParaImprimir.transportista"
+            :lugar-entrega="remitoManualParaImprimir.destino"
           />
         </div>
         <div class="mt-4 flex justify-end gap-2">
@@ -358,6 +427,76 @@ function formatearTn(valor) {
         </div>
       </VModal>
     </Teleport>
+
+    <!-- Modal: generar Remito Manual/Blanco (2026-09-09, pedido de Federico) -->
+    <VModal :open="modalRemitoManualAbierto" title="Generar remito manual" @update:open="modalRemitoManualAbierto = $event">
+      <form class="space-y-3" @submit.prevent="guardarRemitoManual">
+        <div v-if="errorRemitoManual" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
+          {{ errorRemitoManual }}
+        </div>
+        <p class="text-xs text-text-soft">
+          Para envío de materiales a obra u otro movimiento interno sin pedido asociado. El N° de remito lo asigna el
+          sistema automáticamente (misma numeración correlativa que los remitos de asfalto).
+        </p>
+        <label class="block text-sm text-text-mid">
+          Descripción / Observaciones *
+          <textarea
+            v-model="formRemitoManual.descripcion"
+            rows="2"
+            placeholder="Qué material o ítem sale hacia la obra…"
+            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+          ></textarea>
+        </label>
+        <label class="block text-sm text-text-mid">
+          Fecha
+          <input
+            v-model="formRemitoManual.fecha"
+            type="date"
+            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+          />
+        </label>
+        <label class="block text-sm text-text-mid">
+          Destino (opcional)
+          <input
+            v-model="formRemitoManual.destino"
+            type="text"
+            placeholder="Obra o lugar de entrega…"
+            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+          />
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm text-text-mid">
+            Patente (opcional)
+            <input
+              v-model="formRemitoManual.patente"
+              list="patentes-remito-manual"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
+          </label>
+          <label class="text-sm text-text-mid">
+            Transportista (opcional)
+            <input
+              v-model="formRemitoManual.transportista"
+              type="text"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
+          </label>
+        </div>
+        <p class="text-xs text-text-soft">
+          Dejá Destino/Patente/Transportista en blanco si preferís completarlos a mano en el papel impreso.
+        </p>
+        <datalist id="patentes-remito-manual">
+          <option v-for="p in patentes" :key="p.id" :value="p.patente" />
+        </datalist>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <VButton type="button" variant="secondary" @click="modalRemitoManualAbierto = false">Cancelar</VButton>
+          <VButton type="submit" :disabled="generandoRemitoManual">
+            {{ generandoRemitoManual ? 'Generando…' : 'Generar e imprimir' }}
+          </VButton>
+        </div>
+      </form>
+    </VModal>
 
     <!-- Modal: elegir cuál vale imprimir (solo cuando el despacho tuvo más de un camión pesado en báscula) -->
     <VModal
@@ -395,7 +534,6 @@ function formatearTn(valor) {
             :vale="valeParaImprimir"
             :obra-nombre="destinoDe(pedidoParaImprimirVale)"
             :mezcla-nombre="formulas.find((f) => f.id === pedidoParaImprimirVale.formula_id)?.nombre"
-            modo="vale"
             :acumulado-tn="acumuladoParaImprimirVale"
             :pedido="pedidoParaImprimirVale"
             :rango-vales="rangoValesParaImprimirVale"

@@ -34,6 +34,7 @@ import { patentesService } from '@/modules/maestros/services/maestros.service'
 // son exactamente los mismos que usa ValeImprimible.vue desde BasculaView.
 import { obtenerAcumuladoHastaFecha, formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
 import { fetchDatosInformeMensual } from '@/modules/despachos/services/informe-mensual.service'
+import { generarRemitoManual, fetchRemitosManuales } from '@/modules/despachos/services/remitos-manuales.service'
 
 const TAMANO_PAGINA = 20
 
@@ -322,6 +323,7 @@ export function useDespachos() {
 
   async function abrirRemito(pedido) {
     pedidoRemito.value = pedido
+    remitoManualParaImprimir.value = null
     modalRemitoAbierto.value = true
     cargandoRemito.value = true
     error.value = null
@@ -336,6 +338,75 @@ export function useDespachos() {
 
   function imprimir() {
     window.print()
+  }
+
+  // -------------------------------------------------------------------------
+  // "Remito Manual/Blanco" (migración 36, 2026-09-09, pedido de Federico):
+  // remito oficial sin pedido asociado — envío de materiales a obra u otro
+  // movimiento interno. N° de remito automático, misma secuencia que los
+  // remitos de asfalto (RemitoImprimible.vue es el mismo componente único
+  // que usa el resto del sistema, ver DespachoImprimible.vue).
+  // -------------------------------------------------------------------------
+
+  const remitosManuales = ref([])
+  const cargandoRemitosManuales = ref(false)
+
+  async function cargarRemitosManuales() {
+    cargandoRemitosManuales.value = true
+    try {
+      remitosManuales.value = await fetchRemitosManuales()
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      cargandoRemitosManuales.value = false
+    }
+  }
+
+  function formRemitoManualVacio() {
+    return { descripcion: '', destino: '', patente: '', transportista: '', fecha: new Date().toISOString().slice(0, 10) }
+  }
+
+  const modalRemitoManualAbierto = ref(false)
+  const formRemitoManual = reactive(formRemitoManualVacio())
+  const generandoRemitoManual = ref(false)
+  const errorRemitoManual = ref(null)
+
+  function abrirRemitoManual() {
+    Object.assign(formRemitoManual, formRemitoManualVacio())
+    errorRemitoManual.value = null
+    modalRemitoManualAbierto.value = true
+  }
+
+  // Impresión: reusa el mismo modal/mecanismo que el remito de un despacho
+  // (modalRemitoAbierto/imprimir()) — es el mismo documento (RemitoImprimible.vue),
+  // solo cambia qué props le arma la vista (ver DespachosView.vue).
+  const remitoManualParaImprimir = ref(null)
+
+  async function guardarRemitoManual() {
+    if (!formRemitoManual.descripcion.trim()) {
+      errorRemitoManual.value = 'La descripción es obligatoria.'
+      return
+    }
+    generandoRemitoManual.value = true
+    errorRemitoManual.value = null
+    try {
+      const remito = await generarRemitoManual(formRemitoManual)
+      modalRemitoManualAbierto.value = false
+      pedidoRemito.value = null
+      remitoManualParaImprimir.value = remito
+      modalRemitoAbierto.value = true
+      await cargarRemitosManuales()
+    } catch (e) {
+      errorRemitoManual.value = e.message
+    } finally {
+      generandoRemitoManual.value = false
+    }
+  }
+
+  function verRemitoManual(remito) {
+    pedidoRemito.value = null
+    remitoManualParaImprimir.value = remito
+    modalRemitoAbierto.value = true
   }
 
   // -------------------------------------------------------------------------
@@ -414,6 +485,7 @@ export function useDespachos() {
     })
     cargarKpis()
     cargarProduccionAnual()
+    cargarRemitosManuales()
   }
 
   return {
@@ -461,6 +533,17 @@ export function useDespachos() {
     cargandoRemito,
     abrirRemito,
     imprimir,
+    remitosManuales,
+    cargandoRemitosManuales,
+    cargarRemitosManuales,
+    modalRemitoManualAbierto,
+    formRemitoManual,
+    generandoRemitoManual,
+    errorRemitoManual,
+    abrirRemitoManual,
+    guardarRemitoManual,
+    remitoManualParaImprimir,
+    verRemitoManual,
     modalSeleccionValeAbierto,
     pedidoParaSeleccionVale,
     valesDisponibles,
