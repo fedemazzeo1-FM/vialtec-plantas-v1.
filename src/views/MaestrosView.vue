@@ -450,9 +450,17 @@ async function toggleActivo(registro) {
           </template>
           <template v-else-if="campo.type === 'number'">
             {{ campo.label }}
+            <!-- step="any" (2026-09-09, bug real reportado por Federico: "solo me
+                 deja poner números redondos" al editar Tara en Camiones) — sin
+                 step, el navegador asume step="1" (enteros); en el teclado
+                 numérico de mobile eso hace que ni aparezca la tecla del punto
+                 decimal. Aplica a todos los campos numéricos genéricos de Maestros
+                 (Tara, mínimo/máximo de Stock en Materiales) — ninguno es
+                 conceptualmente entero-only. -->
             <input
               v-model.number="formData[campo.key]"
               type="number"
+              step="any"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
             />
           </template>
