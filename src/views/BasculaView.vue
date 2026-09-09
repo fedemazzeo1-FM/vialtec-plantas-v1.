@@ -215,11 +215,17 @@ watch(
             <template v-if="slot.tipo === 'ingreso_arido'">
               <label class="text-sm text-text-mid">
                 Material
-                <input
+                <!-- 2026-09-09 (pedido de Federico): antes texto libre, ahora
+                     desplegable sobre el catálogo real de Maestros
+                     (plantas_materiales) — mismo criterio que ya se usó para
+                     Egreso de áridos el 2026-09-08 (ver comentario más abajo). -->
+                <select
                   v-model="slot.form.material"
-                  type="text"
                   class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                />
+                >
+                  <option value="" disabled>Elegir material…</option>
+                  <option v-for="m in materiales" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
+                </select>
               </label>
               <label class="text-sm text-text-mid">
                 Proveedor
