@@ -1,5 +1,80 @@
 # pending.md — Pendientes
 
+## 🔴 Remito unificado + automático + Remito Manual, y Material select en Ingreso de áridos (2026-09-09) — CÓDIGO LISTO, migración 36 (schema) PENDIENTE DE APLICAR
+
+Pedido de Federico en 2 mensajes seguidos (con capturas de los 2 remitos
+distintos que mostraban Despachos vs. Báscula) + un pedido chico
+independiente de Báscula. Build verificado (`npm run build` limpio) y
+committeado en 5 commits atómicos.
+
+1. **✅ Báscula — Material de Ingreso de áridos → select.** Mismo criterio
+   que Egreso de áridos (2026-09-08): pasa de texto libre a `<select>`
+   sobre `plantas_materiales`. Sin cambio de schema, sin pendiente.
+2. **🔴 Remito único compartido Báscula/Despachos + numeración automática
+   — CÓDIGO LISTO, FALTA APLICAR LA MIGRACIÓN 36.** Federico mostró que
+   el remito de Despachos (slip simple, "N° remito: —" o un valor viejo
+   del legado) y el de Báscula (documento fiscal completo) eran dos
+   diseños distintos para el mismo despacho — pidió que quede uno solo (el
+   de Báscula) en los dos módulos, y que el número de remito de asfalto
+   sea **automático** en vez de un campo opcional que el operador tipeaba.
+   Aclaración clave de Federico sobre el momento de asignación: **es 1
+   solo N° de remito por pedido**, compartido por TODAS sus pesadas (si un
+   pedido tiene 10 pesadas, las 10 llevan el mismo número) — y como
+   Báscula permite imprimir el remito desde CUALQUIER pesada (no solo la
+   última), el número se asigna en la **primera carga** del pedido
+   (`registrar_carga_asfalto`), no al cerrar el despacho
+   (`finalizar_despacho`) — si no, imprimir a mitad del día mostraría "—"
+   en vez del número real.
+   - `supabase/migrations/36_remito_automatico_y_manual.sql`: secuencia
+     nueva `plantas_remitos_numero_seq` (arranca en 1 — "arrancalo de
+     cero" se interpretó como numeración nueva, no como que el primer
+     remito real diga literalmente "0"; si Federico quería el 0 literal,
+     es un `alter sequence ... restart with 0` de una línea, avisar).
+     `registrar_carga_asfalto` ya no acepta remito tipeado a mano, lo
+     asigna solo (coalesce, no pisa si ya lo tiene). `finalizar_despacho`
+     sin cambios de comportamiento.
+   - `src/components/shared/RemitoImprimible.vue` (nuevo): el documento
+     único — antes vivía como modo "remito" adentro de
+     `ValeImprimible.vue` (que ahora quedó 100% dedicado al vale de
+     pesaje). Genérico, sin conocer `vale`/`pedido`, cada módulo le arma
+     los props ya resueltos.
+   - Báscula (`useBascula.js#remitoParaImprimir`) y Despachos
+     (`DespachoImprimible.vue`, wrapper fino) arman esos props cada uno
+     desde su propia fuente de datos — mismo documento final.
+   - Para hormigón (que no tiene remito único de pedido — "el remito ya es
+     por carga") el fix del 2026-09-09 anterior (fallback a los N° reales
+     por carga) sigue funcionando igual, sin tocar.
+   - `PedidosView.vue`: sacado el input "N° de remito (opcional)" del
+     modal de despacho de asfalto — ya no aplica, es automático.
+3. **🔴 Remito Manual/Blanco — CÓDIGO LISTO, misma migración 36.** Nueva
+   funcionalidad pedida por Federico: remito oficial sin pedido asociado
+   (envío de materiales a obra u otro movimiento interno), con N°
+   automático que **consume y continúa la misma secuencia** que los
+   remitos de asfalto (pedido explícito). Tabla `plantas_remitos_manuales`
+   + RPC `generar_remito_manual` (única vía de escritura — sin policy de
+   insert/update/delete directa, admin/plantista). Despachos → nueva card
+   "Remitos manuales" con botón "+ Generar remito manual" (Descripción
+   obligatoria, Destino/Patente/Transportista opcionales para completar a
+   mano si se prefiere) + listado + reimprimir, mismo `RemitoImprimible.vue`.
+
+   **No se pudo aplicar la migración 36 en esta sesión** — mismo motivo
+   que la 35 (Clientes): no hay MCP de Supabase conectado, y de todos
+   modos requiere confirmación explícita de Federico antes de correr en
+   producción (`memory/procedimientos.md`). Hasta que se aplique:
+   - Despachar asfalto **no se rompe** — PostgREST resuelve la llamada del
+     cliente nuevo (6 parámetros con nombre, sin `p_numero_remito_global`)
+     contra la función VIEJA todavía desplegada (7 parámetros, el último
+     opcional) sin error, porque los nombres que sí manda calzan igual; el
+     único efecto real es que el remito de asfalto sigue sin asignarse
+     automáticamente (como ya venía pasando) hasta que se aplique la
+     migración — degradación silenciosa, no un error visible.
+   - El botón nuevo "+ Generar remito manual" (Despachos) **sí va a
+     fallar** con `relation "plantas_remitos_manuales" does not exist` o
+     `function generar_remito_manual(...) does not exist` — depende
+     exclusivamente de objetos que solo crea la migración 36.
+   **Avisar a Federico antes de deployar este código a producción**, o
+   aplicar la migración primero.
+
 ## 🔴 4 correcciones/mejoras pedidas por Federico (2026-09-09) — CÓDIGO LISTO, migración 35 (tabla nueva) PENDIENTE DE APLICAR
 
 Pedido directo de Federico ("Atención Code"), 4 puntos. Build verificado
