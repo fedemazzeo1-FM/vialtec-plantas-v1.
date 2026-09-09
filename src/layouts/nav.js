@@ -11,11 +11,16 @@ export const SECCIONES = [
     // semanal y Pedidos suben acá junto al inicio, son las 3 pantallas de
     // uso diario más frecuente — quedan afuera de "Operación" (que se queda
     // con lo más puntual/operativo del día a día de planta).
+    // Orden Pedidos/Plan semanal invertido 2026-09-09 (pedido explícito de
+    // Federico) — Pedidos primero, Plan semanal después. Ya coincidía con
+    // este orden en la nav inferior de mobile (`TABS_INFERIOR`,
+    // MobileLayout.vue), ahora el sidebar de desktop queda consistente con
+    // esa misma prioridad.
     titulo: 'General',
     links: [
       { to: '/dashboard', label: 'Home', tab: 'dashboard', icon: 'grid' },
-      { to: '/plan-semanal', label: 'Plan semanal', tab: 'plan-semanal', icon: 'calendario' },
       { to: '/pedidos', label: 'Pedidos', tab: 'pedidos', icon: 'clipboard' },
+      { to: '/plan-semanal', label: 'Plan semanal', tab: 'plan-semanal', icon: 'calendario' },
     ],
   },
   {
