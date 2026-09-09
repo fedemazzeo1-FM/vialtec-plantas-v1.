@@ -1,5 +1,77 @@
 # pending.md — Pendientes
 
+## 🔴 4 correcciones/mejoras pedidas por Federico (2026-09-09) — CÓDIGO LISTO, migración 35 (tabla nueva) PENDIENTE DE APLICAR
+
+Pedido directo de Federico ("Atención Code"), 4 puntos. Build verificado
+(`npm run build` limpio, 140 módulos) y commit hecho. Ninguno de los 3
+primeros necesita cambio de schema; el 4to sí (tabla nueva, ver detalle).
+
+1. **✅ Remito de Despachos mostraba siempre "—" en hormigón — CORREGIDO.**
+   `DespachoImprimible.vue` solo leía `pedido.nro_remito_global` — un campo
+   único y OPCIONAL que únicamente pide el modal de despacho de asfalto
+   ("N° de remito (opcional, uno solo para todo el despacho)",
+   `useDespachoAsfalto.js`). El despacho de hormigón nunca tuvo ese campo:
+   ahí el N° de remito es OBLIGATORIO pero se carga **por carga/mixer**
+   (`plantas_cargas_hormigon.numero_remito`, `useCargaHormigon.js`) — el dato
+   real siempre existió, pero el componente recibía el prop `cargas` (con
+   `numeroRemitoOVale` ya normalizado por `fetchCargasDelPedido()`) y nunca
+   lo usaba en el template. Fix: fallback a los N° de remito reales de las
+   cargas cuando no hay remito global, solo para hormigón (en asfalto ese
+   mismo campo de la carga es N° de VALE, no remito — no corresponde
+   mezclarlo). Si hay más de un mixer con remito distinto, se listan
+   separados por coma. El remito de asfalto (Pedidos y Báscula) sigue siendo
+   opcional como estaba — si Federico también lo ve en "—" ahí, es porque
+   nadie lo tipeó al despachar, no un bug de binding.
+2. **✅ Leyendas de firma del vale de Báscula invertidas — CORREGIDAS.**
+   `ValeImprimible.vue` tenía Original="Firma del responsable en balanza" /
+   Duplicado="Firma del chofer" (texto fijado el 2026-09-03). Pedido de
+   Federico esta sesión: al revés — **Original="Firma del chofer"** /
+   **Duplicado="Firma del responsable en balanza"**. Corregido.
+3. **✅ Orden del menú lateral (Pedidos/Plan semanal) — CORREGIDO.** Único
+   punto de verdad `src/layouts/nav.js` (`SECCIONES`, compartido por
+   Desktop/MobileLayout) — Pedidos ahora va primero, Plan semanal después.
+   La nav inferior de mobile (`TABS_INFERIOR`, `MobileLayout.vue`) ya tenía
+   ese orden desde el roadmap Mobile del 2026-09-07, sin cambios ahí.
+4. **🔴 Tab "Clientes" en Maestros + `<select>` en Pedidos — CÓDIGO LISTO,
+   FALTA APLICAR LA MIGRACIÓN 35 EN PRODUCCIÓN.** No existía ninguna tabla
+   de clientes (ya lo tenía anotado `modules-status.md` desde la auditoría
+   de Maestros del 2026-09-01: "clientes (7) sin migrar (falta tabla,
+   requiere autorización)" — los 7 del legado viven en `kv_store` bajo
+   `vt_maestros9.clientes`, **no se migran acá**, es una tarea aparte si
+   Federico la pide). Se creó `supabase/migrations/35_clientes_maestro.sql`:
+   tabla `plantas_clientes` (nombre único, cuit/contacto/teléfono
+   opcionales, activo) con el mismo patrón de RLS fina que el resto de los
+   catálogos de Maestros desde la migración 23 (lectura abierta a cualquier
+   autenticado, escritura admin/plantista). Código ya armado sobre esa tabla
+   (no depende de datos, solo del schema):
+   - `maestros.service.js#clientesService` + `maestrosService.clientes`
+     (mismo `crudEntidad()` que Materiales/Proveedores).
+   - `MaestrosView.vue`: tab nueva "Clientes" (Nombre/CUIT/Contacto/
+     Teléfono), mismo patrón genérico ENTIDADES que Materiales — no hace
+     falta nada especial como con Obras.
+   - `usePedidos.js`: `clientes` nuevo en `cargarBase()` (mismo `Promise.all`
+     que obras/formulas/patentes/choferes) y expuesto en el `return`.
+   - `PedidosView.vue`: "Cliente externo" (alta y edición) pasó de `<input>`
+     texto libre a `<select>` sobre `clientes`. Con un fallback deliberado:
+     si el pedido ya tenía un cliente cargado como texto libre que no está
+     (todavía) en el catálogo nuevo — típico en pedidos de venta externa ya
+     migrados o cargados antes de este cambio — se agrega como opción extra
+     marcada "(no está en el catálogo)" en vez de dejar el `<select>` sin
+     ninguna opción coincidiendo (que hubiera sido confuso visualmente,
+     aunque el dato en sí no se pierde). `plantas_pedidos.cliente_externo`
+     sigue siendo texto libre, sin FK nueva — el select solo completa ese
+     mismo campo por nombre.
+
+   **No se pudo aplicar la migración 35 en esta sesión** — no hay ninguna
+   herramienta de Supabase conectada (MCP) para correrla, y aunque la
+   hubiera, `memory/procedimientos.md` exige aviso + confirmación explícita
+   antes de crear una tabla nueva en producción. Hasta que se aplique: el
+   tab "Clientes" de Maestros y el `<select>` de Pedidos van a tirar error
+   al cargar (`relation "plantas_clientes" does not exist`) — **avisar a
+   Federico antes de deployar este cambio a producción**, o aplicar primero
+   la migración con acceso directo a Supabase (SQL Editor / CLI) y recién
+   después correr `npx vercel --prod`.
+
 ## ✅ WhatsApp: toast de "pedido nuevo" ahora sí apunta a Daniel Natel — 2026-09-08
 
 Federico confirmó el flujo esperado: al CREAR un pedido (sea quien sea que
