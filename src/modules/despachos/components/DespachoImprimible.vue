@@ -72,10 +72,14 @@ const transporte = computed(() => {
 
 // Un solo "item" (mismo criterio que Báscula: solo el acumulado total del
 // despacho, nunca desglose de cargas individuales — ver RemitoImprimible.vue).
+// Detalle: para asfalto es SIEMPRE "MEZCLA ASFÁLTICA" fijo, nunca la fórmula
+// real (2026-09-09, pedido explícito de Federico — mismo criterio que
+// useBascula.js#remitoParaImprimir). Hormigón no está en ese pedido, sigue
+// mostrando la fórmula real.
 const items = computed(() => [
   {
     cantidad: `${props.pedido.cantidad_despachada} ${unidad(props.pedido.tipo)}`,
-    detalle: (props.formulaNombre || '').toUpperCase(),
+    detalle: props.pedido.tipo === 'asfalto' ? 'MEZCLA ASFÁLTICA' : (props.formulaNombre || '').toUpperCase(),
     subtexto: detalleSubtexto.value,
   },
 ])

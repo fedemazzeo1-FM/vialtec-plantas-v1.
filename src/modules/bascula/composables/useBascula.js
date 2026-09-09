@@ -705,7 +705,12 @@ export function useBascula() {
       items: [
         {
           cantidad: acumuladoParaImprimir.value != null ? `${acumuladoParaImprimir.value.toFixed(2)} tn` : '',
-          detalle: (mezclaNombreParaImprimir.value || 'Mezcla asfáltica').toUpperCase(),
+          // "MEZCLA ASFÁLTICA" fijo, NUNCA la fórmula real (2026-09-09,
+          // pedido explícito de Federico: en el remito que ve el cliente no
+          // siempre conviene mostrar cuál mezcla específica se usó — el
+          // vale de pesaje interno, ValeImprimible.vue, sigue mostrando la
+          // mezcla real sin cambios, esto es solo del documento remito).
+          detalle: 'MEZCLA ASFÁLTICA',
           subtexto:
             valeDesde != null
               ? `S/Vale de báscula N° ${formatearNumeroVale(valeDesde)}${valeHasta !== valeDesde ? ` al ${formatearNumeroVale(valeHasta)}` : ''} (correlativos${cantidadVales ? ` — ${cantidadVales} pesada${cantidadVales === 1 ? '' : 's'}` : ''})`
