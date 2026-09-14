@@ -76,6 +76,8 @@ const {
   imprimir,
   remitosManuales,
   cargandoRemitosManuales,
+  remitosManualesColapsado,
+  toggleRemitosManualesColapsado,
   modalRemitoManualAbierto,
   formRemitoManual,
   generandoRemitoManual,
@@ -236,37 +238,48 @@ function formatearTn(valor) {
            otro movimiento interno — N° automático, misma numeración que los
            remitos de asfalto (memory/pending.md). -->
       <VCard class="mb-4">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <p class="text-sm font-bold text-text">Remitos manuales</p>
+        <div class="flex flex-wrap items-center justify-between gap-3" :class="remitosManualesColapsado ? '' : 'mb-3'">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 text-sm font-bold text-text"
+            :title="remitosManualesColapsado ? 'Expandir' : 'Colapsar'"
+            @click="toggleRemitosManualesColapsado"
+          >
+            <span class="text-xs text-text-soft">{{ remitosManualesColapsado ? '▼' : '▲' }}</span>
+            Remitos manuales
+            <span v-if="remitosManualesColapsado && remitosManuales.length" class="font-normal text-text-soft">({{ remitosManuales.length }})</span>
+          </button>
           <VButton size="sm" @click="abrirRemitoManual">+ Generar remito manual</VButton>
         </div>
-        <p v-if="cargandoRemitosManuales" class="text-sm text-text-soft">Cargando…</p>
-        <div v-else-if="remitosManuales.length" class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead>
-              <tr class="border-b border-border text-xs uppercase tracking-wide text-text-soft">
-                <th class="py-1.5 pr-3">N°</th>
-                <th class="py-1.5 pr-3">Fecha</th>
-                <th class="py-1.5 pr-3">Destino</th>
-                <th class="py-1.5"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in remitosManuales.slice(0, 10)" :key="r.id" class="border-b border-border/60">
-                <td class="py-1.5 pr-3 font-semibold text-text">{{ formatearNumeroRemito(r.numero_remito) }}</td>
-                <td class="py-1.5 pr-3">{{ r.fecha }}</td>
-                <td class="py-1.5 pr-3 text-text-soft">{{ r.destino || '—' }}</td>
-                <td class="py-1.5">
-                  <VButton variant="ghost" size="sm" @click="verRemitoManual(r)">Reimprimir</VButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-if="remitosManuales.length > 10" class="mt-2 text-xs text-text-soft">
-            Mostrando los 10 más recientes de {{ remitosManuales.length }}.
-          </p>
-        </div>
-        <p v-else class="text-sm text-text-soft">Todavía no se generó ningún remito manual.</p>
+        <template v-if="!remitosManualesColapsado">
+          <p v-if="cargandoRemitosManuales" class="text-sm text-text-soft">Cargando…</p>
+          <div v-else-if="remitosManuales.length" class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead>
+                <tr class="border-b border-border text-xs uppercase tracking-wide text-text-soft">
+                  <th class="py-1.5 pr-3">N°</th>
+                  <th class="py-1.5 pr-3">Fecha</th>
+                  <th class="py-1.5 pr-3">Destino</th>
+                  <th class="py-1.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in remitosManuales.slice(0, 10)" :key="r.id" class="border-b border-border/60">
+                  <td class="py-1.5 pr-3 font-semibold text-text">{{ formatearNumeroRemito(r.numero_remito) }}</td>
+                  <td class="py-1.5 pr-3">{{ r.fecha }}</td>
+                  <td class="py-1.5 pr-3 text-text-soft">{{ r.destino || '—' }}</td>
+                  <td class="py-1.5">
+                    <VButton variant="ghost" size="sm" @click="verRemitoManual(r)">Reimprimir</VButton>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-if="remitosManuales.length > 10" class="mt-2 text-xs text-text-soft">
+              Mostrando los 10 más recientes de {{ remitosManuales.length }}.
+            </p>
+          </div>
+          <p v-else class="text-sm text-text-soft">Todavía no se generó ningún remito manual.</p>
+        </template>
       </VCard>
 
       <VCard>
@@ -401,7 +414,12 @@ function formatearTn(valor) {
         @update:open="modalRemitoAbierto = $event"
       >
         <p v-if="cargandoRemito" class="text-sm text-text-soft">Cargando…</p>
-        <div v-else class="imprimible">
+        <!-- modo-remito (2026-09-14): mismo criterio que el remito de Báscula
+             (ver src/assets/main.css) — dimensiones A4 portrait (210×297mm)
+             en vez del landscape default de .imprimible. Aplica siempre acá
+             porque este contenedor es exclusivo del remito (de despacho o
+             manual, nunca del vale, que tiene su propio div más abajo). -->
+        <div v-else class="imprimible modo-remito">
           <DespachoImprimible
             v-if="pedidoRemito"
             :pedido="pedidoRemito"

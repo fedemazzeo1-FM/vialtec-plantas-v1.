@@ -340,8 +340,27 @@ export function useDespachos() {
     }
   }
 
+  // Fix 2026-09-14 (pedido de Federico: el Remito Manual salía en horizontal,
+  // tenía que ser vertical "para mantener la misma línea visual que el resto
+  // de los remitos del sistema"). Mismo mecanismo ya usado por
+  // useBascula.js#imprimir() para su propio remito: se inyecta un <style>
+  // con `@page { size: A4 portrait }` justo antes de imprimir — como es la
+  // última regla `@page` del documento, gana por cascada sobre el `@page
+  // landscape` global de main.css — y se remueve enseguida después de
+  // `window.print()` para no afectar el modal de "Imprimir vale" (asfalto,
+  // sigue landscape, 2 copias lado a lado), que reusa esta misma función.
+  // Se activa solo cuando el modal abierto es el del remito (de despacho o
+  // manual, los dos usan RemitoImprimible.vue con la clase `modo-remito` en
+  // DespachosView.vue) — el de vale no toca este ref.
   function imprimir() {
+    let estiloTemporal = null
+    if (modalRemitoAbierto.value) {
+      estiloTemporal = document.createElement('style')
+      estiloTemporal.textContent = '@page { size: A4 portrait; margin: 0; }'
+      document.head.appendChild(estiloTemporal)
+    }
     window.print()
+    estiloTemporal?.remove()
   }
 
   // -------------------------------------------------------------------------
@@ -356,6 +375,16 @@ export function useDespachos() {
 
   const remitosManuales = ref([])
   const cargandoRemitosManuales = ref(false)
+  // Plegado por defecto (2026-09-14, pedido de Federico): la card ocupaba
+  // espacio arriba de la tabla principal de Despachos aunque no se necesite
+  // ver el listado a cada rato — mismo patrón de toggle que las puertas de
+  // Báscula (useBascula.js#toggleColapso), acá para una sola card en vez de
+  // por-slot.
+  const remitosManualesColapsado = ref(true)
+
+  function toggleRemitosManualesColapsado() {
+    remitosManualesColapsado.value = !remitosManualesColapsado.value
+  }
 
   async function cargarRemitosManuales() {
     cargandoRemitosManuales.value = true
@@ -591,6 +620,8 @@ export function useDespachos() {
     imprimir,
     remitosManuales,
     cargandoRemitosManuales,
+    remitosManualesColapsado,
+    toggleRemitosManualesColapsado,
     cargarRemitosManuales,
     modalRemitoManualAbierto,
     formRemitoManual,
