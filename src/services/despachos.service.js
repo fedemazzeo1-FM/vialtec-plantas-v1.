@@ -30,9 +30,13 @@ const TABLA_HISTORIAL = 'plantas_pedidos_historial'
 
 /**
  * @param {{ tipo?: 'asfalto'|'hormigon', obraId?: number, formulaId?: string,
- *   desde?: string, hasta?: string }} filtros desde/hasta en 'YYYY-MM-DD',
- *   sobre fecha_programada (memory/relevamiento: el legado usa `fecha` como
- *   fecha planificada Y de despacho, no hay una fecha "real" separada).
+ *   clienteExterno?: string, desde?: string, hasta?: string }} filtros
+ *   desde/hasta en 'YYYY-MM-DD', sobre fecha_programada (memory/relevamiento:
+ *   el legado usa `fecha` como fecha planificada Y de despacho, no hay una
+ *   fecha "real" separada). clienteExterno filtra por texto exacto contra
+ *   plantas_pedidos.cliente_externo (2026-09-14, pedido de Federico) — el
+ *   valor viene del `<select>` sobre plantas_clientes en la vista, mismo
+ *   texto que ya guarda el pedido (no hay FK entre ambas tablas).
  * @param {{ pagina?: number, tamanoPagina?: number }} opciones
  */
 export async function fetchDespachos(filtros = {}, { pagina = 1, tamanoPagina = 20 } = {}) {
@@ -47,6 +51,7 @@ export async function fetchDespachos(filtros = {}, { pagina = 1, tamanoPagina = 
       if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
       if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
       if (filtros.formulaId) query = query.eq('formula_id', filtros.formulaId)
+      if (filtros.clienteExterno) query = query.eq('cliente_externo', filtros.clienteExterno)
       if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
       if (filtros.hasta) query = query.lte('fecha_programada', filtros.hasta)
 

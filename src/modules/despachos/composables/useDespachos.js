@@ -23,6 +23,10 @@ import {
 } from '@/services/despachos.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+// Catálogo de clientes de venta externa (2026-09-14, filtro "Cliente externo"
+// pedido por Federico) — mismo catálogo que ya usa el <select> de Pedidos
+// (migración 35), no se duplica la query.
+import { clientesService } from '@/modules/maestros/services/maestros.service'
 // Reuso de Home (memory/conventions.md: no duplicar lógica compartida entre
 // módulos) — 2026-09-06, pedido de Federico: las cards de producción anual
 // de asfalto de Despachos tienen que mostrar exactamente lo mismo que las
@@ -60,6 +64,12 @@ export function useDespachos() {
   // (ValeImprimible.vue#transporteLabel, mismo criterio que Báscula) — no se
   // usa en ningún otro lado de esta vista.
   const patentes = ref([])
+  // Clientes de venta externa (2026-09-14): solo para el filtro "Cliente
+  // externo" de abajo — a diferencia de Pedidos, acá no hace falta el
+  // fallback "(no está en el catálogo)" porque es un filtro, no un campo que
+  // se guarda (un cliente_externo que no está en el catálogo simplemente no
+  // aparece como opción de filtro, no hay nada que perder).
+  const clientes = ref([])
   const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
   const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
 
@@ -77,14 +87,16 @@ export function useDespachos() {
     // del error real. Mismo patrón que ya usan cargarBase() en
     // useBascula.js/useSimulador.js.
     try {
-      const [listaObras, listaFormulas, listaPatentes] = await Promise.all([
+      const [listaObras, listaFormulas, listaPatentes, listaClientes] = await Promise.all([
         fetchObras(),
         fetchFormulas({ soloActivas: false }),
         patentesService.fetch(),
+        clientesService.fetch(),
       ])
       obras.value = listaObras
       formulas.value = listaFormulas
       patentes.value = listaPatentes
+      clientes.value = listaClientes
     } catch (e) {
       error.value = e.message
     }
@@ -135,7 +147,7 @@ export function useDespachos() {
   const totalDespachos = ref(0)
   const paginaActual = ref(1)
   const cargando = ref(false)
-  const filtros = reactive({ tipo: '', obraId: '', formulaId: '', desde: '', hasta: '' })
+  const filtros = reactive({ tipo: '', obraId: '', formulaId: '', clienteExterno: '', desde: '', hasta: '' })
 
   const filasConNombres = computed(() =>
     filas.value.map((p) => ({
@@ -155,6 +167,7 @@ export function useDespachos() {
           tipo: filtros.tipo || undefined,
           obraId: filtros.obraId || undefined,
           formulaId: filtros.formulaId || undefined,
+          clienteExterno: filtros.clienteExterno || undefined,
           desde: filtros.desde || undefined,
           hasta: filtros.hasta || undefined,
         },
@@ -178,6 +191,7 @@ export function useDespachos() {
     filtros.tipo = ''
     filtros.obraId = ''
     filtros.formulaId = ''
+    filtros.clienteExterno = ''
     filtros.desde = ''
     filtros.hasta = ''
     aplicarFiltros()
@@ -314,31 +328,16 @@ export function useDespachos() {
   }
 
   // -------------------------------------------------------------------------
-  // Modal "Ver remito" imprimible (Logica sis. plantas v1.rtf §4.5: "slip"
-  // con datos del pedido + firma de responsable de planta + firma del
-  // encargado). Reusa cargasDetalle si ya se abrió el detalle del mismo
-  // pedido; si no, las trae.
+  // Modal "Ver remito" imprimible — SOLO para Remito Manual desde acá
+  // (2026-09-14, pedido de Federico: el botón "Remito" por pedido despachado
+  // se removió de esta vista, esa impresión queda únicamente en Báscula
+  // sobre un vale ya pesado — abrirImpresionRemito). Antes este modal
+  // también servía para el remito de un despacho puntual (abrirRemito(),
+  // DespachoImprimible.vue) — ver historial de git si hace falta esa
+  // versión.
   // -------------------------------------------------------------------------
 
   const modalRemitoAbierto = ref(false)
-  const pedidoRemito = ref(null)
-  const cargasRemito = ref([])
-  const cargandoRemito = ref(false)
-
-  async function abrirRemito(pedido) {
-    pedidoRemito.value = pedido
-    remitoManualParaImprimir.value = null
-    modalRemitoAbierto.value = true
-    cargandoRemito.value = true
-    error.value = null
-    try {
-      cargasRemito.value = await fetchCargasDelPedido(pedido.id, pedido.tipo)
-    } catch (e) {
-      error.value = e.message
-    } finally {
-      cargandoRemito.value = false
-    }
-  }
 
   // Fix 2026-09-14 (pedido de Federico: el Remito Manual salía en horizontal,
   // tenía que ser vertical "para mantener la misma línea visual que el resto
@@ -468,7 +467,6 @@ export function useDespachos() {
     try {
       const resultado = await generarRemitoManual({ ...formRemitoManual, items: itemsValidos })
       modalRemitoManualAbierto.value = false
-      pedidoRemito.value = null
       remitoManualParaImprimir.value = resultado
       modalRemitoAbierto.value = true
       await cargarRemitosManuales()
@@ -486,7 +484,6 @@ export function useDespachos() {
     error.value = null
     try {
       const items = await fetchItemsDeRemitoManual(remito.id)
-      pedidoRemito.value = null
       remitoManualParaImprimir.value = { remito, items }
       modalRemitoAbierto.value = true
     } catch (e) {
@@ -578,6 +575,7 @@ export function useDespachos() {
     obras,
     formulas,
     patentes,
+    clientes,
     obrasPorId,
     formulasPorId,
     kpisMes,
@@ -613,10 +611,6 @@ export function useDespachos() {
     abrirCorreccion,
     guardarCorreccion,
     modalRemitoAbierto,
-    pedidoRemito,
-    cargasRemito,
-    cargandoRemito,
-    abrirRemito,
     imprimir,
     remitosManuales,
     cargandoRemitosManuales,

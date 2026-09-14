@@ -14,7 +14,6 @@ import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
 import VKpiCard from '@/components/shared/VKpiCard.vue'
 import { useDespachos } from '@/modules/despachos/composables/useDespachos'
-import DespachoImprimible from '@/modules/despachos/components/DespachoImprimible.vue'
 import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 import { formatearNumeroRemito } from '@/services/formato-numeros'
@@ -37,6 +36,7 @@ const {
   obras,
   formulas,
   patentes,
+  clientes,
   kpisMes,
   kpisHistorico,
   cargandoProduccionAnual,
@@ -69,10 +69,6 @@ const {
   abrirCorreccion,
   guardarCorreccion,
   modalRemitoAbierto,
-  pedidoRemito,
-  cargasRemito,
-  cargandoRemito,
-  abrirRemito,
   imprimir,
   remitosManuales,
   cargandoRemitosManuales,
@@ -168,7 +164,7 @@ function formatearTn(valor) {
             Hormigón
           </VButton>
         </div>
-        <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
           <label class="text-sm text-text-mid">
             Mezcla
             <select v-model="filtros.formulaId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
@@ -181,6 +177,18 @@ function formatearTn(valor) {
             <select v-model="filtros.obraId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
               <option value="">Todas</option>
               <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
+            </select>
+          </label>
+          <!-- Cliente externo (2026-09-14, pedido de Federico): filtra ventas
+               externas (tipo_pedido='venta') por el mismo catálogo que usa
+               el <select> de Pedidos (plantas_clientes, migración 35) — no
+               interfiere con el filtro de Obra, un pedido tiene uno u otro
+               según tipo_pedido, nunca los dos. -->
+          <label class="text-sm text-text-mid">
+            Cliente externo
+            <select v-model="filtros.clienteExterno" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
+              <option value="">Todos</option>
+              <option v-for="c in clientes" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
             </select>
           </label>
           <label class="text-sm text-text-mid">
@@ -316,17 +324,13 @@ function formatearTn(valor) {
             <div class="flex flex-wrap gap-1.5">
               <VButton variant="secondary" size="sm" @click="abrirDetalle(row)">🚛 Detalle de cargas</VButton>
               <VButton variant="secondary" size="sm" @click="abrirCorreccion(row)">Corregir</VButton>
-              <!-- Selector Vale/Remito (2026-09-02, pedido de Federico): 2
-                   botones en vez de un <select> — más claro en mobile, el
-                   "Vale" internamente pregunta cuál si el despacho tuvo más
-                   de un camión pesado en báscula. -->
-              <VButton variant="ghost" size="sm" @click="abrirRemito(row)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 shrink-0">
-                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                Remito
-              </VButton>
+              <!-- Botón "Remito" removido de acá (2026-09-14, pedido de
+                   Federico): la impresión de remito de un despacho queda
+                   únicamente en Báscula (abrirImpresionRemito, sobre un vale
+                   ya pesado) — Despachos ya no ofrece un segundo camino para
+                   el mismo documento. "Remito Manual" (más arriba, sin
+                   pedido asociado) es una funcionalidad distinta, no se
+                   toca. -->
               <VButton v-if="row.tipo === 'asfalto'" variant="ghost" size="sm" @click="abrirImpresionVale(row)">
                 🖨 Vale
               </VButton>
@@ -404,33 +408,19 @@ function formatearTn(valor) {
       </form>
     </VModal>
 
-    <!-- Modal: Ver remito imprimible — Teleport a <body> (2026-09-04, mismo
-         fix que Báscula: ver comentario en src/assets/main.css). -->
+    <!-- Modal: Remito Manual imprimible — Teleport a <body> (2026-09-04, mismo
+         fix que Báscula: ver comentario en src/assets/main.css). Desde
+         2026-09-14 este modal es EXCLUSIVO de Remito Manual (pedido de
+         Federico: la impresión de remito de un despacho puntual quedó
+         únicamente en Báscula) — antes también servía para el remito de un
+         pedido despachado (DespachoImprimible.vue), ver historial de git. -->
     <Teleport to="body">
-      <VModal
-        :open="modalRemitoAbierto"
-        :title="pedidoRemito ? 'Remito de despacho' : 'Remito manual'"
-        size="xl"
-        @update:open="modalRemitoAbierto = $event"
-      >
-        <p v-if="cargandoRemito" class="text-sm text-text-soft">Cargando…</p>
+      <VModal :open="modalRemitoAbierto" title="Remito manual" size="xl" @update:open="modalRemitoAbierto = $event">
         <!-- modo-remito (2026-09-14): mismo criterio que el remito de Báscula
              (ver src/assets/main.css) — dimensiones A4 portrait (210×297mm)
-             en vez del landscape default de .imprimible. Aplica siempre acá
-             porque este contenedor es exclusivo del remito (de despacho o
-             manual, nunca del vale, que tiene su propio div más abajo). -->
-        <div v-else class="imprimible modo-remito">
-          <DespachoImprimible
-            v-if="pedidoRemito"
-            :pedido="pedidoRemito"
-            :obra-nombre="destinoDe(pedidoRemito)"
-            :formula-nombre="formulas.find((f) => f.id === pedidoRemito.formula_id)?.nombre"
-            :cargas="cargasRemito"
-            :patentes="patentes"
-          />
-          <!-- Remito manual/en blanco: sin pedido detrás, remitoManualProps
-               (useDespachos.js) ya arma los props genéricos con sus items. -->
-          <RemitoImprimible v-else-if="remitoManualProps" v-bind="remitoManualProps" />
+             en vez del landscape default de .imprimible. -->
+        <div class="imprimible modo-remito">
+          <RemitoImprimible v-if="remitoManualProps" v-bind="remitoManualProps" />
         </div>
         <div class="mt-4 flex justify-end gap-2">
           <VButton variant="secondary" @click="modalRemitoAbierto = false">Cerrar</VButton>
