@@ -56,6 +56,10 @@ const EMPRESA = {
   iibb: '901-904193-7',
   inicioActividad: '01/03/1998',
   deposito: 'Parque Industrial Ruta N°6',
+  // CAI (Código de Autorización de Impresión) — dato fiscal estático, mismo
+  // valor/vencimiento para las dos copias (2026-09-14, pedido de Federico).
+  cai: '52135217859558',
+  caiVencimiento: '30/03/2027',
 }
 
 const fechaLabel = computed(() => {
@@ -73,7 +77,14 @@ const fechaLabel = computed(() => {
       class="flex h-full w-full flex-col p-6"
       :class="i === 0 ? 'break-after-page' : ''"
     >
-      <div class="mx-auto flex h-full w-full max-w-3xl flex-col border border-gray-400 p-8 text-base text-gray-800">
+      <!-- flex-1 (no h-full): deja lugar debajo para el bloque fiscal
+           CAI/F.Vto — con h-full el recuadro ocupaba el 100% del alto fijo
+           del contenedor de la copia sin dejarle espacio a ningún hermano
+           de abajo; flex-1 lo hace crecer para llenar el espacio DISPONIBLE
+           dentro del mismo flex-col, cediéndole lugar a lo que venga después
+           (mismo resultado visual de "ocupa toda la hoja" cuando no hay
+           nada más, pero cooperativo si lo hay). -->
+      <div class="mx-auto flex w-full max-w-3xl flex-1 flex-col border border-gray-400 p-8 text-base text-gray-800">
         <div class="mb-4 flex items-start justify-between border-b-2 border-gray-800 pb-3">
           <div>
             <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-16 w-auto" />
@@ -166,6 +177,18 @@ const fechaLabel = computed(() => {
         <div class="mt-3 border-t border-gray-300 pt-1.5 text-xs text-gray-500">
           <span class="font-semibold">Depósito:</span> {{ EMPRESA.deposito }}
         </div>
+      </div>
+
+      <!-- Bloque fiscal CAI — 2026-09-14, pedido de Federico: por FUERA y
+           debajo del recuadro principal (hermano del `div` de arriba, no
+           adentro), alineado a la derecha. Mismo ancho/centrado (mx-auto
+           max-w-3xl) que el recuadro para que quede bajo su borde derecho,
+           no pegado al borde de la hoja. Estático, sin prop — mismo valor
+           para las dos copias (estamos dentro del v-for de Original/
+           Duplicado, así que se repite en ambas sin nada especial). -->
+      <div class="mx-auto mt-2 w-full max-w-3xl shrink-0 text-right text-xs text-gray-600">
+        <p>CAI: {{ EMPRESA.cai }}</p>
+        <p>F/Vto.: {{ EMPRESA.caiVencimiento }}</p>
       </div>
     </div>
   </div>
