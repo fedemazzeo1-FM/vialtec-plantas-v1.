@@ -105,6 +105,25 @@ export const COLOR_FILA_VALE = {
 
 const TAMANO_PAGINA_HISTORIAL = 50
 
+// Fix 2026-09-14 (bug real reportado por Federico: con 4 puertas abiertas,
+// imprimir el vale de UNA de ellas y cerrar el modal de impresión reseteaba/
+// cerraba las otras 3). Causa real: un remount de BasculaView en algún punto
+// del flujo de impresión — el mismo fenómeno ya detectado sin poder
+// diagnosticarse el 2026-09-07 (ahí se mitigó solo el síntoma del filtro de
+// historial, persistiéndolo en la URL; el remount en sí nunca se pudo
+// reproducir ni encontrar qué lo dispara). Cada remount vuelve a ejecutar
+// `<script setup>` de BasculaView.vue, que llama a useBascula() de cero —
+// si `slots` viviera adentro de la función (como estaba antes), un `ref([])`
+// nuevo reemplaza al de las puertas en curso, perdiéndolas todas sin aviso.
+// En vez de seguir cazando el remount (dos sesiones ya no lo encontraron),
+// se aísla el estado de las puertas a nivel de MÓDULO — mismo patrón que
+// `promesaRestaurarSesion`/`escuchandoCambiosAuth` en auth.store.js — así
+// sobrevive a cualquier remount futuro de la vista, sea cual sea la causa.
+// Báscula es la única vista que llama a useBascula(), así que no hay riesgo
+// de que este estado se filtre entre features no relacionadas.
+let contadorSlot = 0
+const slots = ref([])
+
 export function useBascula() {
   const error = ref(null)
   const auth = useAuthStore()
@@ -206,8 +225,8 @@ export function useBascula() {
   // cards apiladas simultáneamente, cada una colapsable de forma
   // independiente (memory/relevamiento-sistema-viejo.md Etapa 1 §2) — no es
   // un tab-bar de una sola visible a la vez, por eso no hay slotActivoId acá.
-  let contadorSlot = 0
-  const slots = ref([])
+  // `slots`/`contadorSlot` viven a nivel de módulo (arriba de esta función) —
+  // ver el comentario ahí para el porqué.
 
   const puertasAbiertas = computed(() => slots.value.length)
 
