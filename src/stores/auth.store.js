@@ -242,6 +242,22 @@ export const useAuthStore = defineStore('auth', {
       await supabase.auth.signOut()
       this.$reset()
       this.listo = true
+      // Terminal compartida entre turnos/operadores en Báscula (2026-09-14,
+      // pedido de Federico): las puertas en curso viven a nivel de módulo
+      // (useBascula.js) para sobrevivir a un remount de la vista — sin este
+      // reset, el próximo balancero que loguee en la misma pestaña vería
+      // las puertas sin guardar del turno anterior. Import DINÁMICO a
+      // propósito (no estático arriba del archivo): auth.store.js se carga
+      // eager para toda la app desde el arranque — un import estático de
+      // useBascula.js lo arrastraría al bundle principal para TODOS los
+      // roles, rompiendo el code-splitting por ruta que Báscula ya tenía
+      // (verificado: el chunk de BasculaView bajaba de ~35kB a ~23kB y ese
+      // peso se corría al bundle principal). Con import() dinámico, el
+      // módulo de Báscula se resuelve del mismo chunk lazy de siempre —
+      // recién se pide la primera vez que alguien hace logout, sin costo
+      // para el resto de los roles que nunca entran a Báscula.
+      const { resetPuertasBascula } = await import('@/modules/bascula/composables/useBascula')
+      resetPuertasBascula()
     },
   },
 })

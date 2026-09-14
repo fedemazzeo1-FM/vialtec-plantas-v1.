@@ -124,6 +124,23 @@ const TAMANO_PAGINA_HISTORIAL = 50
 let contadorSlot = 0
 const slots = ref([])
 
+/**
+ * Vacía las puertas en curso (2026-09-14, pedido de Federico: la báscula es
+ * una terminal compartida entre turnos/operadores). Con `slots` viviendo a
+ * nivel de módulo (fix de arriba, mismo día) para sobrevivir a un remount de
+ * la vista, quedó un efecto colateral a resolver: sin este reset explícito,
+ * las puertas sin guardar de un balancero seguirían visibles para el
+ * siguiente que loguee en la misma pestaña sin recargar. Se llama desde
+ * auth.store.js#logout() vía `import()` DINÁMICO (no estático): un import
+ * estático de este archivo desde auth.store.js — que se carga eager para
+ * toda la app — arrastraría todo useBascula.js (y sus dependencias) al
+ * bundle principal para TODOS los roles, rompiendo el code-splitting por
+ * ruta que Báscula ya tenía. Ver el comentario en auth.store.js#logout().
+ */
+export function resetPuertasBascula() {
+  slots.value = []
+}
+
 export function useBascula() {
   const error = ref(null)
   const auth = useAuthStore()
