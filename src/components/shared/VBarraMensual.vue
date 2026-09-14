@@ -29,7 +29,15 @@ const props = defineProps({
 })
 
 const ANCHO = 600
-const ALTO = 200
+// Fix 2026-09-14 (pedido de Federico: los gráficos de producción mensual de
+// Home se veían "demasiado grandes"). El SVG es responsive por viewBox
+// (`class="w-full"`, sin alto fijo en CSS) — su altura real en pantalla
+// escala con el ancho del contenedor según ESTE ratio ANCHO:ALTO, así que
+// bajar ALTO es lo que efectivamente los achica en cualquier ancho de
+// pantalla. Antes 200 (ratio 3:1, con el VCard de Home a ~900px de ancho
+// terminaba en ~300px de alto real) — 130 (ratio ~4.6:1) da un gráfico más
+// achatado/compacto, igual de legible para una serie mensual simple.
+const ALTO = 130
 const MARGEN = { top: 14, right: 8, bottom: 24, left: 38 }
 const anchoGrafico = ANCHO - MARGEN.left - MARGEN.right
 const altoGrafico = ALTO - MARGEN.top - MARGEN.bottom
