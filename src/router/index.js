@@ -95,8 +95,12 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.publica) {
-    // Ya logueado y yendo a /login -> mandarlo al dashboard.
-    if (auth.estaLogueado && to.name === 'login') return { name: 'dashboard' }
+    // Ya logueado y yendo a /login -> mandarlo a su primera tab disponible
+    // (2026-09-14: antes era siempre 'dashboard' a ciegas — un rol sin
+    // permiso de ver Home, como balancero, quedaba en loop infinito con el
+    // chequeo de tab de abajo y la pantalla se veía congelada en /login. Ver
+    // auth.store.js#primeraTabDisponible).
+    if (auth.estaLogueado && to.name === 'login') return { name: auth.primeraTabDisponible ?? 'dashboard' }
     return true
   }
 
@@ -105,7 +109,9 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.tab && !auth.puedeVerTab(to.meta.tab)) {
-    return { name: 'dashboard' }
+    // Mismo fallback que arriba — nunca asumir 'dashboard' como destino
+    // seguro, un rol sin permiso ahí loopearía contra este mismo chequeo.
+    return { name: auth.primeraTabDisponible ?? 'dashboard' }
   }
 
   return true

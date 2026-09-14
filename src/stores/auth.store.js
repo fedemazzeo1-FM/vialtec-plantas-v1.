@@ -77,6 +77,24 @@ export const useAuthStore = defineStore('auth', {
       const modulo = TAB_A_MODULO[tab]
       return modulo ? state.modulosVer.has(modulo) : false
     },
+    // Fix 2026-09-14 (bug real reportado por Federico: un balancero logueaba
+    // bien pero la pantalla quedaba congelada en /login, sin redirigir a
+    // ningún módulo). Causa real: router/index.js redirigía SIEMPRE a
+    // `{ name: 'dashboard' }` tanto desde /login como desde cualquier tab sin
+    // permiso — funciona para casi todos los roles (que sí tienen "ver" en
+    // dashboard, migración 30), pero balancero tiene
+    // dashboard/ver = false en plantas_permisos (rol pensado para vivir
+    // 100% en Báscula) — el guard entraba en un loop infinito
+    // login -> dashboard -> (sin permiso) -> dashboard -> ... que Vue Router
+    // corta solo, dejando al usuario varado en la última pantalla real
+    // (login). Esta getter devuelve la primera tab con permiso real, en el
+    // mismo orden en que aparecen en el sidebar (nav.js) — el router la usa
+    // en vez de asumir 'dashboard' a ciegas.
+    primeraTabDisponible(state) {
+      if (state.rol === 'admin') return 'dashboard'
+      const ORDEN_TABS = ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'bascula', 'stock', 'simulador', 'formulas', 'maestros']
+      return ORDEN_TABS.find((tab) => this.puedeVerTab(tab)) ?? null
+    },
   },
 
   actions: {
