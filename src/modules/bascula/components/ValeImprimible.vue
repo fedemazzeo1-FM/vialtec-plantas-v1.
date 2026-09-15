@@ -28,6 +28,11 @@ const props = defineProps({
   vale: { type: Object, required: true },
   obraNombre: { type: String, default: '' },
   mezclaNombre: { type: String, default: '' },
+  // Pedido de venta externa (plantas_pedidos.tipo_pedido = 'venta') vs. obra
+  // propia — 2026-09-15, pedido explícito de Federico: el reemplazo por
+  // "MEZCLA ASFÁLTICA" aplica SOLO a cliente externo; producción interna
+  // (obra) sigue mostrando el nombre real/técnico de la fórmula.
+  clienteExterno: { type: Boolean, default: false },
   acumuladoTn: { type: Number, default: null },
 })
 
@@ -108,11 +113,17 @@ const copiasVale = [
              botón "Vale") no tiene obra asociada, va con
              Proveedor/Remito/Remito(cantidad) en su lugar. -->
         <p v-if="vale.tipo_vale !== 'ingreso_arido'" class="col-span-2"><span class="text-gray-500">Obra:</span> {{ obraNombre || '—' }}</p>
-        <!-- 2026-09-04 (pedido de Federico: Vale también para egreso de
-             áridos): asfalto lleva Mezcla (fórmula del pedido); egreso/
-             ingreso de áridos no tienen pedido/fórmula, llevan Material
-             (texto libre que cargó el balancero en la puerta) en su lugar. -->
-        <p v-if="vale.tipo_vale === 'asfalto'" class="col-span-2"><span class="text-gray-500">Mezcla:</span> {{ mezclaNombre || '—' }}</p>
+        <!-- Mezcla (2026-09-15, ajuste explícito de Federico sobre la
+             decisión del 2026-09-14): "MEZCLA ASFÁLTICA" genérico SOLO para
+             venta a cliente externo (clienteExterno=true, tipo_pedido='venta')
+             — producción interna/obra propia sigue mostrando el nombre real
+             de la fórmula, igual que siempre mostró este vale antes del
+             2026-09-14. Egreso/ingreso de áridos no tienen pedido/fórmula,
+             llevan Material (texto libre que cargó el balancero en la
+             puerta). -->
+        <p v-if="vale.tipo_vale === 'asfalto'" class="col-span-2">
+          <span class="text-gray-500">Mezcla:</span> {{ clienteExterno ? 'MEZCLA ASFÁLTICA' : (mezclaNombre || '—') }}
+        </p>
         <p v-else class="col-span-2"><span class="text-gray-500">Material:</span> {{ vale.material || '—' }}</p>
         <template v-if="vale.tipo_vale === 'ingreso_arido'">
           <p><span class="text-gray-500">N° Remito:</span> {{ vale.numero_remito_ingreso || '—' }}</p>

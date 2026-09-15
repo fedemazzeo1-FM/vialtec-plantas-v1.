@@ -542,6 +542,7 @@ watch(
             :vale="valeParaImprimir"
             :obra-nombre="obraNombreParaImprimir"
             :mezcla-nombre="mezclaNombreParaImprimir"
+            :cliente-externo="pedidoParaImprimir?.tipo_pedido === 'venta'"
             :acumulado-tn="acumuladoParaImprimir"
           />
           <!-- Remito: mismo componente único que usa Despachos (2026-09-09,

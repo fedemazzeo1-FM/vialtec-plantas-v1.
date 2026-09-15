@@ -565,6 +565,7 @@ function formatearTn(valor) {
             :vale="valeParaImprimir"
             :obra-nombre="destinoDe(pedidoParaImprimirVale)"
             :mezcla-nombre="formulas.find((f) => f.id === pedidoParaImprimirVale.formula_id)?.nombre"
+            :cliente-externo="pedidoParaImprimirVale.tipo_pedido === 'venta'"
             :acumulado-tn="acumuladoParaImprimirVale"
             :pedido="pedidoParaImprimirVale"
             :rango-vales="rangoValesParaImprimirVale"
