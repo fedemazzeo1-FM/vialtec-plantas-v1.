@@ -17,6 +17,7 @@ import { useDespachos } from '@/modules/despachos/composables/useDespachos'
 import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 import { formatearNumeroRemito } from '@/services/formato-numeros'
+import { ref } from 'vue'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const mesActualLabel = MESES[new Date().getMonth()]
@@ -108,6 +109,48 @@ function unidadDe(tipo) {
 
 function formatearTn(valor) {
   return valor.toLocaleString('es-AR', { maximumFractionDigits: 1 })
+}
+
+// "Descargar PDF" (2026-09-14, pedido de Federico: al lado de "Imprimir" en
+// los 3 modales de vista previa del sistema) — mismo elemento ".imprimible"
+// que ya arma cada modal para imprimir, pdf-imprimible.js lo rasteriza tal
+// cual. 2 modales acá (Remito Manual y Vale), cada uno con su propio
+// template ref y su propio nombre de archivo.
+const refImprimibleRemito = ref(null)
+const descargandoPdfRemito = ref(false)
+
+async function descargarPdfRemito() {
+  descargandoPdfRemito.value = true
+  error.value = null
+  try {
+    // Import dinámico a propósito — ver el mismo comentario en useBascula.js/
+    // BasculaView.vue#descargarPdf(): html2canvas+jsPDF solo se cargan al
+    // hacer clic acá, no al entrar a Despachos.
+    const { descargarPdfImprimible } = await import('@/services/pdf-imprimible')
+    const nombreArchivo = `Remito-${formatearNumeroRemito(remitoManualProps.value?.numeroRemito)}`
+    await descargarPdfImprimible(refImprimibleRemito.value, { tipo: 'remito', nombreArchivo })
+  } catch (e) {
+    error.value = 'No se pudo generar el PDF: ' + e.message
+  } finally {
+    descargandoPdfRemito.value = false
+  }
+}
+
+const refImprimibleVale = ref(null)
+const descargandoPdfVale = ref(false)
+
+async function descargarPdfVale() {
+  descargandoPdfVale.value = true
+  error.value = null
+  try {
+    const { descargarPdfImprimible } = await import('@/services/pdf-imprimible')
+    const nombreArchivo = `Vale-${formatearNumeroVale(valeParaImprimir.value?.numero_vale)}`
+    await descargarPdfImprimible(refImprimibleVale.value, { tipo: 'vale', nombreArchivo })
+  } catch (e) {
+    error.value = 'No se pudo generar el PDF: ' + e.message
+  } finally {
+    descargandoPdfVale.value = false
+  }
 }
 </script>
 
@@ -419,11 +462,14 @@ function formatearTn(valor) {
         <!-- modo-remito (2026-09-14): mismo criterio que el remito de Báscula
              (ver src/assets/main.css) — dimensiones A4 portrait (210×297mm)
              en vez del landscape default de .imprimible. -->
-        <div class="imprimible modo-remito">
+        <div ref="refImprimibleRemito" class="imprimible modo-remito">
           <RemitoImprimible v-if="remitoManualProps" v-bind="remitoManualProps" />
         </div>
         <div class="mt-4 flex justify-end gap-2">
           <VButton variant="secondary" @click="modalRemitoAbierto = false">Cerrar</VButton>
+          <VButton variant="secondary" :disabled="descargandoPdfRemito" @click="descargarPdfRemito">
+            {{ descargandoPdfRemito ? 'Generando…' : 'Descargar PDF' }}
+          </VButton>
           <VButton @click="imprimir">Imprimir</VButton>
         </div>
       </VModal>
@@ -559,7 +605,7 @@ function formatearTn(valor) {
          componente que useBascula.js) — Teleport a <body>, mismo fix. -->
     <Teleport to="body">
       <VModal :open="modalImpresionValeAbierto" title="Vale de pesaje" size="xl" @update:open="modalImpresionValeAbierto = $event">
-        <div class="imprimible">
+        <div ref="refImprimibleVale" class="imprimible">
           <ValeImprimible
             v-if="valeParaImprimir && pedidoParaImprimirVale"
             :vale="valeParaImprimir"
@@ -574,6 +620,9 @@ function formatearTn(valor) {
         </div>
         <div class="mt-4 flex justify-end gap-2">
           <VButton variant="secondary" @click="modalImpresionValeAbierto = false">Cerrar</VButton>
+          <VButton variant="secondary" :disabled="descargandoPdfVale" @click="descargarPdfVale">
+            {{ descargandoPdfVale ? 'Generando…' : 'Descargar PDF' }}
+          </VButton>
           <VButton @click="imprimir">Imprimir</VButton>
         </div>
       </VModal>

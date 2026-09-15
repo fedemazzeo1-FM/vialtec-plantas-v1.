@@ -24,8 +24,9 @@ import {
   ENTRADA_SALIDA_VALE,
 } from '@/modules/bascula/composables/useBascula'
 import { formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
+import { formatearNumeroRemito } from '@/services/formato-numeros'
 import { useBreakpoint } from '@/composables/useBreakpoint'
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const { esMobile } = useBreakpoint()
@@ -90,6 +91,34 @@ const {
   confirmarAnulacion,
   iniciar,
 } = useBascula()
+
+// "Descargar PDF" (2026-09-14, pedido de Federico: al lado de "Imprimir" en
+// los 3 modales de vista previa del sistema) — mismo elemento ".imprimible"
+// que ya arma el modal para imprimir, pdf-imprimible.js lo rasteriza tal
+// cual. `refImprimible` apunta al div con esa clase en el template de abajo.
+const refImprimible = ref(null)
+const descargandoPdf = ref(false)
+
+async function descargarPdf() {
+  descargandoPdf.value = true
+  error.value = null
+  try {
+    // Import dinámico a propósito (no estático arriba del archivo): html2canvas
+    // + jsPDF pesan ~600kB — cargarlas solo la primera vez que alguien hace
+    // clic acá, no cada vez que se entra a Báscula (mismo criterio que ya usa
+    // el proyecto con exceljs en Stock/Despachos).
+    const { descargarPdfImprimible } = await import('@/services/pdf-imprimible')
+    const nombreArchivo =
+      modoImpresion.value === 'remito'
+        ? `Remito-${formatearNumeroRemito(remitoParaImprimir.value?.numeroRemito)}`
+        : `Vale-${formatearNumeroVale(valeParaImprimir.value?.numero_vale)}`
+    await descargarPdfImprimible(refImprimible.value, { tipo: modoImpresion.value === 'remito' ? 'remito' : 'vale', nombreArchivo })
+  } catch (e) {
+    error.value = 'No se pudo generar el PDF: ' + e.message
+  } finally {
+    descargandoPdf.value = false
+  }
+}
 
 // Réplica exacta del cuadro "Movimientos del día" del legado (2026-09-02,
 // memory/relevamiento-sistema-viejo.md §2, verificado de nuevo en vivo hoy
@@ -536,7 +565,7 @@ watch(
         size="xl"
         @update:open="modalImpresionAbierto = $event"
       >
-        <div class="imprimible" :class="{ 'modo-remito': modoImpresion === 'remito' }">
+        <div ref="refImprimible" class="imprimible" :class="{ 'modo-remito': modoImpresion === 'remito' }">
           <ValeImprimible
             v-if="modoImpresion === 'vale' && valeParaImprimir"
             :vale="valeParaImprimir"
@@ -552,6 +581,9 @@ watch(
         </div>
         <div class="mt-4 flex justify-end gap-2">
           <VButton variant="secondary" @click="modalImpresionAbierto = false">Cerrar</VButton>
+          <VButton variant="secondary" :disabled="descargandoPdf" @click="descargarPdf">
+            {{ descargandoPdf ? 'Generando…' : 'Descargar PDF' }}
+          </VButton>
           <VButton @click="imprimir">Imprimir</VButton>
         </div>
       </VModal>
