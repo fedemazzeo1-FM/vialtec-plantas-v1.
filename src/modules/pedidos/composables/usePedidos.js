@@ -274,6 +274,11 @@ export function usePedidos() {
 
   function abrirNuevo() {
     Object.assign(formNuevo, formularioPedidoVacio())
+    // Responsable precargado con el usuario logueado (2026-09-17, pedido de
+    // Federico) — sigue siendo editable a mano, esto es solo el valor por
+    // defecto. auth.nombre ya resuelve el nombre real vía flota_usuarios_email
+    // (o cae al email si no hay match, ver auth.store.js#_cargarPerfil).
+    formNuevo.encargado = auth.nombre || ''
     modalNuevoAbierto.value = true
   }
 

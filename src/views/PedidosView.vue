@@ -42,6 +42,11 @@ const puedeDespacharAsfalto = computed(() => auth.rol === 'admin' || auth.rol ==
 const puedeDespacharHormigon = computed(
   () => auth.rol === 'admin' || auth.rol === 'plantista' || auth.rol === 'plantista_hormigon'
 )
+// Editar/Postergar por creador (2026-09-17, migración 41): admin/plantista
+// mantienen alcance global; cualquier otro rol (encargado/supervisor, los
+// únicos que además pueden crear pedidos) solo sobre el pedido que él mismo
+// creó — PedidoCard.vue compara pedido.creado_por contra este email.
+const puedeGestionarPedidosGlobal = computed(() => auth.rol === 'admin' || auth.rol === 'plantista')
 
 const {
   error,
@@ -285,6 +290,8 @@ iniciar()
               :puede-confirmar="puedeConfirmar"
               :puede-despachar-asfalto="puedeDespacharAsfalto"
               :puede-despachar-hormigon="puedeDespacharHormigon"
+              :puede-gestionar-global="puedeGestionarPedidosGlobal"
+              :usuario-actual="auth.user?.email"
               @confirmar="confirmar"
               @despachar="despacho.abrir"
               @registrar-carga="cargaHormigon.abrir"

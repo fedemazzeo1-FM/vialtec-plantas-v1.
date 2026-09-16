@@ -19,6 +19,7 @@
 // Editar/Postergar/Cancelar; despachado/cancelado -> solo "Ver historial".
 import VBadge from '@/components/shared/VBadge.vue'
 import VButton from '@/components/shared/VButton.vue'
+import { computed } from 'vue'
 import {
   VARIANTE_ESTADO,
   COLOR_BORDE_ESTADO,
@@ -40,7 +41,20 @@ const props = defineProps({
   puedeConfirmar: { type: Boolean, default: false },
   puedeDespacharAsfalto: { type: Boolean, default: false },
   puedeDespacharHormigon: { type: Boolean, default: false },
+  // Editar/Postergar por creador (2026-09-17, migración 41): admin/plantista
+  // (puedeGestionarGlobal) ven estos botones en cualquier pedido; el resto
+  // solo si pedido.creado_por coincide con su propio email (usuarioActual) —
+  // mismo criterio que ya valida actualizar_pedido()/postergar_pedido() del
+  // lado del servidor, esto solo evita mostrar un botón que el servidor va
+  // a rechazar igual. Pedidos migrados/históricos sin creado_por quedan
+  // gestionables solo por admin/plantista (comportamiento ya esperado).
+  puedeGestionarGlobal: { type: Boolean, default: false },
+  usuarioActual: { type: String, default: null },
 })
+
+const puedeGestionarEstePedido = computed(
+  () => props.puedeGestionarGlobal || (!!props.usuarioActual && props.pedido.creado_por === props.usuarioActual)
+)
 
 defineEmits(['confirmar', 'despachar', 'registrar-carga', 'editar', 'postergar', 'cancelar', 'archivar', 'ver-historial'])
 
@@ -118,10 +132,20 @@ function formatearFechaHoraCreacion(iso) {
       <!-- Resto de acciones (2026-09-04, réplica del legado: agrupadas en la
            misma fila que "Ver historial", a la derecha). -->
       <span class="ml-auto flex flex-wrap gap-1.5">
-        <VButton v-if="ESTADOS_EDITABLES.includes(pedido.estado)" variant="secondary" size="sm" @click="$emit('editar', pedido)">
+        <VButton
+          v-if="ESTADOS_EDITABLES.includes(pedido.estado) && puedeGestionarEstePedido"
+          variant="secondary"
+          size="sm"
+          @click="$emit('editar', pedido)"
+        >
           Editar
         </VButton>
-        <VButton v-if="ESTADOS_POSTERGABLES.includes(pedido.estado)" variant="secondary" size="sm" @click="$emit('postergar', pedido)">
+        <VButton
+          v-if="ESTADOS_POSTERGABLES.includes(pedido.estado) && puedeGestionarEstePedido"
+          variant="secondary"
+          size="sm"
+          @click="$emit('postergar', pedido)"
+        >
           Postergar
         </VButton>
         <VButton v-if="ESTADOS_CANCELABLES.includes(pedido.estado)" variant="danger" size="sm" @click="$emit('cancelar', pedido)">
