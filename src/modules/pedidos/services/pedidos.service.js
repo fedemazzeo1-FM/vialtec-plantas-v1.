@@ -480,10 +480,13 @@ export async function registrarCargaHormigon(cargaData) {
  *
  * @param {{ pedido_id: string, numero_vale: string, cantidad_tn: number,
  *   patente?: string, fecha_carga?: string|Date, observaciones?: string }} cargaData
- *   El N° de remito del despacho (plantas_pedidos.nro_remito_global) ya NO
- *   se recibe acá — desde la migración 36 (2026-09-09, pedido de Federico)
- *   se asigna automáticamente y una sola vez, dentro de la RPC, en la
- *   primera carga del pedido (mismo número para todas las cargas/pesadas).
+ *   El N° de remito del despacho (plantas_pedidos.nro_remito_global) NO se
+ *   recibe ni se genera acá — desde la migración 39 (2026-09-16, pedido de
+ *   Federico) se origina en BÁSCULA (registrar_pesada_bascula, primera
+ *   pesada del pedido), no en esta RPC: el balancero pesa e imprime el
+ *   remito primero, el plantista lo recibe ya asignado al concretar el
+ *   despacho acá. Antes (migración 36) se asignaba en la primera carga de
+ *   ESTA función — eso no reflejaba la operativa real.
  */
 export async function registrarCargaAsfalto(cargaData) {
   const fechaCarga = cargaData.fecha_carga ? new Date(cargaData.fecha_carga) : new Date()

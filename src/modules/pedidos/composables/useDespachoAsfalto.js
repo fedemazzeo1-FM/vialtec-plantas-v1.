@@ -3,9 +3,10 @@
 // legado soporta N cargas con N° de vale obligatorio por carga). Cada carga
 // se persiste con una llamada independiente a registrarCargaAsfalto (RPC
 // atómica con lock de fila) — ver pedidos.service.js. El N° de remito del
-// despacho ya NO se tipea acá: desde 2026-09-09 (pedido de Federico) se
-// asigna automáticamente y una sola vez, dentro de la RPC, en la primera
-// carga del pedido (mismo número para todas las cargas/pesadas).
+// despacho ya NO se tipea (ni se genera) acá: desde la migración 39
+// (2026-09-16, pedido de Federico) se origina en BÁSCULA cuando el
+// balancero procesa la primera pesada del pedido — el plantista ya lo
+// recibe impreso en papel al momento de concretar el despacho acá.
 //
 // Cierre del pedido (Logica sis. plantas v1.rtf §2.2, migración 11): al
 // terminar de cargar, SIEMPRE se llama a finalizarDespacho() — el pedido

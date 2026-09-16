@@ -546,9 +546,19 @@ iniciar()
         </div>
 
         <p class="text-sm font-semibold text-text">Total: {{ despacho.totalCargas.toFixed(2) }} tn</p>
-        <!-- N° de remito: automático desde 2026-09-09 (pedido de Federico) —
-             ya no se tipea acá, lo asigna el sistema en la primera carga y
-             se muestra en el remito imprimible. -->
+        <!-- N° de remito: se origina en Báscula, no acá (migración 39,
+             2026-09-16) — el balancero lo asigna e imprime en la primera
+             pesada del pedido, el plantista lo recibe ya en papel. Esta
+             línea es solo de lectura/confirmación contra ese papel. -->
+        <p class="text-sm text-text-mid">
+          N° de remito:
+          <span v-if="despacho.pedido?.nro_remito_global" class="font-semibold text-text">
+            {{ despacho.pedido.nro_remito_global }}
+          </span>
+          <span v-else class="text-warning">
+            todavía sin asignar — falta procesar la primera pesada en Báscula
+          </span>
+        </p>
 
         <!-- Cierre parcial + pedido residual (Logica sis. plantas v1.rtf §2.2) -->
         <div v-if="despacho.residualEstimado > 0" class="rounded-lg border border-warning/30 bg-warning-light/40 p-3">

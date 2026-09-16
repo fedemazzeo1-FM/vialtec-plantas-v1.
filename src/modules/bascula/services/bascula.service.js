@@ -3,11 +3,14 @@
 // (memory/conventions.md).
 //
 // registrarPesada() llama a la RPC registrar_pesada_bascula (ver
-// supabase/migrations/07_roles_y_rpc_atomicas.sql, extendida en 09 y 10): la
-// lectura del pedido, el insert del vale y el update de cantidad_despachada
-// corren atómicos del lado del servidor (con lock de fila), en vez del flujo
-// multi-paso que tenía este service antes — eso es lo que soluciona la race
-// condition entre slots paralelos pesando el mismo pedido (memory/pending.md).
+// supabase/migrations/07_roles_y_rpc_atomicas.sql, extendida en 09, 10, 20 y
+// 39): la lectura del pedido y el insert del vale corren atómicos del lado
+// del servidor (con lock de fila), en vez del flujo multi-paso que tenía
+// este service antes — eso es lo que soluciona la race condition entre
+// slots paralelos pesando el mismo pedido (memory/pending.md). Desde la
+// migración 39, para asfalto con pedido_id también asigna acá
+// nro_remito_global (una sola vez por pedido, coalesce) — es el ORIGEN real
+// del remito, no Pedidos (registrar_carga_asfalto ya no lo genera).
 //
 // fetchHistorialVales() usa fetchPagina() (paginación server-side): trae solo
 // la página que se muestra en UI, no todo el historial a memoria (memory/
