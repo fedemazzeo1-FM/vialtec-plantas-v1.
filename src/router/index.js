@@ -2,8 +2,9 @@
 // Guard global: exige sesión (excepto /login) y filtra por rol vía
 // auth.store.js#puedeVerTab (memory/business-rules.md, 7 roles).
 
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, START_LOCATION } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
+import { esPantallaMobile } from '@/composables/useBreakpoint'
 // Import estático (no lazy): App.vue también la usa directo para el gate de
 // sesión, así que iba a terminar en el bundle principal de todos modos.
 import LoginView from '@/views/LoginView.vue'
@@ -87,7 +88,7 @@ export const router = createRouter({
   routes,
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   const auth = useAuthStore()
 
   if (!auth.listo) {
@@ -95,12 +96,13 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.publica) {
-    // Ya logueado y yendo a /login -> mandarlo a su primera tab disponible
+    // Ya logueado y yendo a /login -> mandarlo a su ruta de aterrizaje
     // (2026-09-14: antes era siempre 'dashboard' a ciegas — un rol sin
     // permiso de ver Home, como balancero, quedaba en loop infinito con el
-    // chequeo de tab de abajo y la pantalla se veía congelada en /login. Ver
-    // auth.store.js#primeraTabDisponible).
-    if (auth.estaLogueado && to.name === 'login') return { name: auth.primeraTabDisponible ?? 'dashboard' }
+    // chequeo de tab de abajo y la pantalla se veía congelada en /login.
+    // 2026-09-16: la ruta de aterrizaje también prioriza Pedidos en mobile —
+    // ver auth.store.js#rutaInicioSesion).
+    if (auth.estaLogueado && to.name === 'login') return { name: auth.rutaInicioSesion(esPantallaMobile()) }
     return true
   }
 
@@ -108,10 +110,20 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
+  // Primer aterrizaje real de la sesión en esta carga de página (F5 en "/",
+  // apertura directa del dominio/PWA) — `from === START_LOCATION` distingue
+  // esto de un click explícito en "Home" ya con la sesión andando, que
+  // siempre debe llevar a Home sin importar el dispositivo. En mobile,
+  // Pedidos tiene prioridad sobre Home acá (2026-09-16, pedido de Federico:
+  // la operativa de campo vive en Pedidos) — ver auth.store.js#rutaInicioSesion.
+  if (from === START_LOCATION && to.name === 'dashboard' && esPantallaMobile() && auth.puedeVerTab('pedidos')) {
+    return { name: 'pedidos' }
+  }
+
   if (to.meta.tab && !auth.puedeVerTab(to.meta.tab)) {
     // Mismo fallback que arriba — nunca asumir 'dashboard' como destino
     // seguro, un rol sin permiso ahí loopearía contra este mismo chequeo.
-    return { name: auth.primeraTabDisponible ?? 'dashboard' }
+    return { name: auth.rutaInicioSesion(esPantallaMobile()) }
   }
 
   return true

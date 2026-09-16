@@ -31,6 +31,15 @@ import {
 
 const props = defineProps({
   pedido: { type: Object, required: true },
+  // RBAC (2026-09-16, pedido de Federico): Confirmar/Despachar son acciones
+  // sensibles (cierran o mueven stock) — el permiso real vive en las RPC del
+  // servidor (confirmar_pedido/registrar_carga_asfalto/registrar_carga_hormigon),
+  // esto solo evita mostrar un botón que el servidor va a rechazar igual.
+  // Se calculan en PedidosView.vue (auth.store.js), no acá — este componente
+  // sigue siendo puramente presentacional (memory/conventions.md).
+  puedeConfirmar: { type: Boolean, default: false },
+  puedeDespacharAsfalto: { type: Boolean, default: false },
+  puedeDespacharHormigon: { type: Boolean, default: false },
 })
 
 defineEmits(['confirmar', 'despachar', 'registrar-carga', 'editar', 'postergar', 'cancelar', 'archivar', 'ver-historial'])
@@ -74,14 +83,14 @@ function formatearFechaHoraCreacion(iso) {
       <!-- Acción principal (2026-09-04, réplica del legado: botón grande
            arriba a la derecha, distinto del resto de las acciones). -->
       <VButton
-        v-if="ESTADOS_CONFIRMABLES.includes(pedido.estado)"
+        v-if="ESTADOS_CONFIRMABLES.includes(pedido.estado) && puedeConfirmar"
         size="sm"
         @click="$emit('confirmar', pedido)"
       >
         Confirmar
       </VButton>
       <VButton
-        v-else-if="pedido.estado === 'confirmado' && pedido.tipo === 'asfalto'"
+        v-else-if="pedido.estado === 'confirmado' && pedido.tipo === 'asfalto' && puedeDespacharAsfalto"
         variant="success"
         size="sm"
         @click="$emit('despachar', pedido)"
@@ -89,7 +98,7 @@ function formatearFechaHoraCreacion(iso) {
         ↑ Despachar
       </VButton>
       <VButton
-        v-else-if="pedido.estado === 'confirmado' && pedido.tipo === 'hormigon'"
+        v-else-if="pedido.estado === 'confirmado' && pedido.tipo === 'hormigon' && puedeDespacharHormigon"
         variant="success"
         size="sm"
         @click="$emit('registrar-carga', pedido)"

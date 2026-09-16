@@ -25,6 +25,7 @@
 import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
+import { esPantallaMobile } from '@/composables/useBreakpoint'
 import logoVialtec from '@/assets/img/logo-vialtec.png'
 
 const auth = useAuthStore()
@@ -43,7 +44,10 @@ async function enviar() {
   enviando.value = true
   try {
     await auth.login(email.value.trim(), password.value)
-    router.replace(route.query.redirect || '/dashboard')
+    // Ruta de aterrizaje: respeta un ?redirect= explícito (deep link) por
+    // sobre todo; si no hay, en mobile prioriza Pedidos sobre Home
+    // (2026-09-16, ver auth.store.js#rutaInicioSesion).
+    router.replace(route.query.redirect || { name: auth.rutaInicioSesion(esPantallaMobile()) })
   } catch (e) {
     error.value = e.message
   } finally {
@@ -118,7 +122,7 @@ async function confirmarNuevaPassword() {
   guardandoPassword.value = true
   try {
     await auth.completarRecoveryPassword(nuevaPassword.value)
-    router.replace(route.query.redirect || '/dashboard')
+    router.replace(route.query.redirect || { name: auth.rutaInicioSesion(esPantallaMobile()) })
   } catch (e) {
     error.value = e.message
     // completarRecoveryPassword() ya reseteó el store si la sesión temporal del link

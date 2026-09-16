@@ -57,6 +57,12 @@ export const useAuthStore = defineStore('auth', {
     // en supabase/migrations/26_matriz_permisos_roles.sql). Vacío para
     // admin: admin tiene bypass total, no se calcula desde acá.
     modulosVer: new Set(),
+    // Set de "modulo:accion" habilitados (cualquier acción, no solo "ver") —
+    // 2026-09-16, RBAC de Pedidos: permite chequear del lado del cliente lo
+    // mismo que plantas_tiene_permiso() chequea del lado del servidor (ej.
+    // 'pedidos:aprobar'), sin hardcodear roles en la UI ni duplicar la
+    // matriz. Vacío para admin (bypass total, ver getter tienePermiso).
+    permisosHabilitados: new Set(),
     cargando: false,
     listo: false, // true cuando ya se resolvió la sesión inicial (evita parpadeo en los guards)
     // true tras click en un link de recuperación de contraseña (evento PASSWORD_RECOVERY
@@ -95,6 +101,29 @@ export const useAuthStore = defineStore('auth', {
       const ORDEN_TABS = ['dashboard', 'pedidos', 'plan-semanal', 'despachos', 'bascula', 'stock', 'simulador', 'formulas', 'maestros']
       return ORDEN_TABS.find((tab) => this.puedeVerTab(tab)) ?? null
     },
+    // Chequeo genérico modulo/acción (2026-09-16) — espejo cliente de
+    // plantas_tiene_permiso(modulo, accion) del servidor. Admin: bypass
+    // total, igual que el servidor. Uso típico: gatear en la UI un botón
+    // cuya RPC detrás está protegida por la matriz (ej. 'pedidos'/'aprobar'
+    // para "Confirmar pedido") — evita mostrar una acción que el servidor va
+    // a rechazar igual.
+    tienePermiso: (state) => (modulo, accion) => {
+      if (state.rol === 'admin') return true
+      return state.permisosHabilitados.has(`${modulo}:${accion}`)
+    },
+    // Ruta de aterrizaje al iniciar sesión (2026-09-16, pedido de Federico):
+    // en mobile, Pedidos tiene prioridad sobre Home — la operativa de campo
+    // (confirmar/despachar/ver pedidos del día) vive ahí, no en el dashboard
+    // de KPIs. Se usa tanto desde LoginView.vue (login explícito) como desde
+    // router/index.js (F5/apertura directa, "ya logueado y volviendo a
+    // /login"). Fuera de mobile, o si el rol no puede ver Pedidos, cae al
+    // mismo criterio de siempre (primeraTabDisponible).
+    rutaInicioSesion() {
+      return (esMobile) => {
+        if (esMobile && this.puedeVerTab('pedidos')) return 'pedidos'
+        return this.primeraTabDisponible ?? 'dashboard'
+      }
+    },
   },
 
   actions: {
@@ -118,22 +147,26 @@ export const useAuthStore = defineStore('auth', {
       this.verVentas = rolRow.ver_ventas
       this.obraIds = rolRow.obra_ids ?? []
 
-      // Matriz real de "ver" por módulo (migración 26) — admin no la
-      // necesita (bypass total en el getter de arriba), así nos ahorramos
-      // el request para el rol más frecuente en el día a día del admin.
+      // Matriz real de permisos (migración 26, ampliada 2026-09-16 a todas
+      // las acciones — no solo "ver") — admin no la necesita (bypass total
+      // en los getters de arriba), así nos ahorramos el request para el rol
+      // más frecuente en el día a día del admin.
       if (rolRow.rol === 'admin') {
         this.modulosVer = new Set()
+        this.permisosHabilitados = new Set()
       } else {
-        const { data: filasVer, error: errorVer } = await supabase
+        const { data: filasPermisos, error: errorPermisos } = await supabase
           .from('plantas_permisos')
-          .select('modulo')
+          .select('modulo, accion')
           .eq('rol_id', rolRow.rol)
-          .eq('accion', 'ver')
           .eq('habilitado', true)
         // No tumba el login si falla — degradación segura: sin filas, el
-        // usuario no ve ninguna pestaña más que Home (mismo criterio de
-        // "seguro por default" que plantas_tiene_permiso() del servidor).
-        this.modulosVer = new Set(errorVer ? [] : (filasVer ?? []).map((f) => f.modulo))
+        // usuario no ve ninguna pestaña más que Home ni ninguna acción
+        // protegida por la matriz (mismo criterio de "seguro por default"
+        // que plantas_tiene_permiso() del servidor).
+        const filas = errorPermisos ? [] : (filasPermisos ?? [])
+        this.modulosVer = new Set(filas.filter((f) => f.accion === 'ver').map((f) => f.modulo))
+        this.permisosHabilitados = new Set(filas.map((f) => `${f.modulo}:${f.accion}`))
       }
 
       // Nombre para mostrar — lectura best-effort desde flota_usuarios_email,

@@ -22,8 +22,26 @@ import { useCargaHormigon } from '@/modules/pedidos/composables/useCargaHormigon
 import PedidoCard from '@/modules/pedidos/components/PedidoCard.vue'
 import { ESTADOS, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { useAuthStore } from '@/stores/auth.store'
+import { computed } from 'vue'
 
 const { esMobile } = useBreakpoint()
+const auth = useAuthStore()
+
+// RBAC (2026-09-16, pedido de Federico): Confirmar/Despachar solo para
+// plantista/admin — "pedidos.aprobar" en la matriz hoy resuelve exactamente
+// a ese par de roles (admin por bypass total). Despachar difiere por tipo
+// porque las RPC detrás (registrar_carga_asfalto/registrar_carga_hormigon)
+// hardcodean roles distintos, no pasan por la matriz: asfalto queda
+// admin/plantista únicamente, hormigón además admite plantista_hormigon
+// (rol que existe específicamente para despachar hormigón — no se le puede
+// sacar esa única acción sin romper su función real). Ver esos 2 archivos
+// de migración si esto cambia algún día.
+const puedeConfirmar = computed(() => auth.tienePermiso('pedidos', 'aprobar'))
+const puedeDespacharAsfalto = computed(() => auth.rol === 'admin' || auth.rol === 'plantista')
+const puedeDespacharHormigon = computed(
+  () => auth.rol === 'admin' || auth.rol === 'plantista' || auth.rol === 'plantista_hormigon'
+)
 
 const {
   error,
@@ -264,6 +282,9 @@ iniciar()
               v-for="pedido in grupo.filas"
               :key="pedido.id"
               :pedido="pedido"
+              :puede-confirmar="puedeConfirmar"
+              :puede-despachar-asfalto="puedeDespacharAsfalto"
+              :puede-despachar-hormigon="puedeDespacharHormigon"
               @confirmar="confirmar"
               @despachar="despacho.abrir"
               @registrar-carga="cargaHormigon.abrir"
