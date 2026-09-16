@@ -54,25 +54,67 @@ export function estiloHeaderTabla(cell) {
 export function estiloSubtotal(cell) {
   aplicarFill(cell, VIOLETA_CLARO)
   cell.font = { bold: true, color: { argb: VIOLETA }, size: 10 }
+  cell.border = BORDE_CELDA
+  cell.alignment = { vertical: 'middle' }
 }
 
 export function estiloTotalGeneral(cell, size = 10) {
   aplicarFill(cell, VIOLETA_OSCURO)
   cell.font = { bold: true, color: { argb: BLANCO }, size }
+  cell.border = BORDE_CELDA
+  cell.alignment = { vertical: 'middle' }
 }
 
 export function estiloBandaExterna(cell) {
   aplicarFill(cell, VIOLETA)
   cell.font = { bold: true, color: { argb: BLANCO }, size: 11 }
+  cell.border = BORDE_CELDA
+  cell.alignment = { vertical: 'middle' }
 }
 
 export function estiloCuerpo(cell, esPar = false) {
   cell.font = { color: { argb: GRIS_TEXTO }, size: 10 }
   cell.border = BORDE_CELDA
+  // Centrado vertical (2026-09-17, pedido de Federico: "presentación
+  // profesional") en TODAS las celdas de cuerpo — antes solo el header lo
+  // tenía. wrapText queda afuera acá a propósito: activarlo en celdas
+  // cortas (números, fechas) no aporta nada y puede afinar filas sin
+  // necesidad; las columnas de texto largo (Notas, Cliente) lo activan
+  // puntualmente donde se escriben (excel-informe-mensual.js).
+  cell.alignment = { vertical: 'middle' }
   // Zebra striping (2026-09-03, pedido de Federico: "bien profesionales y
   // estéticos") — filas pares con un gris muy claro, impares blancas; hace
   // mucho más legible una tabla larga sin depender de bordes solos.
   if (esPar) aplicarFill(cell, 'FFF9FAFB')
+}
+
+/**
+ * Anchos "auto-fit" a partir del contenido REAL ya formateado (no del label
+ * solo) — evita texto cortado o `###` en números/fechas anchas (2026-09-17,
+ * pedido de Federico). Recibe arrays de arrays ya en su forma de display
+ * final (mismo texto que se va a escribir en cada celda) — nunca filas de
+ * título/banner mergeadas: una fila mergeada A:K con un título largo
+ * "pertenece" en los datos a la columna A sola, así que distorsionaría el
+ * ancho de esa columna si se la incluyera acá. El caller arma los arrays
+ * (típicamente header + cuerpo + totales de cada tabla) y los pasa acá; se
+ * puede llamar una sola vez combinando varias tablas que comparten las
+ * mismas columnas físicas (ver armarHojaDestino en excel-informe-mensual.js).
+ * @param {Array<Array<any>>} filas
+ * @param {{minimo?: number, maximo?: number}} [opciones]
+ * @returns {number[]} ancho por columna, mismo orden que las filas
+ */
+export function calcularAnchosAutoFit(filas, { minimo = 8, maximo = 45 } = {}) {
+  const nCols = filas.reduce((max, f) => Math.max(max, f.length), 0)
+  const anchos = new Array(nCols).fill(minimo)
+  for (const fila of filas) {
+    fila.forEach((valor, i) => {
+      if (valor == null || valor === '') return
+      const texto = String(valor)
+      const largoMayor = Math.max(...texto.split('\n').map((l) => l.length))
+      anchos[i] = Math.min(maximo, Math.max(anchos[i], largoMayor + 2))
+    })
+  }
+  return anchos
 }
 
 let logoBufferCache = null

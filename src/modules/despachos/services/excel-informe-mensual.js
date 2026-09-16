@@ -32,7 +32,13 @@ import {
   estiloBandaExterna,
   estiloCuerpo,
   agregarPieInstitucional,
+  calcularAnchosAutoFit,
 } from '@/services/excel-corporativo'
+
+// Amarillo (2026-09-17, pedido de Federico): color de pestaña/solapa de
+// "Ventas Externas" — la única hoja que lo usa, para distinguirla a simple
+// vista del resto (violeta) en la barra de hojas de Excel.
+const AMARILLO_TAB = 'FFFFEB3B'
 
 const TN = (v) => (v ? `${Number(v).toFixed(2)} tn` : '—')
 const M3 = (v) => (v ? `${Number(v).toFixed(1)} m³` : '—')
@@ -75,6 +81,8 @@ function agregarLogo(workbook, worksheet, logoBuffer) {
 function armarHojaResumenMensual(workbook, datos) {
   const ws = workbook.addWorksheet('Resumen mensual')
   ws.columns = [{ width: 5 }, { width: 42 }, { width: 13 }, { width: 20 }, { width: 18 }]
+  ws.properties.defaultRowHeight = 18
+  ws.views = [{ showGridLines: true }]
   ws.getRow(1).height = 50 // agrandada junto con el logo, ver agregarLogo()
 
   ws.mergeCells('A2:E2')
@@ -311,6 +319,8 @@ function generarImagenGraficoAnual(filas) {
 async function armarHojaResumenAnual(workbook, datos) {
   const ws = workbook.addWorksheet('Resumen anual')
   ws.columns = [{ width: 20 }, { width: 18 }, { width: 18 }]
+  ws.properties.defaultRowHeight = 18
+  ws.views = [{ showGridLines: true }]
 
   ws.mergeCells('A1:C1')
   ws.getCell('A1').value = `Informe Anual Enero–${datos.mesLabel}`
@@ -367,6 +377,8 @@ async function armarHojaResumenAnual(workbook, datos) {
 function armarHojaProveedores(workbook, datos) {
   const ws = workbook.addWorksheet('Analítica de Proveedores')
   ws.columns = [{ width: 30 }, { width: 24 }, { width: 10 }, { width: 14 }]
+  ws.properties.defaultRowHeight = 18
+  ws.views = [{ showGridLines: true }]
 
   ws.mergeCells('A1:D1')
   ws.getCell('A1').value = `Analítica de proveedores — ${datos.mesLabel}`
@@ -424,15 +436,81 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasResumen, filasPesadas
   const nombreHoja = nombre.replace(/[:\\/?*[\]]/g, ' ').slice(0, 31)
   const ws = workbook.addWorksheet(nombreHoja)
   const N_COLS = 11
-  ws.columns = [
-    { width: 6 }, { width: 24 }, { width: 16 }, { width: 20 }, { width: 10 },
-    { width: 12 }, { width: 12 }, { width: 9 }, { width: 14 }, { width: 14 }, { width: 16 },
-  ]
   const letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
+  ws.properties.defaultRowHeight = 18 // filas de datos (2026-09-17, pedido de Federico)
+  ws.views = [{ showGridLines: true }]
+
+  const header1 = ['N°', 'Cliente', 'Fecha', 'Mezcla', 'Tipo', 'Solicitado', 'Real', 'Unidad', 'Estado', 'N° Remito', 'N° Vale']
+  const header2 = ['N°', 'Fecha/Hora', 'Tipo', 'N° Vale', 'N° Remito', 'Patente', 'Chofer', 'Cantidad', 'Unidad']
+
+  // Cada fila se resuelve a { valores, texto }: `valores` es lo que se
+  // ESCRIBE en la celda (Number/Date reales — no strings prearmados — para
+  // que Excel los trate como tales: ordenables/filtrables, con el numFmt
+  // aplicado más abajo). `texto` es el equivalente en pantalla, usado SOLO
+  // para calcular el ancho auto-fit de columna (calcularAnchosAutoFit,
+  // excel-corporativo.js) — nunca se escribe en una celda.
+  const filas1 = filasResumen.map((d, i) => ({
+    valores: [
+      i + 1, nombre, d.fecha ? new Date(d.fecha) : null, d.mezcla, d.tipo,
+      Number(d.pedido) || 0, Number(d.real) || 0, d.unidad, d.estado ?? '', d.nroRemito || '', d.nroVale || '',
+    ],
+    texto: [
+      i + 1, nombre, FECHA(d.fecha), d.mezcla, d.tipo,
+      (Number(d.pedido) || 0).toFixed(2), (Number(d.real) || 0).toFixed(2), d.unidad, d.estado ?? '', d.nroRemito || '', d.nroVale || '',
+    ],
+  }))
+
+  // Fix 2026-09-07 (revisión general pedida por Federico): un mismo destino
+  // (obra o cliente externo) puede recibir asfalto Y hormigón en el mismo
+  // mes — antes se sumaban `real` de las dos en una sola variable, mezclando
+  // tn con m³ en un solo "TOTAL" sin sentido. Se totaliza por tipo — una
+  // fila "TOTAL ASFALTO"/"TOTAL HORMIGÓN" por cada uno que tenga al menos un
+  // despacho ese mes (el caso más común, un solo tipo, sigue viéndose como
+  // una sola fila de total).
+  const tipos = [...new Set(filasResumen.map((d) => d.tipo))]
+  const totales1 = tipos.map((tipo) => {
+    const delTipo = filasResumen.filter((d) => d.tipo === tipo)
+    const totalReal = Number(delTipo.reduce((acc, d) => acc + d.real, 0).toFixed(2))
+    const valores = [
+      tipos.length > 1 ? `TOTAL ${tipo.toUpperCase()}` : 'TOTAL', null, null, null,
+      `${delTipo.length} desp.`, null, totalReal, delTipo[0]?.unidad ?? '', null, null, null,
+    ]
+    return { valores, texto: valores.map((v) => (v == null ? '' : String(v))) }
+  })
+
+  const filas2 = filasPesadas.map((p, i) => ({
+    valores: [i + 1, p.fecha ? new Date(p.fecha) : null, p.tipo, p.nroVale || '', p.nroRemito || '', p.patente, p.chofer, Number(p.cantidad) || 0, p.unidad],
+    texto: [i + 1, FECHA_HORA(p.fecha), p.tipo, p.nroVale || '', p.nroRemito || '', p.patente, p.chofer, (Number(p.cantidad) || 0).toFixed(2), p.unidad],
+  }))
+
+  const tiposPesadas = [...new Set(filasPesadas.map((p) => p.tipo))]
+  const totales2 = tiposPesadas.map((tipo) => {
+    const delTipo = filasPesadas.filter((p) => p.tipo === tipo)
+    const totalCantidad = Number(delTipo.reduce((acc, p) => acc + p.cantidad, 0).toFixed(2))
+    const valores = [
+      tiposPesadas.length > 1 ? `TOTAL ${tipo.toUpperCase()}` : 'TOTAL', null,
+      `${delTipo.length} pesada${delTipo.length === 1 ? '' : 's'}`, null, null, null, null, totalCantidad, delTipo[0]?.unidad ?? '',
+    ]
+    return { valores, texto: valores.map((v) => (v == null ? '' : String(v))) }
+  })
+
+  // Auto-fit (2026-09-17, pedido de Federico: "evitar textos cortados o
+  // ###"): combina el contenido de las 2 tablas, que comparten las mismas
+  // 11 columnas físicas con distinto significado según la sección (mismo
+  // criterio ya usado en armarHojaResumenMensual para "Despachos por
+  // obra"/"Consumo de insumos"). Nunca incluye las filas de título/banner
+  // mergeadas (ver doc de calcularAnchosAutoFit) — esas se escriben aparte,
+  // después de fijar el ancho.
+  const anchos = calcularAnchosAutoFit([
+    header1, ...filas1.map((f) => f.texto), ...totales1.map((f) => f.texto),
+    header2, ...filas2.map((f) => f.texto), ...totales2.map((f) => f.texto),
+  ])
+  ws.columns = anchos.map((width) => ({ width }))
 
   ws.mergeCells(`A1:${letras[N_COLS - 1]}1`)
   ws.getCell('A1').value = nombre
   ws.getCell('A1').font = { bold: true, size: 13, color: { argb: GRIS_TEXTO } }
+  ws.getRow(1).height = 24
   ws.mergeCells(`A2:${letras[N_COLS - 1]}2`)
   ws.getCell('A2').value = `Despachos — ${mesLabel}`
   ws.getCell('A2').font = { italic: true, size: 10, color: { argb: GRIS_SUAVE } }
@@ -442,45 +520,42 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasResumen, filasPesadas
   ws.mergeCells(`A${fila}:${letras[N_COLS - 1]}${fila}`)
   ws.getCell(`A${fila}`).value = '  Resumen por pedido'
   letras.forEach((c) => estiloSubtotal(ws.getCell(`${c}${fila}`)))
+  ws.getRow(fila).height = 20
   fila++
 
-  const header1 = ws.getRow(fila)
-  header1.values = ['N°', 'Cliente', 'Fecha', 'Mezcla', 'Tipo', 'Solicitado', 'Real', 'Unidad', 'Estado', 'N° Remito', 'N° Vale']
-  header1.eachCell((cell) => estiloHeaderTabla(cell))
+  ws.getRow(fila).values = header1
+  ws.getRow(fila).height = 22
+  ws.getRow(fila).eachCell((cell) => estiloHeaderTabla(cell))
   fila++
 
-  filasResumen.forEach((d, i) => {
+  filas1.forEach(({ valores }) => {
     const row = ws.getRow(fila)
-    row.values = [i + 1, nombre, FECHA(d.fecha), d.mezcla, d.tipo, d.pedido, d.real, d.unidad, d.estado ?? '', d.nroRemito, d.nroVale]
+    row.values = valores
+    row.height = 18
     row.eachCell((cell) => estiloCuerpo(cell))
+    row.getCell(2).alignment = { vertical: 'middle', wrapText: true } // Cliente
+    row.getCell(4).alignment = { vertical: 'middle', wrapText: true } // Mezcla
+    row.getCell(3).numFmt = 'dd/mm/yyyy' // Fecha
+    row.getCell(6).numFmt = '#,##0.00' // Solicitado
+    row.getCell(7).numFmt = '#,##0.00' // Real
+    row.getCell(10).numFmt = '@' // N° Remito — texto, nunca reinterpretado como número
+    row.getCell(11).numFmt = '@' // N° Vale
     fila++
   })
 
-  if (!filasResumen.length) {
+  if (!filas1.length) {
     ws.mergeCells(`A${fila}:${letras[N_COLS - 1]}${fila}`)
     ws.getCell(`A${fila}`).value = 'Sin despachos en el mes.'
     ws.getCell(`A${fila}`).font = { italic: true, size: 10, color: { argb: GRIS_SUAVE } }
     fila++
   }
 
-  // Fix 2026-09-07 (revisión general pedida por Federico): un mismo destino
-  // (obra o cliente externo) puede recibir asfalto Y hormigón en el mismo
-  // mes — antes se sumaban `real` de las dos en una sola variable, mezclando
-  // tn con m³ en un solo "TOTAL" sin sentido (y la unidad mostrada era la de
-  // la ÚLTIMA fila nomás, no la de la suma). Ahora se totaliza por tipo —
-  // una fila "TOTAL ASFALTO"/"TOTAL HORMIGÓN" por cada uno que tenga al
-  // menos un despacho ese mes (el caso más común, un solo tipo, sigue
-  // viéndose como una sola fila de total, igual que antes).
-  const tipos = [...new Set(filasResumen.map((d) => d.tipo))]
-  tipos.forEach((tipo) => {
-    const delTipo = filasResumen.filter((d) => d.tipo === tipo)
-    const totalReal = delTipo.reduce((acc, d) => acc + d.real, 0)
-    const total = ws.getRow(fila)
-    total.getCell(1).value = tipos.length > 1 ? `TOTAL ${tipo.toUpperCase()}` : 'TOTAL'
-    total.getCell(5).value = `${delTipo.length} desp.`
-    total.getCell(7).value = Number(totalReal.toFixed(2))
-    total.getCell(8).value = delTipo[0]?.unidad ?? ''
-    letras.forEach((c) => estiloSubtotal(total.getCell(c)))
+  totales1.forEach(({ valores }) => {
+    const row = ws.getRow(fila)
+    row.values = valores
+    row.height = 20
+    letras.forEach((c) => estiloSubtotal(row.getCell(c)))
+    row.getCell(7).numFmt = '#,##0.00'
     fila++
   })
   fila += 1 // aire entre tablas
@@ -489,36 +564,38 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasResumen, filasPesadas
   ws.mergeCells(`A${fila}:${letras[N_COLS - 1]}${fila}`)
   ws.getCell(`A${fila}`).value = '  Detalle de pesadas'
   letras.forEach((c) => estiloSubtotal(ws.getCell(`${c}${fila}`)))
+  ws.getRow(fila).height = 20
   fila++
 
-  const header2 = ws.getRow(fila)
-  header2.values = ['N°', 'Fecha/Hora', 'Tipo', 'N° Vale', 'N° Remito', 'Patente', 'Chofer', 'Cantidad', 'Unidad']
-  header2.eachCell((cell) => estiloHeaderTabla(cell))
+  ws.getRow(fila).values = header2
+  ws.getRow(fila).height = 22
+  ws.getRow(fila).eachCell((cell) => estiloHeaderTabla(cell))
   fila++
 
-  filasPesadas.forEach((p, i) => {
+  filas2.forEach(({ valores }) => {
     const row = ws.getRow(fila)
-    row.values = [i + 1, FECHA_HORA(p.fecha), p.tipo, p.nroVale, p.nroRemito, p.patente, p.chofer, Number(p.cantidad.toFixed(2)), p.unidad]
+    row.values = valores
+    row.height = 18
     row.eachCell((cell) => estiloCuerpo(cell))
+    row.getCell(2).numFmt = 'dd/mm/yyyy hh:mm' // Fecha/Hora
+    row.getCell(4).numFmt = '@' // N° Vale
+    row.getCell(5).numFmt = '@' // N° Remito
+    row.getCell(8).numFmt = '#,##0.00' // Cantidad
     fila++
   })
 
-  if (!filasPesadas.length) {
+  if (!filas2.length) {
     ws.mergeCells(`A${fila}:${letras[N_COLS - 1]}${fila}`)
     ws.getCell(`A${fila}`).value = 'Sin pesadas/cargas individuales registradas en el mes.'
     ws.getCell(`A${fila}`).font = { italic: true, size: 10, color: { argb: GRIS_SUAVE } }
     fila++
   } else {
-    const tiposPesadas = [...new Set(filasPesadas.map((p) => p.tipo))]
-    tiposPesadas.forEach((tipo) => {
-      const delTipo = filasPesadas.filter((p) => p.tipo === tipo)
-      const totalCantidad = delTipo.reduce((acc, p) => acc + p.cantidad, 0)
-      const total = ws.getRow(fila)
-      total.getCell(1).value = tiposPesadas.length > 1 ? `TOTAL ${tipo.toUpperCase()}` : 'TOTAL'
-      total.getCell(3).value = `${delTipo.length} pesada${delTipo.length === 1 ? '' : 's'}`
-      total.getCell(8).value = Number(totalCantidad.toFixed(2))
-      total.getCell(9).value = delTipo[0]?.unidad ?? ''
-      letras.forEach((c) => estiloSubtotal(total.getCell(c)))
+    totales2.forEach(({ valores }) => {
+      const row = ws.getRow(fila)
+      row.values = valores
+      row.height = 20
+      letras.forEach((c) => estiloSubtotal(row.getCell(c)))
+      row.getCell(8).numFmt = '#,##0.00'
       fila++
     })
   }
@@ -552,6 +629,12 @@ export async function construirWorkbookInformeMensual(datos, logoBuffer) {
 
   if (datos.hojaVentasExternas.destinos.length) {
     const wsVentas = workbook.addWorksheet('Ventas Externas')
+    // Pestaña amarilla (2026-09-17, pedido de Federico) — distingue esta
+    // hoja a simple vista en la barra de solapas de Excel (el resto usa el
+    // violeta corporativo por defecto).
+    wsVentas.properties.tabColor = { argb: AMARILLO_TAB }
+    wsVentas.properties.defaultRowHeight = 18
+    wsVentas.views = [{ showGridLines: true }]
     wsVentas.columns = [{ width: 5 }, { width: 40 }, { width: 12 }, { width: 20 }, { width: 18 }]
     wsVentas.mergeCells('A1:E1')
     wsVentas.getCell('A1').value = `Ventas Externas — ${datos.mesLabel}`
