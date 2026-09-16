@@ -11,7 +11,14 @@
 // queries en el momento del export, según el mes elegido en el selector de
 // "Resumen por obra" — nada hardcodeado (pedido explícito de Federico).
 
-import { fetchResumenPorObra, fetchTotalesMes, fetchDespachos, rangoDelMes } from '@/services/despachos.service'
+import {
+  fetchResumenPorObra,
+  fetchTotalesMes,
+  fetchDespachos,
+  rangoDelMes,
+  fetchValesDeVariosPedidos,
+  fetchCargasHormigonDeVariosPedidos,
+} from '@/services/despachos.service'
 import { fetchTodosLosMovimientos } from '@/services/stock.service'
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
@@ -131,12 +138,68 @@ export async function fetchResumenAnual(mesHasta) {
 }
 
 /**
+ * Detalle de pesadas/cargas individuales (Tabla 2 de la hoja por destino,
+ * 2026-09-16, pedido de Federico) — una fila por CAMIÓN/pesada real, a
+ * diferencia del resumen por pedido de fetchDetalleDestinoDelMes() (una fila
+ * por pedido). Asfalto sale de plantas_vales (Báscula, no anulados): es la
+ * única fuente con peso NETO realmente pesado, chofer y N° de vale siempre
+ * poblado — plantas_cargas_asfalto (lo que tipea el plantista al despachar)
+ * no tiene chofer ni peso real, solo la cantidad declarada, y memory/
+ * business-rules.md es explícito en que Báscula y Pedidos no se dedupean
+ * entre sí, así que no se mezclan ambas fuentes en una sola fila acá.
+ * Hormigón no tiene báscula (se mide por volumen del mixer, no se pesa) —
+ * sale de plantas_cargas_hormigon, remito/chofer por carga siempre
+ * poblados (ambos obligatorios al despachar).
+ * @param {Array<{id: string, tipo: string}>} pedidos crudos (fetchDespachos)
+ * @param {Record<string, {nro_remito_global: string|null}>} pedidosPorId
+ */
+async function fetchDetallePesadasDelMes(pedidos, pedidosPorId) {
+  const idsAsfalto = pedidos.filter((p) => p.tipo === 'asfalto').map((p) => p.id)
+  const idsHormigon = pedidos.filter((p) => p.tipo === 'hormigon').map((p) => p.id)
+
+  const [vales, cargasHormigon] = await Promise.all([
+    fetchValesDeVariosPedidos(idsAsfalto),
+    fetchCargasHormigonDeVariosPedidos(idsHormigon),
+  ])
+
+  const filasAsfalto = vales.map((v) => ({
+    fecha: v.fecha_pesada,
+    tipo: 'Asfalto',
+    // N° Remito es 1 solo por PEDIDO (compartido por todas sus pesadas,
+    // migración 39) — se resuelve acá contra el pedido dueño de cada vale,
+    // no contra el vale (que no tiene remito propio).
+    nroRemito: pedidosPorId[v.pedido_id]?.nro_remito_global || '',
+    nroVale: v.numero_vale != null ? String(v.numero_vale) : '',
+    patente: v.patente || '',
+    chofer: v.chofer || '',
+    cantidad: v.unidad === 'kg' ? Number(v.peso_neto) / 1000 : Number(v.peso_neto),
+    unidad: 'tn',
+  }))
+
+  const filasHormigon = cargasHormigon.map((c) => ({
+    fecha: c.fecha_carga,
+    tipo: 'Hormigón',
+    nroRemito: c.numero_remito || '', // por carga, no por pedido — "el remito ya es por carga" en hormigón
+    nroVale: '', // hormigón no tiene concepto de vale (no se pesa en báscula)
+    patente: c.patente_mixer || '',
+    chofer: c.chofer || '',
+    cantidad: Number(c.volumen_m3) || 0,
+    unidad: 'm³',
+  }))
+
+  return [...filasAsfalto, ...filasHormigon].sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
+}
+
+/**
  * Detalle de despachos (vale/remito/entrega) de una obra puntual en el mes
- * — una hoja del informe por obra. Reusa fetchDespachos() (ya existe,
- * paginado) filtrando por obraId + el rango del mes; para ventas externas
- * (sin obra propia) filtra client-side por cliente_externo ya que
- * fetchDespachos() no tiene ese filtro (volumen bajo por cliente, no
- * amerita agregar un filtro server-side nuevo solo para esto).
+ * — una hoja del informe por obra, con 2 tablas (2026-09-16, pedido de
+ * Federico): `resumen` (una fila por PEDIDO, Tabla 1) y `pesadas` (una fila
+ * por camión/carga real, Tabla 2 — ver fetchDetallePesadasDelMes() arriba).
+ * Reusa fetchDespachos() (ya existe, paginado) filtrando por obraId + el
+ * rango del mes; para ventas externas (sin obra propia) filtra client-side
+ * por cliente_externo ya que fetchDespachos() no tiene ese filtro (volumen
+ * bajo por cliente, no amerita agregar un filtro server-side nuevo solo
+ * para esto).
  * @param {{ obraId?: number, clienteExterno?: string }} destino
  * @param {string} mes 'YYYY-MM'
  * @param {Record<string, {nombre: string}>} formulasPorId para resolver el nombre de mezcla (columna "Mezcla" de la hoja)
@@ -155,12 +218,14 @@ export async function fetchDetalleDestinoDelMes(destino, mes, formulasPorId) {
     ? filas
     : filas.filter((f) => (f.cliente_externo || 'Venta externa') === destino.clienteExterno)
 
-  return propias
+  const resumen = propias
     .map((p) => ({
+      id: p.id,
       fecha: p.fecha_programada,
       mezcla: formulasPorId[p.formula_id]?.nombre ?? '—',
       tipo: p.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto',
       unidad: p.tipo === 'hormigon' ? 'm³' : 'tn',
+      estado: p.estado,
       pedido: Number(p.cantidad_solicitada),
       real: Number(p.cantidad_despachada) || 0,
       nroRemito: p.nro_remito_global || '',
@@ -169,6 +234,11 @@ export async function fetchDetalleDestinoDelMes(destino, mes, formulasPorId) {
       notas: p.motivo || '',
     }))
     .sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
+
+  const pedidosPorId = Object.fromEntries(propias.map((p) => [p.id, p]))
+  const pesadas = await fetchDetallePesadasDelMes(propias, pedidosPorId)
+
+  return { resumen, pesadas }
 }
 
 /**
@@ -232,9 +302,21 @@ export async function fetchDatosInformeMensual(mes) {
     consumoInsumos,
     resumenAnual,
     analiticaProveedores,
-    hojasInternas: despachosPorObra.internos.map((d, i) => ({ ...d, detalle: detalleInternos[i] })),
+    // detalleInternos[i]/detalleExternos[i] = { resumen, pesadas } (ver
+    // fetchDetalleDestinoDelMes) — se desparraman acá para que
+    // excel-informe-mensual.js reciba las 2 tablas de cada hoja ya
+    // resueltas, sin tener que conocer la forma interna del fetch.
+    hojasInternas: despachosPorObra.internos.map((d, i) => ({
+      ...d,
+      detalle: detalleInternos[i].resumen,
+      pesadas: detalleInternos[i].pesadas,
+    })),
     hojaVentasExternas: {
-      destinos: despachosPorObra.externos.map((d, i) => ({ ...d, detalle: detalleExternos[i] })),
+      destinos: despachosPorObra.externos.map((d, i) => ({
+        ...d,
+        detalle: detalleExternos[i].resumen,
+        pesadas: detalleExternos[i].pesadas,
+      })),
       resumen: despachosPorObra.externos,
     },
   }

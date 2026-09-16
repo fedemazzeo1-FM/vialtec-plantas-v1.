@@ -50,6 +50,11 @@ const FECHA = (iso) => {
   const [anio, mes, dia] = iso.split('-')
   return `${dia}/${mes}/${anio}`
 }
+// Fecha+hora real de una pesada/carga (timestamptz, `fecha_pesada`/
+// `fecha_carga`) — a diferencia de FECHA() de arriba, que es solo fecha
+// (`fecha_programada` es columna `date`, sin hora). Tabla 2 "Detalle de
+// Pesadas" (2026-09-16) sí necesita la hora real de cada camión.
+const FECHA_HORA = (iso) => (iso ? new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '')
 
 function agregarLogo(workbook, worksheet, logoBuffer) {
   const imageId = workbook.addImage({ buffer: logoBuffer, extension: 'png' })
@@ -402,34 +407,61 @@ function armarHojaProveedores(workbook, datos) {
   return ws
 }
 
-/** Una hoja por destino (obra interna o cliente externo) con el detalle de vales/remitos/entregas. */
-function armarHojaDestino(workbook, nombre, mesLabel, filasDetalle) {
+/**
+ * Una hoja por destino (obra interna o cliente externo) con 2 tablas
+ * claramente separadas (2026-09-16, pedido de Federico):
+ *   Tabla 1 "Resumen por pedido" (filasResumen, una fila por pedido —
+ *     mismo dato que ya existía, ahora con Cliente/Estado agregados).
+ *   Tabla 2 "Detalle de pesadas" (filasPesadas, una fila por camión/carga
+ *     real — fetchDetallePesadasDelMes() en informe-mensual.service.js).
+ * Ambas comparten el mismo ancho de columnas (11) reusándolas con distinto
+ * significado según la tabla — mismo criterio ya usado en
+ * armarHojaResumenMensual() (5 columnas para "Despachos por obra" Y para
+ * "Consumo de insumos" en la misma hoja).
+ */
+function armarHojaDestino(workbook, nombre, mesLabel, filasResumen, filasPesadas) {
   // Nombre de hoja: Excel limita a 31 caracteres y prohíbe : \ / ? * [ ].
   const nombreHoja = nombre.replace(/[:\\/?*[\]]/g, ' ').slice(0, 31)
   const ws = workbook.addWorksheet(nombreHoja)
+  const N_COLS = 11
   ws.columns = [
-    { width: 12 }, { width: 24 }, { width: 10 }, { width: 10 }, { width: 10 },
-    { width: 8 }, { width: 14 }, { width: 16 }, { width: 18 }, { width: 30 },
+    { width: 6 }, { width: 24 }, { width: 16 }, { width: 20 }, { width: 10 },
+    { width: 12 }, { width: 12 }, { width: 9 }, { width: 14 }, { width: 14 }, { width: 16 },
   ]
+  const letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
 
-  ws.mergeCells('A1:J1')
+  ws.mergeCells(`A1:${letras[N_COLS - 1]}1`)
   ws.getCell('A1').value = nombre
   ws.getCell('A1').font = { bold: true, size: 13, color: { argb: GRIS_TEXTO } }
-  ws.mergeCells('A2:J2')
+  ws.mergeCells(`A2:${letras[N_COLS - 1]}2`)
   ws.getCell('A2').value = `Despachos — ${mesLabel}`
   ws.getCell('A2').font = { italic: true, size: 10, color: { argb: GRIS_SUAVE } }
 
-  const header = ws.getRow(3)
-  header.values = ['Fecha', 'Mezcla', 'Tipo', 'Pedido', 'Real', 'Unidad', 'N° Remito', 'N° Vale', 'Encargado', 'Notas']
-  header.eachCell((cell) => estiloHeaderTabla(cell))
+  // ---- Tabla 1: Resumen por pedido -----------------------------------
+  let fila = 3
+  ws.mergeCells(`A${fila}:${letras[N_COLS - 1]}${fila}`)
+  ws.getCell(`A${fila}`).value = '  Resumen por pedido'
+  letras.forEach((c) => estiloSubtotal(ws.getCell(`${c}${fila}`)))
+  fila++
 
-  let fila = 4
-  filasDetalle.forEach((d) => {
+  const header1 = ws.getRow(fila)
+  header1.values = ['N°', 'Cliente', 'Fecha', 'Mezcla', 'Tipo', 'Solicitado', 'Real', 'Unidad', 'Estado', 'N° Remito', 'N° Vale']
+  header1.eachCell((cell) => estiloHeaderTabla(cell))
+  fila++
+
+  filasResumen.forEach((d, i) => {
     const row = ws.getRow(fila)
-    row.values = [FECHA(d.fecha), d.mezcla, d.tipo, d.pedido, d.real, d.unidad, d.nroRemito, d.nroVale, d.encargado, d.notas]
+    row.values = [i + 1, nombre, FECHA(d.fecha), d.mezcla, d.tipo, d.pedido, d.real, d.unidad, d.estado ?? '', d.nroRemito, d.nroVale]
     row.eachCell((cell) => estiloCuerpo(cell))
     fila++
   })
+
+  if (!filasResumen.length) {
+    ws.mergeCells(`A${fila}:${letras[N_COLS - 1]}${fila}`)
+    ws.getCell(`A${fila}`).value = 'Sin despachos en el mes.'
+    ws.getCell(`A${fila}`).font = { italic: true, size: 10, color: { argb: GRIS_SUAVE } }
+    fila++
+  }
 
   // Fix 2026-09-07 (revisión general pedida por Federico): un mismo destino
   // (obra o cliente externo) puede recibir asfalto Y hormigón en el mismo
@@ -439,18 +471,57 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasDetalle) {
   // una fila "TOTAL ASFALTO"/"TOTAL HORMIGÓN" por cada uno que tenga al
   // menos un despacho ese mes (el caso más común, un solo tipo, sigue
   // viéndose como una sola fila de total, igual que antes).
-  const tipos = [...new Set(filasDetalle.map((d) => d.tipo))]
+  const tipos = [...new Set(filasResumen.map((d) => d.tipo))]
   tipos.forEach((tipo) => {
-    const delTipo = filasDetalle.filter((d) => d.tipo === tipo)
+    const delTipo = filasResumen.filter((d) => d.tipo === tipo)
     const totalReal = delTipo.reduce((acc, d) => acc + d.real, 0)
     const total = ws.getRow(fila)
     total.getCell(1).value = tipos.length > 1 ? `TOTAL ${tipo.toUpperCase()}` : 'TOTAL'
-    total.getCell(3).value = `${delTipo.length} desp.`
-    total.getCell(5).value = Number(totalReal.toFixed(2))
-    total.getCell(6).value = delTipo[0]?.unidad ?? ''
-    ;[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].forEach((c) => estiloSubtotal(total.getCell(c)))
+    total.getCell(5).value = `${delTipo.length} desp.`
+    total.getCell(7).value = Number(totalReal.toFixed(2))
+    total.getCell(8).value = delTipo[0]?.unidad ?? ''
+    letras.forEach((c) => estiloSubtotal(total.getCell(c)))
     fila++
   })
+  fila += 1 // aire entre tablas
+
+  // ---- Tabla 2: Detalle de pesadas (una fila por camión/carga) -------
+  ws.mergeCells(`A${fila}:${letras[N_COLS - 1]}${fila}`)
+  ws.getCell(`A${fila}`).value = '  Detalle de pesadas'
+  letras.forEach((c) => estiloSubtotal(ws.getCell(`${c}${fila}`)))
+  fila++
+
+  const header2 = ws.getRow(fila)
+  header2.values = ['N°', 'Fecha/Hora', 'Tipo', 'N° Vale', 'N° Remito', 'Patente', 'Chofer', 'Cantidad', 'Unidad']
+  header2.eachCell((cell) => estiloHeaderTabla(cell))
+  fila++
+
+  filasPesadas.forEach((p, i) => {
+    const row = ws.getRow(fila)
+    row.values = [i + 1, FECHA_HORA(p.fecha), p.tipo, p.nroVale, p.nroRemito, p.patente, p.chofer, Number(p.cantidad.toFixed(2)), p.unidad]
+    row.eachCell((cell) => estiloCuerpo(cell))
+    fila++
+  })
+
+  if (!filasPesadas.length) {
+    ws.mergeCells(`A${fila}:${letras[N_COLS - 1]}${fila}`)
+    ws.getCell(`A${fila}`).value = 'Sin pesadas/cargas individuales registradas en el mes.'
+    ws.getCell(`A${fila}`).font = { italic: true, size: 10, color: { argb: GRIS_SUAVE } }
+    fila++
+  } else {
+    const tiposPesadas = [...new Set(filasPesadas.map((p) => p.tipo))]
+    tiposPesadas.forEach((tipo) => {
+      const delTipo = filasPesadas.filter((p) => p.tipo === tipo)
+      const totalCantidad = delTipo.reduce((acc, p) => acc + p.cantidad, 0)
+      const total = ws.getRow(fila)
+      total.getCell(1).value = tiposPesadas.length > 1 ? `TOTAL ${tipo.toUpperCase()}` : 'TOTAL'
+      total.getCell(3).value = `${delTipo.length} pesada${delTipo.length === 1 ? '' : 's'}`
+      total.getCell(8).value = Number(totalCantidad.toFixed(2))
+      total.getCell(9).value = delTipo[0]?.unidad ?? ''
+      letras.forEach((c) => estiloSubtotal(total.getCell(c)))
+      fila++
+    })
+  }
 
   return ws
 }
@@ -476,7 +547,7 @@ export async function construirWorkbookInformeMensual(datos, logoBuffer) {
 
   for (const destino of datos.hojasInternas) {
     const filas = destino.detalle.map((d) => ({ ...d, mezcla: d.mezcla ?? '—' }))
-    armarHojaDestino(workbook, destino.nombre, datos.mesLabel, filas)
+    armarHojaDestino(workbook, destino.nombre, datos.mesLabel, filas, destino.pesadas)
   }
 
   if (datos.hojaVentasExternas.destinos.length) {
@@ -515,7 +586,7 @@ export async function construirWorkbookInformeMensual(datos, logoBuffer) {
     // Una hoja por cliente externo, mismo formato que las obras internas.
     for (const destino of datos.hojaVentasExternas.destinos) {
       const filas = destino.detalle.map((d) => ({ ...d, mezcla: d.mezcla ?? '—' }))
-      armarHojaDestino(workbook, destino.nombre, datos.mesLabel, filas)
+      armarHojaDestino(workbook, destino.nombre, datos.mesLabel, filas, destino.pesadas)
     }
   }
 

@@ -252,6 +252,52 @@ export async function fetchValesDelPedido(pedidoId) {
 }
 
 // ---------------------------------------------------------------------------
+// Detalle de pesadas/cargas de VARIOS pedidos a la vez (2026-09-16, Informe
+// Mensual — Tabla "Detalle de Pesadas" por obra/mes, una fila por camión en
+// vez de una fila por pedido). Variantes "bulk" de fetchValesDelPedido()/
+// fetchCargasDelPedido() de arriba, para no hacer 1 query por pedido cuando
+// el informe necesita el detalle de TODOS los pedidos de un destino en el
+// mes de una sola vez. Sin fetchPaginado() (memory/architecture.md): acotado
+// a los pedidos de un solo destino en un solo mes, mismo criterio de "tope
+// generoso" que ya usa fetchDetalleDestinoDelMes() (informe-mensual.service.js).
+// ---------------------------------------------------------------------------
+
+/**
+ * Vales de báscula (asfalto, no anulados) de varios pedidos — trae solo las
+ * columnas que necesita el detalle del informe (peso NETO real pesado,
+ * chofer, patente, N° de vale), no `select('*')`.
+ * @param {string[]} pedidoIds
+ */
+export async function fetchValesDeVariosPedidos(pedidoIds) {
+  if (!pedidoIds.length) return []
+  const { data, error } = await supabase
+    .from('plantas_vales')
+    .select('numero_vale, pedido_id, patente, chofer, peso_neto, unidad, fecha_pesada')
+    .in('pedido_id', pedidoIds)
+    .eq('tipo_vale', 'asfalto')
+    .eq('anulado', false)
+  if (error) throw error
+  return data ?? []
+}
+
+/**
+ * Cargas de hormigón (una fila por mixer) de varios pedidos — hormigón no
+ * tiene báscula (se mide por volumen del mixer, no hay pesada real), el
+ * detalle sale directo de plantas_cargas_hormigon (remito y chofer por
+ * carga, ambos obligatorios al despachar — ver registrar_carga_hormigon()).
+ * @param {string[]} pedidoIds
+ */
+export async function fetchCargasHormigonDeVariosPedidos(pedidoIds) {
+  if (!pedidoIds.length) return []
+  const { data, error } = await supabase
+    .from('plantas_cargas_hormigon')
+    .select('pedido_id, numero_remito, volumen_m3, patente_mixer, chofer, fecha_carga')
+    .in('pedido_id', pedidoIds)
+  if (error) throw error
+  return data ?? []
+}
+
+// ---------------------------------------------------------------------------
 // Corrección post-despacho (Logica sis. plantas v1.rtf §5, RPC atómica —
 // supabase/migrations/12_despachos_vista_camion_y_correccion.sql)
 // ---------------------------------------------------------------------------
