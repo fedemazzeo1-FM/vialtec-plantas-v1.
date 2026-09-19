@@ -1,5 +1,40 @@
 # pending.md — Pendientes
 
+## 🔴 Báscula: numeración propia de ingreso/egreso de áridos (I-00001) — 2026-09-19, CÓDIGO LISTO, migración 42 PENDIENTE DE APLICAR
+
+Pedido de Federico: la numeración de asfalto no se puede mezclar con la de
+ingresos de áridos. Decisión: **ingreso y egreso comparten una numeración
+propia** (`plantas_vales.numero_vale_arido`, formato `I-00001`, arranca en 1),
+separada de `numero_vale` (solo asfalto/hormigón). Build verificado
+(`npm run build` limpio). **No commiteado, no deployado, migración no aplicada.**
+
+- `supabase/migrations/42_numeracion_ingreso_egreso_aridos.sql` (BORRADOR,
+  requiere confirmación de Federico — cambia schema y datos): `numero_vale`
+  deja de ser `identity` (nullable, secuencia común que conserva su posición,
+  próximo asfalto = 10065); secuencia nueva para `numero_vale_arido`; renumera
+  los 514 ingresos/egresos existentes en orden cronológico y guarda el N°
+  anterior en `datos_legados->>'numero_vale_previo'`; CHECK anti-mezcla;
+  recrea `registrar_pesada_bascula`, `corregir_vale_bascula`,
+  `anular_vale_bascula` (etiqueta `plantas_etiqueta_vale()`) y
+  `plantas_v_bascula_viva` (+ columna al final).
+- Estado real medido en producción antes de escribirla: `numero_vale` identity
+  ALWAYS, secuencia en 10064; asfalto 442 (9581–10064), ingreso 508 (500
+  sintéticos 90000001+ y 8 reales desde 10014), egreso 6 (3 anulados); sin
+  triggers; vistas dependientes: `plantas_v_bascula_viva` y
+  `plantas_v_despachos_camion` (esta última solo lee asfalto, sin cambios).
+- Frontend: `bascula.service.js` (`formatearNumeroValeArido`,
+  `formatearNumeroDeVale`, `obtenerProximoNumeroValeArido`; se eliminó el hack
+  `PISO_RANGO_SINTETICO_INGRESO`), `useBascula.js`, `BasculaView.vue` (header
+  muestra ambos próximos N°), `ValeImprimible.vue`, Excel del historial.
+- **Orden obligatorio al aplicar: migración 42 primero, deploy después.** Con
+  el código nuevo y sin la migración, los ingresos/egresos muestran "—" como N°.
+- Los egresos con N° de papel del legado también se renumeran (decisión
+  tomada al elegir "ingreso y egreso comparten N°"); el anterior queda en
+  `datos_legados`. Los huecos que deja en la secuencia de asfalto no se reutilizan.
+- Nota: `memory/` documentaba migraciones hasta la 36; el repo ya tiene 37–41
+  (remito manual con items, remito residual, remito con origen en Báscula,
+  CRUD de camiones, edición de pedidos por creador) sin entrada acá.
+
 ## 🔴 Remito unificado + automático + Remito Manual, y Material select en Ingreso de áridos (2026-09-09) — CÓDIGO LISTO, migración 36 (schema) PENDIENTE DE APLICAR
 
 Pedido de Federico en 2 mensajes seguidos (con capturas de los 2 remitos

@@ -23,7 +23,7 @@ import {
   TIPO_CORTO_VALE,
   ENTRADA_SALIDA_VALE,
 } from '@/modules/bascula/composables/useBascula'
-import { formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
+import { formatearNumeroVale, formatearNumeroValeArido, formatearNumeroDeVale } from '@/modules/bascula/services/bascula.service'
 import { formatearNumeroRemito } from '@/services/formato-numeros'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { ref, watch } from 'vue'
@@ -43,6 +43,7 @@ const {
   pedidosParaPesada,
   nombreDestinoPedido,
   proximoNumeroVale,
+  proximoNumeroValeArido,
   puertasAbiertas,
   slots,
   crearSlot,
@@ -111,7 +112,7 @@ async function descargarPdf() {
     const nombreArchivo =
       modoImpresion.value === 'remito'
         ? `Remito-${formatearNumeroRemito(remitoParaImprimir.value?.numeroRemito)}`
-        : `Vale-${formatearNumeroVale(valeParaImprimir.value?.numero_vale)}`
+        : `Vale-${formatearNumeroDeVale(valeParaImprimir.value)}`
     await descargarPdfImprimible(refImprimible.value, { tipo: modoImpresion.value === 'remito' ? 'remito' : 'vale', nombreArchivo })
   } catch (e) {
     error.value = 'No se pudo generar el PDF: ' + e.message
@@ -143,7 +144,7 @@ const columnasHistorial = [
   { key: 'proveedorLabel', label: 'Proveedor', secundaria: true },
   { key: 'remitoLabel', label: 'Remito', secundaria: true },
   { key: 'responsableLabel', label: 'Responsable', secundaria: true },
-  { key: 'numero_vale', label: 'N° Vale', format: (v) => formatearNumeroVale(v) },
+  { key: 'numero_vale', label: 'N° Vale', format: (_v, fila) => formatearNumeroDeVale(fila) },
   { key: 'peso_bruto', label: 'Bruto', format: (v) => Number(v).toFixed(2), secundaria: true },
   { key: 'tara', label: 'Tara', format: (v) => Number(v).toFixed(2), secundaria: true },
   { key: 'pesoNetoLabel', label: 'Neto' },
@@ -191,8 +192,10 @@ watch(
   <div>
     <VSection title="Báscula — Despachos simultáneos">
       <p class="-mt-2 mb-3 text-sm text-text-soft">
-        {{ puertasAbiertas }} {{ puertasAbiertas === 1 ? 'puerta abierta' : 'puertas abiertas' }} · Próximo N°
+        {{ puertasAbiertas }} {{ puertasAbiertas === 1 ? 'puerta abierta' : 'puertas abiertas' }} · Próximo N° asfalto
         <span class="font-semibold text-vialtec">{{ formatearNumeroVale(proximoNumeroVale) }}</span>
+        · ingreso/egreso
+        <span class="font-semibold text-vialtec">{{ formatearNumeroValeArido(proximoNumeroValeArido) }}</span>
       </p>
 
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
@@ -594,7 +597,7 @@ watch(
     <VModal :open="modalEditarAbierto" title="Editar vale" @update:open="modalEditarAbierto = $event">
       <form v-if="valeEditar" class="space-y-3" @submit.prevent="guardarEdicion">
         <p class="text-sm text-text-soft">
-          Vale N° <strong>{{ formatearNumeroVale(valeEditar.numero_vale) }}</strong> — {{ ETIQUETA_TIPO_VALE[valeEditar.tipo_vale] }}
+          Vale N° <strong>{{ formatearNumeroDeVale(valeEditar) }}</strong> — {{ ETIQUETA_TIPO_VALE[valeEditar.tipo_vale] }}
         </p>
 
         <div v-if="error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ error }}</div>
@@ -682,7 +685,7 @@ watch(
     <VModal :open="modalAnularAbierto" title="Anular vale" @update:open="modalAnularAbierto = $event">
       <form v-if="valeAnular" class="space-y-3" @submit.prevent="confirmarAnulacion">
         <p class="text-sm text-text-mid">
-          Vale N° <strong>{{ formatearNumeroVale(valeAnular.numero_vale) }}</strong> — {{ ETIQUETA_TIPO_VALE[valeAnular.tipo_vale] }}. El vale queda anulado
+          Vale N° <strong>{{ formatearNumeroDeVale(valeAnular) }}</strong> — {{ ETIQUETA_TIPO_VALE[valeAnular.tipo_vale] }}. El vale queda anulado
           (no se borra: memory/business-rules.md) y su efecto de stock, revertido.
         </p>
 

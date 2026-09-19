@@ -18,7 +18,7 @@
 // mismo documento (antes Despachos tenía su propio slip más simple). Este
 // componente quedó 100% dedicado al vale de pesaje.
 
-import { formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
+import { formatearNumeroDeVale } from '@/modules/bascula/services/bascula.service'
 // Logo real (2026-09-01, provisto por Federico) — reemplaza el mockup en
 // CSS/texto que se usaba antes (no había forma de bajar el archivo a disco
 // en sesiones previas, ver memory/modules-status.md).
@@ -97,7 +97,7 @@ const copiasVale = [
       <div class="mb-4 flex items-start justify-between border-b border-gray-300 pb-3">
         <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-14 w-auto" />
         <div class="text-right">
-          <p class="text-2xl font-bold">Vale de pesaje N° {{ formatearNumeroVale(vale.numero_vale) }}</p>
+          <p class="text-2xl font-bold">Vale de pesaje N° {{ formatearNumeroDeVale(vale) }}</p>
           <p class="text-sm font-semibold uppercase tracking-wide text-gray-400">{{ copia.titulo }}</p>
           <p class="text-[11px] leading-tight text-gray-400">{{ BALANZA_CERT_CALIBRACION }}</p>
         </div>

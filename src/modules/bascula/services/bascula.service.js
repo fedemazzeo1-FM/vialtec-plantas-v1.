@@ -48,6 +48,25 @@ export function formatearNumeroVale(numero) {
   return String(numero).padStart(8, '0')
 }
 
+// Ingreso y egreso de áridos comparten una numeración propia, separada de la
+// de asfalto (migración 42, pedido de Federico 2026-09-19): "I-00001". Nunca
+// se mezcla con el N° de vale de asfalto.
+export function formatearNumeroValeArido(numero) {
+  if (numero == null) return '—'
+  return `I-${String(numero).padStart(5, '0')}`
+}
+
+/**
+ * N° de vale visible de una fila/vale según su tipo: asfalto/hormigón usan
+ * `numero_vale`, ingreso/egreso de áridos usan `numero_vale_arido`.
+ */
+export function formatearNumeroDeVale(vale) {
+  if (!vale) return '—'
+  return vale.numero_vale_arido != null
+    ? formatearNumeroValeArido(vale.numero_vale_arido)
+    : formatearNumeroVale(vale.numero_vale)
+}
+
 // ---------------------------------------------------------------------------
 // Pedidos de asfalto elegibles para pesar en báscula
 // ---------------------------------------------------------------------------
@@ -84,20 +103,12 @@ export async function fetchPedidosAsfaltoParaPesada() {
 // Próximo N° de vale (header operativo de Báscula)
 // ---------------------------------------------------------------------------
 
-// Bloque reservado para los 500 vales de ingreso_arido migrados del legado
-// que nunca tuvieron un N° de vale real en papel (memory/pending.md,
-// renumeración 2026-09-06) — quedaron en 90000001-90000500, bien afuera del
-// rango de numeración real (9579 en adelante), para no colisionar nunca con
-// el asfalto real del legado que sigue avanzando en paralelo hasta el corte.
-// Se excluye acá para no confundir el próximo N° "de papel" que ve el
-// balancero.
-const PISO_RANGO_SINTETICO_INGRESO = 90000000
-
 /**
  * Estimación de sola lectura del próximo N° de vale a asignar. No consulta
  * la secuencia de Postgres directamente (eso consumiría/reservaría un valor
  * solo por mostrarlo) — usa max(numero_vale)+1, equivalente en la práctica
- * porque plantas_vales es insert-only y numero_vale es un identity siempre
+ * porque plantas_vales es insert-only y numero_vale (solo asfalto/hormigón
+ * desde la migración 42) viene de una secuencia siempre
  * creciente. Si la tabla está vacía, cae al valor inicial de la secuencia
  * (9579, ver supabase/migrations/04_bascula_y_vales.sql) + 1.
  */
@@ -105,13 +116,31 @@ export async function obtenerProximoNumeroVale() {
   const { data, error } = await supabase
     .from(TABLA_VALES)
     .select('numero_vale')
-    .lt('numero_vale', PISO_RANGO_SINTETICO_INGRESO)
+    .not('numero_vale', 'is', null)
     .order('numero_vale', { ascending: false })
     .limit(1)
 
   if (error) throw error
   const ultimo = data?.[0]?.numero_vale
   return ultimo != null ? Number(ultimo) + 1 : 9579
+}
+
+/**
+ * Próximo N° de la numeración propia de ingreso/egreso de áridos (I-00001,
+ * migración 42). Mismo criterio que obtenerProximoNumeroVale(): estimación de
+ * solo lectura con max()+1, sin consumir la secuencia.
+ */
+export async function obtenerProximoNumeroValeArido() {
+  const { data, error } = await supabase
+    .from(TABLA_VALES)
+    .select('numero_vale_arido')
+    .not('numero_vale_arido', 'is', null)
+    .order('numero_vale_arido', { ascending: false })
+    .limit(1)
+
+  if (error) throw error
+  const ultimo = data?.[0]?.numero_vale_arido
+  return ultimo != null ? Number(ultimo) + 1 : 1
 }
 
 // ---------------------------------------------------------------------------

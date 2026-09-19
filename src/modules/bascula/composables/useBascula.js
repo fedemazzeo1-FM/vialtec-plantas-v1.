@@ -28,8 +28,10 @@ import {
   anularValeBascula,
   obtenerAcumuladoHastaFecha,
   obtenerProximoNumeroVale,
+  obtenerProximoNumeroValeArido,
   calcularDiferencia,
   formatearNumeroVale,
+  formatearNumeroDeVale,
 } from '@/modules/bascula/services/bascula.service'
 import { fetchObras, fetchNombresPorEmail } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
@@ -225,10 +227,14 @@ export function useBascula() {
   // -------------------------------------------------------------------------
 
   const proximoNumeroVale = ref(null)
+  const proximoNumeroValeArido = ref(null)
 
   async function cargarProximoNumero() {
     try {
-      proximoNumeroVale.value = await obtenerProximoNumeroVale()
+      ;[proximoNumeroVale.value, proximoNumeroValeArido.value] = await Promise.all([
+        obtenerProximoNumeroVale(),
+        obtenerProximoNumeroValeArido(),
+      ])
     } catch (e) {
       error.value = e.message
     }
@@ -676,7 +682,7 @@ export function useBascula() {
             { key: 'proveedorLabel', label: 'Proveedor' },
             { key: 'remitoLabel', label: 'Remito' },
             { key: 'responsableLabel', label: 'Responsable' },
-            { key: 'numero_vale', label: 'N° Vale', format: (v) => formatearNumeroVale(v) },
+            { key: 'numero_vale', label: 'N° Vale', format: (_v, fila) => formatearNumeroDeVale(fila) },
             { key: 'peso_bruto', label: 'Bruto (tn)', format: (v) => Number(v).toFixed(2) },
             { key: 'tara', label: 'Tara (tn)', format: (v) => Number(v).toFixed(2) },
             { key: 'peso_neto', label: 'Neto (tn)', format: (v) => Number(v).toFixed(2) },
@@ -900,6 +906,7 @@ export function useBascula() {
     pedidosParaPesada,
     nombreDestinoPedido,
     proximoNumeroVale,
+    proximoNumeroValeArido,
     puertasAbiertas,
     slots,
     crearSlot,
