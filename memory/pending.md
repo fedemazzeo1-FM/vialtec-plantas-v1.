@@ -1,5 +1,31 @@
 # pending.md — Pendientes vigentes
 
+## ▶ RETOMAR AQUÍ (cierre de la sesión del 2026-09-19)
+
+Federico canceló la aplicación por esa noche: **no se aplicó ningún cambio en
+producción ni se deployó.** Commits locales sin push: `b69aa61` (numeración 42) y
+`954ba24` (migración 43 + este archivo). Producción sigue como antes; la
+vulnerabilidad de la migración 43 SIGUE ABIERTA.
+
+Orden para la próxima sesión (todo requiere confirmación explícita de Federico):
+1. **Aplicar la migración 43** (seguridad, corta y reversible; dry-run ya OK, §3).
+2. **Prueba con rollback de la migración 42** y, si cierra, aplicarla (§2). Nunca
+   se ejecutó ni en dry-run.
+3. `npm run build` y recién ahí `npx vercel --prod` (**después** de la 42: el
+   frontend ya consulta `numero_vale_arido`, sin la migración Báscula muestra un
+   error al cargar).
+4. Revisar las funciones de flota expuestas a `anon` (§4, alto).
+
+Por qué no se aplicó: el clasificador de permisos de Claude Code bloqueó
+`execute_sql`/`apply_migration` contra producción para la 42 (dry-run y aplicación)
+y `apply_migration` para la 43 (el dry-run de la 43 sí pasó). Opciones: aplicarlas
+Federico desde el SQL Editor de Supabase (los archivos están en
+`supabase/migrations/`), o agregar la regla de permiso en la configuración de
+Claude Code y pedirle a Claude que las aplique. No se debe sortear el bloqueo
+ejecutando el mismo SQL por otra herramienta.
+
+Detalle completo de la auditoría: `memory/auditoria-2026-09-19.md`.
+
 > Solo lo que está ABIERTO o es estado actual. El historial completo (3100 líneas,
 > hasta 2026-09-19: migración de datos, corte legado → nuevo, fixes de Báscula,
 > Stock, Pedidos, Mobile, etc.) está archivado sin cambios en
