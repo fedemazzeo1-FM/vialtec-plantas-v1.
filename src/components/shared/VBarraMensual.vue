@@ -34,10 +34,12 @@ const ANCHO = 600
 // (`class="w-full"`, sin alto fijo en CSS) — su altura real en pantalla
 // escala con el ancho del contenedor según ESTE ratio ANCHO:ALTO, así que
 // bajar ALTO es lo que efectivamente los achica en cualquier ancho de
-// pantalla. Antes 200 (ratio 3:1, con el VCard de Home a ~900px de ancho
-// terminaba en ~300px de alto real) — 130 (ratio ~4.6:1) da un gráfico más
-// achatado/compacto, igual de legible para una serie mensual simple.
-const ALTO = 130
+// pantalla. Historial: 200 (ratio 3:1) → 130 (ratio ~4.6:1, 2026-09-14) →
+// **95 (ratio ~6.3:1, 2026-09-22)**, mismo pedido repetido ("siguen grandes"
+// en Desktop, donde el VCard que los contiene ocupa todo el ancho de Home
+// sin límite de columnas) — más achatado todavía, sigue siendo legible para
+// una serie mensual de ~12 barras.
+const ALTO = 95
 const MARGEN = { top: 14, right: 8, bottom: 24, left: 38 }
 const anchoGrafico = ANCHO - MARGEN.left - MARGEN.right
 const altoGrafico = ALTO - MARGEN.top - MARGEN.bottom
