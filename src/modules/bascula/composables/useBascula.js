@@ -347,6 +347,17 @@ export function useBascula() {
         error.value = 'El N° de remito es obligatorio en un ingreso de áridos.'
         return
       }
+      // Fix 2026-09-22 (bug reportado por Federico: "Cant. s/Remito duplica
+      // el peso pesado"): sin esta validación, un operador podía guardar el
+      // ingreso sin cargar este campo — la RPC (antes de la migración 44)
+      // tapaba el hueco con el peso neto pesado en vez de exigir el valor
+      // real declarado por el proveedor. Acá se corta ANTES de llegar a la
+      // RPC (misma defensa en profundidad que la migración 44 agrega del
+      // lado del servidor, por si algún día se llama la RPC por otro lado).
+      if (!(Number(form.cantidad_remito) > 0)) {
+        error.value = 'La cantidad según remito (declarada por el proveedor) es obligatoria y tiene que ser mayor a 0.'
+        return
+      }
     }
     if (slot.tipo === 'egreso_arido') {
       if (!form.material) {
@@ -443,6 +454,13 @@ export function useBascula() {
   async function guardarEdicion() {
     if (!(Number(formEditar.pesoBruto) > 0) || formEditar.tara == null || Number(formEditar.tara) < 0) {
       error.value = 'Completá peso bruto y tara.'
+      return
+    }
+    // Mismo fix 2026-09-22 que guardarPesada() — acá además cubre el caso de
+    // un vale viejo (cargado antes del fix) que llegó a edición sin
+    // cantidad_remito real: obliga a completarlo en vez de dejarlo pasar.
+    if (valeEditar.value?.tipo_vale === 'ingreso_arido' && !(Number(formEditar.cantidadRemito) > 0)) {
+      error.value = 'La cantidad según remito (declarada por el proveedor) es obligatoria y tiene que ser mayor a 0.'
       return
     }
     guardandoEdicion.value = true

@@ -280,7 +280,7 @@ watch(
                 />
               </label>
               <label class="text-sm text-text-mid col-span-2">
-                Cantidad según remito (tn)
+                Cantidad según remito (tn) (obligatorio)
                 <input
                   v-model.number="slot.form.cantidad_remito"
                   type="number"
@@ -288,7 +288,8 @@ watch(
                   class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none md:w-1/3"
                 />
                 <span class="ml-2 text-xs text-text-soft">
-                  El stock se actualiza con esta cantidad, no con el peso neto pesado (memory/business-rules.md).
+                  Valor declarado por el proveedor — independiente del peso neto pesado. El stock se actualiza con
+                  esta cantidad, no con el peso (memory/business-rules.md).
                 </span>
               </label>
             </template>
@@ -653,13 +654,14 @@ watch(
               <input v-model="formEditar.numeroRemito" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
             </label>
             <label class="text-sm text-text-mid col-span-2">
-              Cantidad según remito (tn)
+              Cantidad según remito (tn) (obligatorio)
               <input
                 v-model.number="formEditar.cantidadRemito"
                 type="number"
                 step="0.01"
                 class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none md:w-1/3"
               />
+              <span class="ml-2 text-xs text-text-soft">Valor declarado por el proveedor — independiente del peso neto pesado.</span>
             </label>
           </template>
         </div>
