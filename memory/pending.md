@@ -2,17 +2,21 @@
 
 ## ▶ RETOMAR AQUÍ (actualizado 2026-09-22)
 
-**Migraciones 42 y 43 ya aplicadas en producción** (2026-09-22, confirmación
-explícita de Federico en cada una — ver §2 y §3 para el detalle y la
-verificación post-aplicación de cada una). El bloqueo del clasificador de
-permisos de Claude Code contra `execute_sql`/`apply_migration` de sesiones
-anteriores no se repitió esta vez.
+**Migraciones 42, 43 y 44 ya aplicadas en producción** (2026-09-22,
+confirmación explícita de Federico en cada una — ver §2, §3 y §5 para el
+detalle y la verificación post-aplicación de cada una). Deploy corrido y
+verificado el mismo día (`npm run build` + `npx vercel --prod`,
+`produccion.vialtec.app` responde 200 con el deployment nuevo).
 
-Orden para la próxima sesión (todo requiere confirmación explícita de Federico):
-1. `npm run build` y `npx vercel --prod` — ya no hay ninguna migración
-   bloqueando el deploy.
-2. Revisar las funciones de flota expuestas a `anon` (§4, alto) — es el
+Pendientes para la próxima sesión (requieren confirmación explícita de
+Federico donde aplique):
+1. Revisar las funciones de flota expuestas a `anon` (§4, alto) — es el
    hallazgo de mayor severidad que sigue abierto de la auditoría del 19/09.
+2. Camiones/balancero: Federico reportó que balancero no puede editar en
+   Maestros → Camiones, pero la investigación (código + estado real de
+   producción: RLS, grants, logs de Edge) no encontró ningún bloqueo — todo
+   da correcto. Falta el mensaje de error exacto o el email de prueba para
+   poder reproducirlo; no tocar nada ahí sin eso.
 3. Verificación en vivo opcional (no bloqueante): Stock → Historial y Báscula
    con un usuario real, para confirmar que la migración 43 no rompió nada de
    la UI (la corrección de seguridad en sí ya está activa y verificada a
@@ -36,7 +40,8 @@ Detalle completo de la auditoría: `memory/auditoria-2026-09-19.md`.
 | 37 | `plantas_remitos_manuales_items` | **Aplicada** (tabla existe). |
 | 38–41 | Remito residual hereda N°, remito con origen en Báscula, CRUD camiones, edición de pedidos por creador | Sin verificar una por una. La 40 tiene evidencia (policies de `plantas_patentes` por balancero). |
 | 42 | Numeración propia ingreso/egreso de áridos (`I-00001`) | **APLICADA en producción (2026-09-22).** Ver §2. |
-| 43 | Seguridad: revoke de helpers de stock + `security_invoker` en 2 vistas | **Escrita, dry-run OK, NO aplicada.** Ver §3. |
+| 43 | Seguridad: revoke de helpers de stock + `security_invoker` en 2 vistas | **APLICADA en producción (2026-09-22).** Ver §3. |
+| 44 | Ingreso de áridos: `cantidad_remito` obligatoria en `registrar_pesada_bascula` (ya no se sustituye por el peso neto pesado) | **APLICADA en producción (2026-09-22).** Ver §5. |
 
 ## 2. Migración 42 — numeración `I-00001` — APLICADA en producción (2026-09-22)
 
@@ -73,10 +78,9 @@ Ingreso y egreso de áridos comparten `plantas_vales.numero_vale_arido`
   consultar `numero_vale_arido` sin error.
 - Los 6 egresos con N° de papel del legado también se renumeraron (decisión al
   elegir "ingreso y egreso comparten N°").
-- **Pendiente ahora:** `npm run build` + `npx vercel --prod` (el frontend ya
-  consultaba `numero_vale_arido`, ahora la columna existe — el deploy que
-  estaba en pausa por esto puede seguir). La migración 43 (seguridad, dry-run
-  ya OK) sigue sin aplicar — ver §3.
+- Ya deployado: `npm run build` + `npx vercel --prod` corridos y verificados
+  (2026-09-22) — el frontend ya consultaba `numero_vale_arido`, ahora la
+  columna existe en producción.
 
 ## 3. Migración 43 — seguridad — APLICADA en producción (2026-09-22)
 
@@ -151,7 +155,39 @@ Origen: auditoría del 2026-09-19. Autorizada por Federico.
 No medido: tiempos de carga reales en navegador; el flujo de explotación del
 punto 1 de la 43 no se probó (habría movido stock real).
 
-## 5. Pendientes operativos (heredados del histórico, sin confirmar en vivo)
+## 5. Migración 44 — Cant. s/Remito obligatoria — APLICADA en producción (2026-09-22)
+
+Bug reportado por Federico: en ingresos de proveedores (Báscula), "Cant.
+s/Remito" (declarada por el proveedor) terminaba duplicando el peso
+neto/bruto pesado por la báscula.
+
+- Causa raíz: el frontend nunca exigía cargar `cantidad_remito` en el alta
+  — cuando quedaba vacío, `registrar_pesada_bascula()` lo tapaba con
+  `coalesce(p_cantidad_remito, v_neto_tn)` (el peso neto medido).
+- Fix de dos capas: `useBascula.js#guardarPesada()`/`guardarEdicion()` ya
+  exigen `cantidad_remito > 0` (mismo criterio que `numero_remito`),
+  labels "(obligatorio)" en `BasculaView.vue`; y del lado del servidor,
+  `supabase/migrations/44_ingreso_arido_cantidad_remito_obligatoria.sql`
+  agrega la misma validación en la RPC y saca el `coalesce` (usa
+  `p_cantidad_remito` directo tanto en el INSERT a `plantas_ingresos` como
+  en el movimiento de stock).
+- **Auditoría de datos históricos (2026-09-22, antes de aplicar el fix)**:
+  de 512 ingresos desde el arranque del sistema (junio 2026), **487 (95%)
+  tienen `cantidad`/`peso_neto` distintos** (correctos, confirma que el
+  balancero sí cargaba los dos valores la mayoría de las veces) y **25
+  (5%) coinciden exactamente** (hasta el gramo) — estadísticamente
+  imposible por azar con pesos de 2 a 37 tn, son los casos reales
+  afectados por el bug. Repartidos en todo el período (03/06 al 22/09,
+  varios proveedores: Holcim, Avanzar, Cerro del Aguila, Cantera Pompeya,
+  Transaridos). **Decisión de Federico: no se corrigen** (no hay forma de
+  reconstruir el valor real declarado sin ir remito por remito) — quedan
+  tal cual, documentados acá por si en algún momento se consigue el dato
+  real y se quiere hacer la corrección manual.
+- **Aplicada en producción (2026-09-22, `apply_migration`) — confirmación
+  explícita de Federico.** Verificado post-aplicación: la validación nueva
+  está presente en `pg_get_functiondef('registrar_pesada_bascula')`.
+
+## 6. Pendientes operativos (heredados del histórico, sin confirmar en vivo)
 
 - Impresión física: confirmar con una hoja real el rediseño del remito
   (portrait) y el margen de corte del vale.
@@ -175,7 +211,7 @@ punto 1 de la 43 no se probó (habría movido stock real).
   faltantes (Excel de Pedidos y 5 botones de Despachos). Backup: NO se desarrolla
   (backups de Supabase + export manual).
 
-## 6. Reglas vigentes que salieron del histórico
+## 7. Reglas vigentes que salieron del histórico
 
 - Deploy siempre manual `npx vercel --prod`; nunca auto-deploy (ver `procedimientos.md`).
 - Pedidos no tiene vista puente con el legado (decisión de Federico, ya cortado).
