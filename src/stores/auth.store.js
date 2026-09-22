@@ -128,11 +128,19 @@ export const useAuthStore = defineStore('auth', {
 
   actions: {
     async _cargarPerfil(email) {
-      const { data: rolRow, error: errorRol } = await supabase
-        .from('plantas_usuarios_roles')
-        .select('rol, ver_todas_obras, ver_ventas, obra_ids, activo')
-        .eq('email', email)
-        .maybeSingle()
+      // rol y nombre no dependen entre sí (los dos solo necesitan `email`) —
+      // en paralelo en vez de secuencial (fix 2026-09-22, mismo motivo que
+      // App.vue: acortar la ventana en la que `estaLogueado` ya es `true`
+      // pero el login todavía no terminó de resolver, más notorio en mobile
+      // por la latencia de red).
+      const [{ data: rolRow, error: errorRol }, { data: perfilFlota }] = await Promise.all([
+        supabase
+          .from('plantas_usuarios_roles')
+          .select('rol, ver_todas_obras, ver_ventas, obra_ids, activo')
+          .eq('email', email)
+          .maybeSingle(),
+        supabase.from('flota_usuarios_email').select('nombre').eq('email', email).maybeSingle(),
+      ])
 
       if (errorRol) throw errorRol
       if (!rolRow || !rolRow.activo) {
@@ -169,10 +177,9 @@ export const useAuthStore = defineStore('auth', {
         this.permisosHabilitados = new Set(filas.map((f) => `${f.modulo}:${f.accion}`))
       }
 
-      // Nombre para mostrar — lectura best-effort desde flota_usuarios_email,
+      // Nombre para mostrar — best-effort (ya resuelto en paralelo arriba),
       // no bloquea el login si falla (memory/architecture.md: solo lectura
       // sobre flota_*).
-      const { data: perfilFlota } = await supabase.from('flota_usuarios_email').select('nombre').eq('email', email).maybeSingle()
       this.nombre = perfilFlota?.nombre ?? email
     },
 
