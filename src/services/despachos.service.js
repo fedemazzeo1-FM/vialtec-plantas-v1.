@@ -28,37 +28,52 @@ const TABLA_HISTORIAL = 'plantas_pedidos_historial'
 // Listado principal (tabla FECHA/OBRA/MEZCLA/PEDIDO/REAL/DIFERENCIA)
 // ---------------------------------------------------------------------------
 
-/**
+/** Filtros comunes a fetchDespachos()/fetchTodosLosDespachosFiltrados() — un
+ * solo lugar para no repetir la cadena de `.eq()/.gte()/.lte()` (memory/
+ * conventions.md).
  * @param {{ tipo?: 'asfalto'|'hormigon', obraId?: number, formulaId?: string,
  *   clienteExterno?: string, desde?: string, hasta?: string }} filtros
  *   desde/hasta en 'YYYY-MM-DD', sobre fecha_programada (memory/relevamiento:
  *   el legado usa `fecha` como fecha planificada Y de despacho, no hay una
  *   fecha "real" separada). clienteExterno filtra por texto exacto contra
- *   plantas_pedidos.cliente_externo (2026-09-14, pedido de Federico) — el
- *   valor viene del `<select>` sobre plantas_clientes en la vista, mismo
- *   texto que ya guarda el pedido (no hay FK entre ambas tablas).
- * @param {{ pagina?: number, tamanoPagina?: number }} opciones
+ *   plantas_pedidos.cliente_externo (2026-09-14, pedido de Federico).
+ * @param {object} [selectOpts] segundo argumento posicional de `.select()`
+ *   de supabase-js (ej. `{ count: 'exact' }`) — cada caller pide justo lo
+ *   que necesita.
  */
+function queryDespachosFiltrados(filtros = {}, selectOpts) {
+  let query = supabase
+    .from(TABLA_PEDIDOS)
+    .select('*', selectOpts)
+    .eq('estado', 'despachado')
+    .order('fecha_programada', { ascending: false })
+
+  if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
+  if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
+  if (filtros.formulaId) query = query.eq('formula_id', filtros.formulaId)
+  if (filtros.clienteExterno) query = query.eq('cliente_externo', filtros.clienteExterno)
+  if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
+  if (filtros.hasta) query = query.lte('fecha_programada', filtros.hasta)
+
+  return query
+}
+
+/** @param {{ pagina?: number, tamanoPagina?: number }} opciones */
 export async function fetchDespachos(filtros = {}, { pagina = 1, tamanoPagina = 20 } = {}) {
-  return fetchPagina(
-    () => {
-      let query = supabase
-        .from(TABLA_PEDIDOS)
-        .select('*', { count: 'exact' })
-        .eq('estado', 'despachado')
-        .order('fecha_programada', { ascending: false })
+  return fetchPagina(() => queryDespachosFiltrados(filtros, { count: 'exact' }), { pagina, tamanoPagina })
+}
 
-      if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
-      if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
-      if (filtros.formulaId) query = query.eq('formula_id', filtros.formulaId)
-      if (filtros.clienteExterno) query = query.eq('cliente_externo', filtros.clienteExterno)
-      if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
-      if (filtros.hasta) query = query.lte('fecha_programada', filtros.hasta)
-
-      return query
-    },
-    { pagina, tamanoPagina }
-  )
+/**
+ * Todas las filas que matchean el filtro actual, SIN paginar (memory/
+ * architecture.md: regla de paginación — se usa fetchPaginado(), no un
+ * `.select()` suelto). Pensado para los Totales consolidados del filtro y
+ * para "Exportar filtro a Excel" (2026-09-22, pedido de Federico) — a
+ * diferencia de `filas` (una página de `fetchDespachos`, para la tabla de
+ * UI), acá se necesita el universo completo que matchea el filtro para que
+ * el total/export no queden truncados a la página visible.
+ */
+export async function fetchTodosLosDespachosFiltrados(filtros = {}) {
+  return fetchPaginado(() => queryDespachosFiltrados(filtros))
 }
 
 // ---------------------------------------------------------------------------

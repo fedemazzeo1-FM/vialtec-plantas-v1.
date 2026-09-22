@@ -13,6 +13,7 @@
 import { computed, reactive, ref } from 'vue'
 import {
   fetchDespachos,
+  fetchTodosLosDespachosFiltrados,
   fetchAcumuladoHistorico,
   fetchTotalesMes,
   fetchResumenPorObra,
@@ -149,30 +150,106 @@ export function useDespachos() {
   const cargando = ref(false)
   const filtros = reactive({ tipo: '', obraId: '', formulaId: '', clienteExterno: '', desde: '', hasta: '' })
 
-  const filasConNombres = computed(() =>
-    filas.value.map((p) => ({
+  function enriquecerFila(p) {
+    return {
       ...p,
       destino: destinoDe(p),
       formulaNombre: formulasPorId.value[p.formula_id]?.nombre ?? '—',
       diferencia: Number(p.cantidad_solicitada) - Number(p.cantidad_despachada ?? 0),
-    }))
-  )
+    }
+  }
 
-  async function cargarDespachos() {
+  const filasConNombres = computed(() => filas.value.map(enriquecerFila))
+
+  function filtrosParaService() {
+    return {
+      tipo: filtros.tipo || undefined,
+      obraId: filtros.obraId || undefined,
+      formulaId: filtros.formulaId || undefined,
+      clienteExterno: filtros.clienteExterno || undefined,
+      desde: filtros.desde || undefined,
+      hasta: filtros.hasta || undefined,
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Totales consolidados del filtro + "Exportar filtro a Excel" (2026-09-22,
+  // pedido explícito de Federico): a diferencia de `filas` (una página de
+  // `fetchDespachos`), acá se trae el universo COMPLETO que matchea el
+  // filtro actual — necesario para que el total no quede acotado a lo que
+  // se ve en pantalla, y para que el Excel exportado tenga todas las filas,
+  // no solo la página visible. Se recarga junto con `cargarDespachos()`
+  // (mismos filtros, un fetch más, no se comparte con el paginado porque
+  // Supabase no devuelve "todas las filas + count" en una sola llamada).
+  // -------------------------------------------------------------------------
+
+  const cargandoTotalesFiltro = ref(false)
+  const todosFiltrados = ref([])
+
+  const totalesFiltro = computed(() => {
+    let asfaltoTn = 0
+    let hormigonM3 = 0
+    for (const p of todosFiltrados.value) {
+      const cantidad = Number(p.cantidad_despachada) || 0
+      if (p.tipo === 'hormigon') hormigonM3 += cantidad
+      else asfaltoTn += cantidad
+    }
+    return { asfaltoTn, hormigonM3, cantidadDespachos: todosFiltrados.value.length }
+  })
+
+  async function cargarTotalesFiltro() {
+    cargandoTotalesFiltro.value = true
+    try {
+      const todos = await fetchTodosLosDespachosFiltrados(filtrosParaService())
+      todosFiltrados.value = todos.map(enriquecerFila)
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      cargandoTotalesFiltro.value = false
+    }
+  }
+
+  const exportandoFiltro = ref(false)
+
+  /** Línea legible de qué filtros estaban activos — va dentro del Excel
+   * (excel-despachos-filtro.js) para que el archivo se explique solo. */
+  const resumenFiltrosLabel = computed(() => {
+    const partes = []
+    if (filtros.tipo) partes.push(`Tipo: ${filtros.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto'}`)
+    if (filtros.obraId) partes.push(`Obra: ${obrasPorId.value[filtros.obraId]?.nombre ?? filtros.obraId}`)
+    if (filtros.formulaId) partes.push(`Mezcla: ${formulasPorId.value[filtros.formulaId]?.nombre ?? filtros.formulaId}`)
+    if (filtros.clienteExterno) partes.push(`Cliente: ${filtros.clienteExterno}`)
+    if (filtros.desde) partes.push(`Desde: ${filtros.desde}`)
+    if (filtros.hasta) partes.push(`Hasta: ${filtros.hasta}`)
+    return partes.length ? partes.join(' · ') : 'Sin filtros (todos los despachos)'
+  })
+
+  async function exportarFiltroExcel() {
+    exportandoFiltro.value = true
+    error.value = null
+    try {
+      const { exportarDespachosFiltroExcel } = await import('@/modules/despachos/services/excel-despachos-filtro')
+      // Si `todosFiltrados` quedó desactualizado (no debería, se recarga en
+      // cada aplicarFiltros/limpiarFiltros/iniciar) se refresca antes de
+      // exportar — más seguro que confiar en el estado en memoria del
+      // cliente para un archivo que se va a guardar.
+      await cargarTotalesFiltro()
+      await exportarDespachosFiltroExcel(todosFiltrados.value, resumenFiltrosLabel.value)
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      exportandoFiltro.value = false
+    }
+  }
+
+  async function cargarPaginaDespachos() {
     cargando.value = true
     error.value = null
     try {
-      const resultado = await fetchDespachos(
-        {
-          tipo: filtros.tipo || undefined,
-          obraId: filtros.obraId || undefined,
-          formulaId: filtros.formulaId || undefined,
-          clienteExterno: filtros.clienteExterno || undefined,
-          desde: filtros.desde || undefined,
-          hasta: filtros.hasta || undefined,
-        },
-        { pagina: paginaActual.value, tamanoPagina: TAMANO_PAGINA }
-      )
+      const resultado = await fetchDespachos(filtrosParaService(), {
+        pagina: paginaActual.value,
+        tamanoPagina: TAMANO_PAGINA,
+      })
       filas.value = resultado.filas
       totalDespachos.value = resultado.total
     } catch (e) {
@@ -180,6 +257,14 @@ export function useDespachos() {
     } finally {
       cargando.value = false
     }
+  }
+
+  // Trae la página actual + recalcula los totales del filtro completo — los
+  // totales solo dependen de `filtros`, no de `paginaActual`, así que
+  // cambiar de página (cambiarPagina()) no hace falta que los vuelva a
+  // pedir (ver más abajo).
+  async function cargarDespachos() {
+    await Promise.all([cargarPaginaDespachos(), cargarTotalesFiltro()])
   }
 
   function aplicarFiltros() {
@@ -199,7 +284,7 @@ export function useDespachos() {
 
   function cambiarPagina(pagina) {
     paginaActual.value = pagina
-    cargarDespachos()
+    cargarPaginaDespachos()
   }
 
   // -------------------------------------------------------------------------
@@ -592,6 +677,11 @@ export function useDespachos() {
     limpiarFiltros,
     cambiarPagina,
     cargarDespachos,
+    totalesFiltro,
+    cargandoTotalesFiltro,
+    exportandoFiltro,
+    exportarFiltroExcel,
+    resumenFiltrosLabel,
     mesResumen,
     resumenObras,
     cargandoResumen,

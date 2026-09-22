@@ -51,6 +51,10 @@ const {
   aplicarFiltros,
   limpiarFiltros,
   cambiarPagina,
+  totalesFiltro,
+  cargandoTotalesFiltro,
+  exportandoFiltro,
+  exportarFiltroExcel,
   mesResumen,
   resumenObras,
   cargandoResumen,
@@ -246,6 +250,28 @@ async function descargarPdfVale() {
         <div class="mt-3 flex gap-2">
           <VButton size="sm" @click="aplicarFiltros">Filtrar</VButton>
           <VButton variant="ghost" size="sm" @click="limpiarFiltros">Limpiar</VButton>
+        </div>
+      </VCard>
+
+      <!-- Totales consolidados del filtro + "Exportar filtro a Excel"
+           (2026-09-22, pedido explícito de Federico): se recalcula cada vez
+           que se aplica un filtro (useDespachos.js#cargarTotalesFiltro),
+           sobre el universo COMPLETO que matchea — no solo la página visible
+           de la tabla de abajo. Asfalto (tn) y Hormigón (m³) nunca se suman
+           entre sí (unidades distintas), se muestran en paralelo como en el
+           resto de la app. -->
+      <VCard class="mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm font-bold text-text">Totales del filtro aplicado</p>
+          <VButton size="sm" :disabled="exportandoFiltro || !totalesFiltro.cantidadDespachos" @click="exportarFiltroExcel">
+            {{ exportandoFiltro ? 'Generando…' : '⬇ Exportar filtro a Excel' }}
+          </VButton>
+        </div>
+        <p v-if="cargandoTotalesFiltro" class="mt-2 text-sm text-text-soft">Calculando…</p>
+        <div v-else class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <VKpiCard label="Asfalto despachado" :value="totalesFiltro.asfaltoTn.toFixed(1)" unidad="tn" />
+          <VKpiCard label="Hormigón despachado" :value="totalesFiltro.hormigonM3.toFixed(1)" unidad="m³" />
+          <VKpiCard label="Despachos" :value="totalesFiltro.cantidadDespachos" unidad="" />
         </div>
       </VCard>
 
