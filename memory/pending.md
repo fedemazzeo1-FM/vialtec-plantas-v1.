@@ -1,28 +1,22 @@
 # pending.md — Pendientes vigentes
 
-## ▶ RETOMAR AQUÍ (cierre de la sesión del 2026-09-19)
+## ▶ RETOMAR AQUÍ (actualizado 2026-09-22)
 
-Federico canceló la aplicación por esa noche: **no se aplicó ningún cambio en
-producción ni se deployó.** Commits locales sin push: `b69aa61` (numeración 42) y
-`954ba24` (migración 43 + este archivo). Producción sigue como antes; la
-vulnerabilidad de la migración 43 SIGUE ABIERTA.
+**Migraciones 42 y 43 ya aplicadas en producción** (2026-09-22, confirmación
+explícita de Federico en cada una — ver §2 y §3 para el detalle y la
+verificación post-aplicación de cada una). El bloqueo del clasificador de
+permisos de Claude Code contra `execute_sql`/`apply_migration` de sesiones
+anteriores no se repitió esta vez.
 
 Orden para la próxima sesión (todo requiere confirmación explícita de Federico):
-1. **Aplicar la migración 43** (seguridad, corta y reversible; dry-run ya OK, §3).
-2. **Prueba con rollback de la migración 42** y, si cierra, aplicarla (§2). Nunca
-   se ejecutó ni en dry-run.
-3. `npm run build` y recién ahí `npx vercel --prod` (**después** de la 42: el
-   frontend ya consulta `numero_vale_arido`, sin la migración Báscula muestra un
-   error al cargar).
-4. Revisar las funciones de flota expuestas a `anon` (§4, alto).
-
-Por qué no se aplicó: el clasificador de permisos de Claude Code bloqueó
-`execute_sql`/`apply_migration` contra producción para la 42 (dry-run y aplicación)
-y `apply_migration` para la 43 (el dry-run de la 43 sí pasó). Opciones: aplicarlas
-Federico desde el SQL Editor de Supabase (los archivos están en
-`supabase/migrations/`), o agregar la regla de permiso en la configuración de
-Claude Code y pedirle a Claude que las aplique. No se debe sortear el bloqueo
-ejecutando el mismo SQL por otra herramienta.
+1. `npm run build` y `npx vercel --prod` — ya no hay ninguna migración
+   bloqueando el deploy.
+2. Revisar las funciones de flota expuestas a `anon` (§4, alto) — es el
+   hallazgo de mayor severidad que sigue abierto de la auditoría del 19/09.
+3. Verificación en vivo opcional (no bloqueante): Stock → Historial y Báscula
+   con un usuario real, para confirmar que la migración 43 no rompió nada de
+   la UI (la corrección de seguridad en sí ya está activa y verificada a
+   nivel de base).
 
 Detalle completo de la auditoría: `memory/auditoria-2026-09-19.md`.
 
@@ -41,10 +35,10 @@ Detalle completo de la auditoría: `memory/auditoria-2026-09-19.md`.
 | 36 | Remito automático + `plantas_remitos_manuales` | **Aplicada** (tabla existe). |
 | 37 | `plantas_remitos_manuales_items` | **Aplicada** (tabla existe). |
 | 38–41 | Remito residual hereda N°, remito con origen en Báscula, CRUD camiones, edición de pedidos por creador | Sin verificar una por una. La 40 tiene evidencia (policies de `plantas_patentes` por balancero). |
-| 42 | Numeración propia ingreso/egreso de áridos (`I-00001`) | **BORRADOR, NO aplicada.** Ver §2. |
+| 42 | Numeración propia ingreso/egreso de áridos (`I-00001`) | **APLICADA en producción (2026-09-22).** Ver §2. |
 | 43 | Seguridad: revoke de helpers de stock + `security_invoker` en 2 vistas | **Escrita, dry-run OK, NO aplicada.** Ver §3. |
 
-## 2. Migración 42 — numeración `I-00001` (commit `b69aa61`, sin deploy)
+## 2. Migración 42 — numeración `I-00001` — APLICADA en producción (2026-09-22)
 
 Pedido de Federico: la numeración de asfalto no se mezcla con la de ingresos.
 Ingreso y egreso de áridos comparten `plantas_vales.numero_vale_arido`
@@ -57,15 +51,34 @@ Ingreso y egreso de áridos comparten `plantas_vales.numero_vale_arido`
   `anular_vale_bascula` y `plantas_v_bascula_viva`.
 - Estado medido en producción antes de escribirla: asfalto 442 (9581–10064),
   ingreso 508, egreso 6 (3 anulados), secuencia en 10064.
-- **Nunca se ejecutó, ni siquiera el dry-run**: el clasificador de permisos de
-  Claude Code bloqueó la prueba (razón "Production Deploy").
-- **Orden obligatorio: aplicar la 42 ANTES de deployar el código.** El frontend
-  ya consulta `numero_vale_arido`; sin la migración, el header de Báscula
-  muestra un error al cargar. Por eso el deploy está en pausa.
-- Los 6 egresos con N° de papel del legado también se renumeran (decisión al
+- **Dry-run ejecutado contra producción y revertido (2026-09-22): OK.** Baseline
+  al momento de correrlo: asfalto 489 (9581–10115), ingreso 512, egreso 6 (3
+  anulados) = 518 áridos totales. Los 10 chequeos dieron OK: separación
+  asfalto/hormigón (solo `numero_vale`) vs. áridos (solo `numero_vale_arido`,
+  518 filas, denso 1..518, sin duplicados), `numero_vale_previo` guardado en
+  las 518, constraint anti-mezcla sin violaciones, secuencia de asfalto
+  preservada en 10115, secuencia de áridos en 518, `plantas_v_bascula_viva`
+  sigue devolviendo las 1007 filas esperadas, 0 filas perdidas/ganadas.
+  Verificado después con `information_schema.columns` que `numero_vale_arido`
+  NO existe en producción (el ROLLBACK no dejó nada aplicado). Script:
+  `supabase/scripts/dry_run_migracion_42.sql`.
+- **Aplicada en producción (2026-09-22, `apply_migration`) — confirmación
+  explícita de Federico ("dale, aplicá la migración 42").** Verificado
+  post-aplicación: 490 asfalto/hormigón (subió de 489 a 490 entre el dry-run
+  y la aplicación real — un vale real más cargado en el medio, no un error),
+  518 áridos con `numero_vale_arido` denso 1..518 sin duplicados,
+  `numero_vale_previo` guardado en las 518, constraint
+  `plantas_vales_numeracion_por_tipo_chk` activa, `plantas_v_bascula_viva`
+  responde 1008 filas (490+518, consistente). El header de Báscula ya puede
+  consultar `numero_vale_arido` sin error.
+- Los 6 egresos con N° de papel del legado también se renumeraron (decisión al
   elegir "ingreso y egreso comparten N°").
+- **Pendiente ahora:** `npm run build` + `npx vercel --prod` (el frontend ya
+  consultaba `numero_vale_arido`, ahora la columna existe — el deploy que
+  estaba en pausa por esto puede seguir). La migración 43 (seguridad, dry-run
+  ya OK) sigue sin aplicar — ver §3.
 
-## 3. Migración 43 — seguridad (archivo escrito, falta aplicar)
+## 3. Migración 43 — seguridad — APLICADA en producción (2026-09-22)
 
 Archivo: `supabase/migrations/43_seguridad_helpers_stock_y_vistas.sql`.
 Origen: auditoría del 2026-09-19. Autorizada por Federico.
@@ -81,11 +94,15 @@ Origen: auditoría del 2026-09-19. Autorizada por Federico.
   1382/614 (~20 ms), plantista 1382/614, encargado 1382/172 (por la matriz, que
   le da `stock:ver`; es intencional), anon 0/0; `anon` y `authenticated` sin
   EXECUTE en los 3 helpers; `registrar_pesada_bascula` sigue ejecutable.
-- **Aplicación real bloqueada** por el clasificador ("Protected-Scope IaC
-  Apply"). Pendiente: aplicarla desde el SQL Editor de Supabase o habilitar la
-  acción en la configuración de permisos, y recién ahí deployar.
-- Verificación posterior sugerida: como anon, contar las 2 vistas (debe dar 0) y
-  probar Stock → Historial y Báscula con un usuario real.
+- **Aplicada en producción (2026-09-22, `apply_migration`) — confirmación
+  explícita de Federico.** El bloqueo del clasificador de sesiones anteriores
+  ("Protected-Scope IaC Apply") no se repitió. Verificado post-aplicación
+  directo en `pg_proc`/`pg_class`: los 3 helpers sin `EXECUTE` para
+  `anon`/`authenticated`, las 2 vistas con `security_invoker=true` en
+  `reloptions` (mismo criterio que `plantas_v_bascula_viva`, que ya lo tenía).
+- Pendiente de verificación en vivo (no crítico, la corrección ya está activa):
+  probar Stock → Historial y Báscula con un usuario real logueado para
+  confirmar que nada se rompió del lado de la UI.
 
 ## 4. Auditoría 2026-09-19 — hallazgos abiertos
 
