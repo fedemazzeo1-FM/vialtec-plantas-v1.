@@ -19,7 +19,8 @@
 // Editar/Postergar/Cancelar; despachado/cancelado -> solo "Ver historial".
 import VBadge from '@/components/shared/VBadge.vue'
 import VButton from '@/components/shared/VButton.vue'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useBreakpoint } from '@/composables/useBreakpoint'
 import {
   VARIANTE_ESTADO,
   COLOR_BORDE_ESTADO,
@@ -56,7 +57,36 @@ const puedeGestionarEstePedido = computed(
   () => props.puedeGestionarGlobal || (!!props.usuarioActual && props.pedido.creado_por === props.usuarioActual)
 )
 
-defineEmits(['confirmar', 'despachar', 'registrar-carga', 'editar', 'postergar', 'cancelar', 'archivar', 'ver-historial'])
+const emit = defineEmits(['confirmar', 'despachar', 'registrar-carga', 'editar', 'postergar', 'cancelar', 'archivar', 'ver-historial'])
+
+const { esMobile } = useBreakpoint()
+
+// Menú "⋮" en mobile (rediseño Mobile-First 2026-09-22, pedido explícito de
+// Federico: "adaptarlo más a mobile"): agrupa Editar/Postergar/Cancelar/
+// Archivar detrás de un botón, en vez de 4 botones sueltos compitiendo con
+// la acción principal (Confirmar/Despachar) por espacio y por el pulgar —
+// en campo, la fila de siempre hacía fácil tocar "✕ Cancelar" (destructivo)
+// por error. Desktop no cambia: sigue mostrando los botones sueltos, ahí
+// sobra espacio y el mouse no tiene el mismo riesgo de toque accidental.
+const menuAbierto = ref(false)
+
+function emitirDesdeMenu(evento) {
+  menuAbierto.value = false
+  emit(evento, props.pedido)
+}
+
+// Mismas condiciones que ya validaban cada botón suelto — solo se
+// reordenan acá para poder iterarlas en el menú mobile.
+const itemsMenu = computed(() =>
+  [
+    ESTADOS_EDITABLES.includes(props.pedido.estado) && puedeGestionarEstePedido.value && { label: 'Editar', evento: 'editar' },
+    ESTADOS_POSTERGABLES.includes(props.pedido.estado) &&
+      puedeGestionarEstePedido.value && { label: 'Postergar', evento: 'postergar' },
+    ESTADOS_ARCHIVABLES.includes(props.pedido.estado) &&
+      !props.pedido.archivado && { label: 'Archivar', evento: 'archivar' },
+    ESTADOS_CANCELABLES.includes(props.pedido.estado) && { label: 'Cancelar pedido', evento: 'cancelar', peligroso: true },
+  ].filter(Boolean)
+)
 
 const unidad = props.pedido.tipo === 'hormigon' ? 'm³' : 'tn'
 
@@ -129,9 +159,11 @@ function formatearFechaHoraCreacion(iso) {
         Ver historial
       </button>
 
-      <!-- Resto de acciones (2026-09-04, réplica del legado: agrupadas en la
-           misma fila que "Ver historial", a la derecha). -->
-      <span class="ml-auto flex flex-wrap gap-1.5">
+      <!-- Resto de acciones: botones sueltos en Desktop (2026-09-04, réplica
+           del legado, agrupados en la misma fila que "Ver historial"), menú
+           "⋮" en mobile (rediseño Mobile-First 2026-09-22) — ver comentario
+           de `itemsMenu` en el script. -->
+      <span v-if="!esMobile" class="ml-auto flex flex-wrap gap-1.5">
         <VButton
           v-if="ESTADOS_EDITABLES.includes(pedido.estado) && puedeGestionarEstePedido"
           variant="secondary"
@@ -159,6 +191,34 @@ function formatearFechaHoraCreacion(iso) {
         >
           Archivar
         </VButton>
+      </span>
+
+      <span v-else-if="itemsMenu.length" class="relative ml-auto">
+        <button
+          type="button"
+          class="flex h-9 w-9 items-center justify-center rounded-lg text-lg font-bold text-text-soft active:bg-gray-100"
+          aria-label="Más acciones"
+          @click="menuAbierto = !menuAbierto"
+        >
+          ⋮
+        </button>
+        <!-- Backdrop transparente para cerrar al tocar afuera. -->
+        <div v-if="menuAbierto" class="fixed inset-0 z-10" @click="menuAbierto = false" />
+        <div
+          v-if="menuAbierto"
+          class="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-lg border border-border bg-white shadow-lg"
+        >
+          <button
+            v-for="item in itemsMenu"
+            :key="item.evento"
+            type="button"
+            class="block w-full px-3 py-2.5 text-left text-sm font-semibold"
+            :class="item.peligroso ? 'text-danger active:bg-danger-light' : 'text-text-mid active:bg-gray-50'"
+            @click="emitirDesdeMenu(item.evento)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
       </span>
     </div>
 

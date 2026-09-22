@@ -23,10 +23,18 @@ import PedidoCard from '@/modules/pedidos/components/PedidoCard.vue'
 import { ESTADOS, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useAuthStore } from '@/stores/auth.store'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const { esMobile } = useBreakpoint()
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
+
+// Etiqueta de cada paso del wizard mobile (rediseño Mobile-First 2026-09-22)
+// — presentacional, no viaja al composable (que solo maneja el número de
+// paso y su validación).
+const TITULOS_PASO = { 1: 'Obra y responsable', 2: 'Material y cantidad', 3: 'Fecha y notas' }
 
 // RBAC (2026-09-16, pedido de Federico): Confirmar/Despachar solo para
 // plantista/admin — "pedidos.aprobar" en la matriz hoy resuelve exactamente
@@ -68,9 +76,15 @@ const {
   verHistoricoCompleto,
   whatsappToasts,
   descartarToastWhatsapp,
+  baseListo,
   modalNuevoAbierto,
   guardandoNuevo,
   formNuevo,
+  pasoNuevo,
+  paso1Valido,
+  paso2Valido,
+  siguientePasoNuevo,
+  pasoAnteriorNuevo,
   abrirNuevo,
   alSeleccionarFormula,
   guardarNuevo,
@@ -116,6 +130,46 @@ function filtrarPorEstado(estado) {
   filtros.estado = filtros.estado === estado ? '' : estado
   aplicarFiltros()
 }
+
+// Pill Todos/Hormigón/Asfalto — mobile únicamente (rediseño Mobile-First
+// 2026-09-22, pedido de Federico: "adaptalo al mobile" para el módulo
+// Pedidos). Filtro 100% client-side sobre lo ya cargado (no dispara
+// cargarPedidos() de nuevo) — en Desktop no hay UI para cambiarlo, así que
+// queda siempre en 'todos' y pedidosPorTipoFiltrado === pedidosPorTipo.
+const filtroTipoMobile = ref('todos')
+const pedidosPorTipoFiltrado = computed(() =>
+  filtroTipoMobile.value === 'todos'
+    ? pedidosPorTipo.value
+    : pedidosPorTipo.value.filter((g) => g.tipo === filtroTipoMobile.value)
+)
+
+// Wizard mobile: el submit del <form> avanza de paso en vez de guardar
+// hasta llegar al paso 3 (rediseño Mobile-First 2026-09-22). En Desktop
+// (todos los campos visibles a la vez, sin pasos) siempre guarda directo.
+function alEnviarFormNuevo() {
+  if (esMobile.value && pasoNuevo.value < 3) {
+    siguientePasoNuevo()
+    return
+  }
+  guardarNuevo()
+}
+
+// FAB de MobileLayout.vue: navega a /pedidos?nuevo=1 desde cualquier
+// pantalla para abrir el alta sin duplicar el composable de Pedidos en el
+// layout. Se espera a que `baseListo` esté en true (obras/fórmulas/clientes
+// ya cargados) antes de abrir el modal, si no los <select> del paso 1
+// quedarían vacíos un instante; y se limpia el query enseguida para que
+// "atrás"/refresh no vuelva a disparar el modal solo.
+watch(
+  [() => route.query.nuevo, baseListo],
+  ([nuevo, listo]) => {
+    if (nuevo === '1' && listo) {
+      abrirNuevo()
+      router.replace({ query: {} })
+    }
+  },
+  { immediate: true }
+)
 
 iniciar()
 </script>
@@ -192,8 +246,25 @@ iniciar()
            anterior/siguiente/hoy a pedido de Federico — "simplificación de
            navegación". Sigue mostrando la semana en curso por default (no
            listar los 184 pedidos históricos de golpe); para ver otra fecha,
-           "Ver histórico completo" + los filtros Desde/Hasta de abajo. -->
-      <VCard class="mb-4">
+           "Ver histórico completo" + los filtros Desde/Hasta de abajo.
+           Franja compacta en mobile (rediseño Mobile-First 2026-09-22): la
+           VCard con padding completo le comía espacio a la lista arriba de
+           todo — acá es solo una línea de texto + link, mismo contenido. -->
+      <div v-if="esMobile" class="mb-3 flex items-center justify-between gap-2 text-xs">
+        <span class="text-text-soft">{{ vistaSemana ? `Semana en curso — ${rangoSemanaLabel}` : 'Histórico completo' }}</span>
+        <button
+          v-if="vistaSemana"
+          type="button"
+          class="font-semibold text-vialtec hover:underline"
+          @click="verHistoricoCompleto"
+        >
+          Ver histórico
+        </button>
+        <button v-else type="button" class="font-semibold text-vialtec hover:underline" @click="irASemanaActual">
+          Volver a esta semana
+        </button>
+      </div>
+      <VCard v-else class="mb-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm font-semibold text-text">
             {{ vistaSemana ? `Semana en curso — ${rangoSemanaLabel}` : 'Histórico completo' }}
@@ -204,6 +275,30 @@ iniciar()
           <VButton v-else variant="secondary" size="sm" @click="irASemanaActual">Volver a la semana actual</VButton>
         </div>
       </VCard>
+
+      <!-- Pill Todos/Hormigón/Asfalto — mobile únicamente, reemplaza el
+           scroll por las dos secciones completas cuando al operador solo le
+           interesa un material (rediseño Mobile-First 2026-09-22). -->
+      <div v-if="esMobile" class="mb-3 flex gap-1.5">
+        <button
+          v-for="opcion in [
+            { valor: 'todos', label: 'Todos' },
+            { valor: 'hormigon', label: 'Hormigón' },
+            { valor: 'asfalto', label: 'Asfalto' },
+          ]"
+          :key="opcion.valor"
+          type="button"
+          class="flex-1 rounded-full border px-3 py-2 text-xs font-semibold"
+          :class="
+            filtroTipoMobile === opcion.valor
+              ? 'border-vialtec bg-vialtec text-white'
+              : 'border-border bg-white text-text-mid'
+          "
+          @click="filtroTipoMobile = opcion.valor"
+        >
+          {{ opcion.label }}
+        </button>
+      </div>
 
       <!-- Filtros — ocultos en mobile (2026-09-07, pedido de Federico:
            "simplificar el uso en campo"). El listado sigue acotado a la
@@ -268,16 +363,17 @@ iniciar()
            memory/pending.md): ya no hay tabs Asfalto/Hormigón, las dos
            secciones conviven siempre con su propio contador ("N pedidos"),
            mismo orden Hormigón → Asfalto confirmado en vivo.
-           Protagonismo del CTA en mobile (2026-09-07, pedido de Federico:
-           con los KPI/filtros de arriba ocultos, este botón queda como lo
-           primero que se ve — ancho completo + tamaño md para que se note). -->
-      <div class="mb-3 flex justify-end">
-        <VButton class="w-full md:w-auto" size="md" @click="abrirNuevo">+ Nuevo pedido</VButton>
+           Oculto en mobile (rediseño Mobile-First 2026-09-22): el FAB
+           central de MobileLayout.vue ya cubre "Nuevo pedido" desde
+           cualquier pantalla, este botón duplicado le comía espacio a la
+           lista. Sigue en Desktop, que no tiene FAB. -->
+      <div v-if="!esMobile" class="mb-3 flex justify-end">
+        <VButton size="md" @click="abrirNuevo">+ Nuevo pedido</VButton>
       </div>
 
       <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
       <template v-else>
-        <div v-for="grupo in pedidosPorTipo" :key="grupo.tipo" class="mb-6">
+        <div v-for="grupo in pedidosPorTipoFiltrado" :key="grupo.tipo" class="mb-6">
           <div class="mb-3 flex items-baseline justify-between">
             <h3 class="text-lg font-bold text-text">{{ grupo.label }}</h3>
             <span class="text-sm text-text-soft">{{ grupo.filas.length }} pedido{{ grupo.filas.length === 1 ? '' : 's' }}</span>
@@ -310,105 +406,146 @@ iniciar()
     </VSection>
 
     <!-- Alta de pedido -->
+    <!-- Wizard de 3 pasos en mobile (rediseño Mobile-First 2026-09-22,
+         pedido explícito de Federico: "botones grandes, pasos cortos").
+         En Desktop (`!esMobile`) todos los `v-if` de paso quedan true a la
+         vez — mismo formulario de siempre, un solo scroll, sin pasos. -->
     <VModal :open="modalNuevoAbierto" title="Nuevo pedido" @update:open="modalNuevoAbierto = $event">
-      <form class="space-y-3" @submit.prevent="guardarNuevo">
-        <label class="block text-sm text-text-mid">
-          Tipo de pedido
-          <select
-            v-model="formNuevo.tipo_pedido"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          >
-            <option value="obra">Producción interna</option>
-            <option value="venta">Venta externa</option>
-          </select>
-        </label>
+      <template v-if="esMobile">
+        <div class="mb-3 flex items-center gap-1.5">
+          <div v-for="n in 3" :key="n" class="h-1.5 flex-1 rounded-full" :class="n <= pasoNuevo ? 'bg-vialtec' : 'bg-gray-200'" />
+        </div>
+        <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-text-soft">
+          Paso {{ pasoNuevo }} de 3 — {{ TITULOS_PASO[pasoNuevo] }}
+        </p>
+      </template>
 
-        <label v-if="formNuevo.tipo_pedido === 'obra'" class="block text-sm text-text-mid">
-          Obra / Centro de costo
-          <select
-            v-model="formNuevo.obra_id"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          >
-            <option value="" disabled>Elegir obra…</option>
-            <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
-          </select>
-        </label>
-        <label v-else class="block text-sm text-text-mid">
-          Cliente externo
-          <select
-            v-model="formNuevo.cliente_externo"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          >
-            <option value="" disabled>Elegir cliente…</option>
-            <option v-for="c in clientes" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
-            <!-- Fallback: un cliente cargado como texto libre antes de que existiera
-                 este catálogo (Maestros → Clientes, 2026-09-09) no debe desaparecer
-                 del select solo por no estar todavía en la lista. -->
-            <option
-              v-if="formNuevo.cliente_externo && !clientes.some((c) => c.nombre === formNuevo.cliente_externo)"
-              :value="formNuevo.cliente_externo"
+      <form class="space-y-3" @submit.prevent="alEnviarFormNuevo">
+        <template v-if="!esMobile || pasoNuevo === 1">
+          <label class="block text-sm text-text-mid">
+            Tipo de pedido
+            <select
+              v-model="formNuevo.tipo_pedido"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
             >
-              {{ formNuevo.cliente_externo }} (no está en el catálogo)
-            </option>
-          </select>
-        </label>
+              <option value="obra">Producción interna</option>
+              <option value="venta">Venta externa</option>
+            </select>
+          </label>
 
-        <label class="block text-sm text-text-mid">
-          Responsable del pedido
-          <input
-            v-model="formNuevo.encargado"
-            type="text"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          />
-        </label>
+          <label v-if="formNuevo.tipo_pedido === 'obra'" class="block text-sm text-text-mid">
+            Obra / Centro de costo
+            <select
+              v-model="formNuevo.obra_id"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            >
+              <option value="" disabled>Elegir obra…</option>
+              <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
+            </select>
+          </label>
+          <label v-else class="block text-sm text-text-mid">
+            Cliente externo
+            <select
+              v-model="formNuevo.cliente_externo"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            >
+              <option value="" disabled>Elegir cliente…</option>
+              <option v-for="c in clientes" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
+              <!-- Fallback: un cliente cargado como texto libre antes de que existiera
+                   este catálogo (Maestros → Clientes, 2026-09-09) no debe desaparecer
+                   del select solo por no estar todavía en la lista. -->
+              <option
+                v-if="formNuevo.cliente_externo && !clientes.some((c) => c.nombre === formNuevo.cliente_externo)"
+                :value="formNuevo.cliente_externo"
+              >
+                {{ formNuevo.cliente_externo }} (no está en el catálogo)
+              </option>
+            </select>
+          </label>
 
-        <label class="block text-sm text-text-mid">
-          Mezcla
-          <select
-            v-model="formNuevo.formula_id"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            @change="alSeleccionarFormula"
+          <label class="block text-sm text-text-mid">
+            Responsable del pedido
+            <input
+              v-model="formNuevo.encargado"
+              type="text"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
+          </label>
+        </template>
+
+        <template v-if="!esMobile || pasoNuevo === 2">
+          <label class="block text-sm text-text-mid">
+            Mezcla
+            <select
+              v-model="formNuevo.formula_id"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              @change="alSeleccionarFormula"
+            >
+              <option value="" disabled>Elegir fórmula…</option>
+              <option v-for="f in formulas" :key="f.id" :value="f.id">{{ f.nombre }}</option>
+            </select>
+          </label>
+          <label class="block text-sm text-text-mid">
+            Cantidad ({{ formNuevo.tipo === 'hormigon' ? 'm³' : 'tn' }})
+            <input
+              v-model.number="formNuevo.cantidad_solicitada"
+              type="number"
+              step="0.01"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
+          </label>
+        </template>
+
+        <template v-if="!esMobile || pasoNuevo === 3">
+          <label class="block text-sm text-text-mid">
+            Fecha de entrega requerida
+            <input
+              v-model="formNuevo.fecha_programada"
+              type="date"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
+          </label>
+          <label class="block text-sm text-text-mid">
+            Notas (opcional)
+            <textarea
+              v-model="formNuevo.observaciones"
+              rows="2"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            ></textarea>
+          </label>
+          <label class="block text-sm text-text-mid">
+            Ubicación (opcional)
+            <input
+              v-model="formNuevo.ubicacion"
+              type="text"
+              placeholder="Ej.: Acceso norte, km 12…"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+            />
+          </label>
+        </template>
+
+        <!-- Nav del wizard en mobile: Atrás/Cancelar a la izquierda,
+             Siguiente/Crear a la derecha. En Desktop, footer de siempre. -->
+        <div v-if="esMobile" class="flex justify-between gap-2 pt-2">
+          <VButton
+            type="button"
+            variant="secondary"
+            @click="pasoNuevo > 1 ? pasoAnteriorNuevo() : (modalNuevoAbierto = false)"
           >
-            <option value="" disabled>Elegir fórmula…</option>
-            <option v-for="f in formulas" :key="f.id" :value="f.id">{{ f.nombre }}</option>
-          </select>
-        </label>
-        <label class="block text-sm text-text-mid">
-          Cantidad ({{ formNuevo.tipo === 'hormigon' ? 'm³' : 'tn' }})
-          <input
-            v-model.number="formNuevo.cantidad_solicitada"
-            type="number"
-            step="0.01"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          />
-        </label>
-        <label class="block text-sm text-text-mid">
-          Fecha de entrega requerida
-          <input
-            v-model="formNuevo.fecha_programada"
-            type="date"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          />
-        </label>
-        <label class="block text-sm text-text-mid">
-          Notas (opcional)
-          <textarea
-            v-model="formNuevo.observaciones"
-            rows="2"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          ></textarea>
-        </label>
-        <label class="block text-sm text-text-mid">
-          Ubicación (opcional)
-          <input
-            v-model="formNuevo.ubicacion"
-            type="text"
-            placeholder="Ej.: Acceso norte, km 12…"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-          />
-        </label>
-
-        <div class="flex justify-end gap-2 pt-2">
+            {{ pasoNuevo > 1 ? '‹ Atrás' : 'Cancelar' }}
+          </VButton>
+          <VButton
+            v-if="pasoNuevo < 3"
+            type="submit"
+            :disabled="(pasoNuevo === 1 && !paso1Valido) || (pasoNuevo === 2 && !paso2Valido)"
+          >
+            Siguiente ›
+          </VButton>
+          <VButton v-else type="submit" :disabled="guardandoNuevo">
+            {{ guardandoNuevo ? 'Guardando…' : 'Crear pedido' }}
+          </VButton>
+        </div>
+        <div v-else class="flex justify-end gap-2 pt-2">
           <VButton type="button" variant="secondary" @click="modalNuevoAbierto = false">Cancelar</VButton>
           <VButton type="submit" :disabled="guardandoNuevo">{{ guardandoNuevo ? 'Guardando…' : 'Crear pedido' }}</VButton>
         </div>

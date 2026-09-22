@@ -202,7 +202,12 @@ const columnasProveedorInsumo = [
               </button>
             </div>
           </div>
-          <div class="flex flex-wrap gap-2">
+          <!-- Sin acciones en mobile (rediseño Mobile-First 2026-09-22,
+               pedido explícito de Federico: "el stock en mobile, hacelo de
+               lectura, ninguna acción") — ingreso/salida manual,
+               relevamiento y export quedan exclusivos de Desktop. El toggle
+               de unidad de arriba no es una acción de escritura, se mantiene. -->
+          <div v-if="!esMobile" class="flex flex-wrap gap-2">
             <VButton size="sm" variant="success" @click="abrirMovimiento('ingreso_manual')">+ Ingreso manual</VButton>
             <VButton size="sm" variant="secondary" @click="abrirMovimiento('egreso_manual')">+ Salida manual</VButton>
             <VButton size="sm" variant="secondary" @click="abrirRelevamiento">▤ Relevamiento mensual</VButton>
@@ -331,6 +336,7 @@ const columnasProveedorInsumo = [
               />
             </label>
             <VButton
+              v-if="!esMobile"
               size="sm"
               variant="secondary"
               :disabled="exportando || !analiticaProveedores.length"

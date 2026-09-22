@@ -4,7 +4,7 @@
 // pasa por pedidos.service.js — este componente no llama a Supabase
 // directamente (memory/conventions.md).
 
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import VCard from '@/components/shared/VCard.vue'
 import VKpiCard from '@/components/shared/VKpiCard.vue'
 import VBadge from '@/components/shared/VBadge.vue'
@@ -20,8 +20,17 @@ import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { hoyISO } from '@/services/fecha'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { useAuthStore } from '@/stores/auth.store'
 
 const { esMobile } = useBreakpoint()
+const auth = useAuthStore()
+
+// Mismo criterio de permiso que PedidosView.vue (auth.store.js): evita
+// mostrar un botón "Confirmar" que la RPC del servidor va a rechazar igual.
+// La franja diaria de mobile (más abajo) es la única que usa esto — la
+// grilla de Desktop ya lo tenía sin gatear por rol desde siempre, no se
+// tocó para no cambiar comportamiento existente ahí.
+const puedeConfirmar = computed(() => auth.tienePermiso('pedidos', 'aprobar'))
 
 const NOMBRES_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 const VARIANTE_ESTADO = {
@@ -63,6 +72,14 @@ function nombreDestinoPedido(p) {
   // Cruz" sin equivalente en flota_obras) — fallback legible en vez de
   // "Obra #null" literal, pero sigue señalando que falta resolverlo.
   return 'Obra sin asignar'
+}
+
+/** Los pedidos no tienen hora de entrega propia (solo `fecha_programada`,
+ * columna date) — se muestra la hora de creación como referencia, mismo
+ * dato que ya expone PedidoCard.vue con el ícono 🕐. */
+function formatearHoraCreacion(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 }
 
 function nombreDestinoTotal(t) {
@@ -112,6 +129,22 @@ const rangoLabel = computed(() =>
   diasSemana.value.length ? `${diasSemana.value[0].iso} — ${diasSemana.value[6].iso}` : ''
 )
 
+// Franja diaria mobile (rediseño Mobile-First 2026-09-22, reemplaza la
+// grilla apilada de 7 días que tenía mobile antes): día seleccionado en la
+// franja horizontal de arriba, cuyo detalle se despliega abajo. Se
+// recalcula cada vez que cambia la semana cargada — no tiene sentido
+// arrastrar el ISO de la semana anterior a la nueva.
+const diaSeleccionadoIso = ref(null)
+
+const diaSeleccionado = computed(
+  () => diasSemana.value.find((d) => d.iso === diaSeleccionadoIso.value) ?? diasSemana.value[0] ?? null
+)
+
+function seleccionarDiaPorDefecto() {
+  const hoy = hoyISO()
+  diaSeleccionadoIso.value = diasSemana.value.some((d) => d.iso === hoy) ? hoy : diasSemana.value[0]?.iso ?? null
+}
+
 async function cargarSemana() {
   cargando.value = true
   error.value = null
@@ -126,24 +159,13 @@ async function cargarSemana() {
     totales.value = totalesSemana
     obras.value = listaObras
     formulas.value = listaFormulas
-    // Mobile (2026-09-07, roadmap: "operatividad rápida"): en la grilla
-    // apilada de 1 columna, "hoy" puede quedar varios scrolls por debajo del
-    // lunes (ej. si se entra un viernes) — se autoscrollea a la columna del
-    // día actual apenas termina de renderizar, sin animación brusca (scroll
-    // suave). Solo aplica en mobile: en desktop las 7 columnas ya se ven
-    // todas juntas, no hay nada que scrollear.
-    if (esMobile.value) {
-      await nextTick()
-      diaHoyRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+    seleccionarDiaPorDefecto()
   } catch (e) {
     error.value = e.message
   } finally {
     cargando.value = false
   }
 }
-
-const diaHoyRef = ref(null)
 
 function semanaAnterior() {
   const f = new Date(fechaRef.value)
@@ -156,6 +178,14 @@ function semanaSiguiente() {
   const f = new Date(fechaRef.value)
   f.setDate(f.getDate() + 7)
   fechaRef.value = f
+  cargarSemana()
+}
+
+/** "Hoy" (rediseño Mobile-First 2026-09-22, pedido explícito de Federico:
+ * volver rápido al día actual desde la franja) — salta directo a la semana
+ * en curso, sea cual sea la que esté cargada, y selecciona el día de hoy. */
+function irAHoySemana() {
+  fechaRef.value = new Date()
   cargarSemana()
 }
 
@@ -175,7 +205,11 @@ cargarSemana()
 <template>
   <div>
     <VSection title="Plan semanal">
-      <div class="mb-4 flex items-center justify-between">
+      <!-- Nav de semana — versión completa en Desktop. En mobile queda una
+           versión compacta (‹ / Hoy / ›) dentro de la franja de abajo, no
+           hace falta duplicar el rango de fechas ahí (los propios chips de
+           día ya muestran número + mes). -->
+      <div v-if="!esMobile" class="mb-4 flex items-center justify-between">
         <VButton variant="ghost" size="sm" @click="semanaAnterior">‹ Semana anterior</VButton>
         <p class="text-sm font-semibold text-text">{{ rangoLabel }}</p>
         <VButton variant="ghost" size="sm" @click="semanaSiguiente">Semana siguiente ›</VButton>
@@ -185,39 +219,120 @@ cargarSemana()
         {{ error }}
       </div>
 
-      <!-- Totalizador general: siempre las dos métricas en paralelo -->
-      <VCard class="mb-4">
-        <p class="mb-2 text-sm font-semibold text-text-soft">Total semana — todas las obras</p>
-        <div class="grid grid-cols-2 gap-3">
-          <VKpiCard label="Asfalto" :value="totales.total.asfaltoTn.toFixed(1)" unidad="tn" />
-          <VKpiCard label="Hormigón" :value="totales.total.hormigonM3.toFixed(1)" unidad="m³" />
-        </div>
-      </VCard>
-
-      <!-- Totales por obra: mismas dos métricas en paralelo -->
-      <div v-if="totales.porObra.length" class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <VCard v-for="t in totales.porObra" :key="t.obraId ?? t.clienteExterno">
-          <p class="mb-2 text-sm font-semibold text-text-soft">{{ nombreDestinoTotal(t) }}</p>
+      <!-- Totalizadores tn/m³ — ocultos en mobile (rediseño Mobile-First
+           2026-09-22, mismo criterio que Pedidos: en campo importa "qué
+           tengo hoy", no el acumulado semanal). Sin cambios en Desktop. -->
+      <template v-if="!esMobile">
+        <VCard class="mb-4">
+          <p class="mb-2 text-sm font-semibold text-text-soft">Total semana — todas las obras</p>
           <div class="grid grid-cols-2 gap-3">
-            <VKpiCard label="Asfalto" :value="t.asfaltoTn.toFixed(1)" unidad="tn" />
-            <VKpiCard label="Hormigón" :value="t.hormigonM3.toFixed(1)" unidad="m³" />
+            <VKpiCard label="Asfalto" :value="totales.total.asfaltoTn.toFixed(1)" unidad="tn" />
+            <VKpiCard label="Hormigón" :value="totales.total.hormigonM3.toFixed(1)" unidad="m³" />
           </div>
         </VCard>
-      </div>
+
+        <div v-if="totales.porObra.length" class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <VCard v-for="t in totales.porObra" :key="t.obraId ?? t.clienteExterno">
+            <p class="mb-2 text-sm font-semibold text-text-soft">{{ nombreDestinoTotal(t) }}</p>
+            <div class="grid grid-cols-2 gap-3">
+              <VKpiCard label="Asfalto" :value="t.asfaltoTn.toFixed(1)" unidad="tn" />
+              <VKpiCard label="Hormigón" :value="t.hormigonM3.toFixed(1)" unidad="m³" />
+            </div>
+          </VCard>
+        </div>
+      </template>
 
       <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
 
-      <!-- Matriz lunes a domingo: grilla de calendario real (una sola grilla
-           con separadores internos, no 7 cards sueltas) — el día actual se
-           resalta con el acento de marca y fin de semana lleva un fondo
-           levemente distinto, mismo lenguaje visual que un calendario
-           semanal estándar. -->
+      <!-- Mobile (<768px, rediseño Mobile-First 2026-09-22): franja
+           horizontal táctil de los 7 días + detalle del día seleccionado
+           debajo, en vez del scroll vertical continuo de antes. -->
+      <template v-else-if="esMobile">
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <VButton variant="ghost" size="sm" @click="semanaAnterior">‹</VButton>
+          <VButton variant="secondary" size="sm" @click="irAHoySemana">Hoy</VButton>
+          <VButton variant="ghost" size="sm" @click="semanaSiguiente">›</VButton>
+        </div>
+
+        <div class="mb-4 flex gap-2 overflow-x-auto pb-1" style="scroll-snap-type: x proximity">
+          <button
+            v-for="dia in diasSemana"
+            :key="dia.iso"
+            type="button"
+            class="flex shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2"
+            style="min-width: 56px; scroll-snap-align: start"
+            :class="dia.iso === diaSeleccionadoIso ? 'border-vialtec bg-vialtec/5' : 'border-border bg-white'"
+            @click="diaSeleccionadoIso = dia.iso"
+          >
+            <span
+              class="text-[10px] font-semibold uppercase tracking-wide"
+              :class="dia.iso === diaSeleccionadoIso ? 'text-vialtec' : 'text-text-soft'"
+            >
+              {{ dia.etiquetaCorta }}
+            </span>
+            <span
+              class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
+              :class="[
+                dia.iso === diaSeleccionadoIso ? 'bg-vialtec text-white' : 'text-text-mid',
+                dia.esHoy && dia.iso !== diaSeleccionadoIso ? 'ring-1 ring-vialtec' : '',
+              ]"
+            >
+              {{ dia.numeroDia }}
+            </span>
+            <!-- Punto indicador: hay pedidos ese día (2026-09-22, pedido de Federico). -->
+            <span class="h-1.5 w-1.5 rounded-full" :class="dia.pedidos.length ? 'bg-vialtec' : 'bg-transparent'" />
+          </button>
+        </div>
+
+        <div v-if="diaSeleccionado" class="mb-3 flex items-baseline justify-between">
+          <p class="text-sm font-bold text-text">{{ diaSeleccionado.etiqueta }} {{ diaSeleccionado.numeroDia }} de {{ diaSeleccionado.mesLabel }}</p>
+          <span class="text-xs text-text-soft">
+            {{ diaSeleccionado.pedidos.length }} {{ diaSeleccionado.pedidos.length === 1 ? 'pedido' : 'pedidos' }}
+          </span>
+        </div>
+
+        <div class="space-y-3">
+          <p
+            v-if="diaSeleccionado && !diaSeleccionado.pedidos.length"
+            class="rounded-xl border border-dashed border-border py-6 text-center text-sm text-text-soft"
+          >
+            Sin pedidos para este día.
+          </p>
+          <div
+            v-for="p in diaSeleccionado?.pedidos ?? []"
+            :key="p.id"
+            class="rounded-xl border border-border bg-white p-3 shadow-sm"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="truncate text-sm font-bold text-text">{{ nombreDestinoPedido(p) }}</p>
+                <p class="text-xs text-text-soft">
+                  {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
+                  <span class="font-semibold text-vialtec">{{ p.cantidad_solicitada }} {{ p.tipo === 'hormigon' ? 'm³' : 'tn' }}</span>
+                </p>
+              </div>
+              <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-soft">
+              <span v-if="p.encargado">👤 {{ p.encargado }}</span>
+              <span>🕐 {{ formatearHoraCreacion(p.created_at) }}</span>
+            </div>
+            <div v-if="p.estado === 'solicitado' && puedeConfirmar" class="mt-2 flex justify-end">
+              <VButton size="sm" @click="confirmar(p)">Confirmar</VButton>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Desktop (>=768px): matriz lunes a domingo sin cambios — grilla de
+           calendario real (una sola grilla con separadores internos, no 7
+           cards sueltas), día actual resaltado, fin de semana con fondo
+           levemente distinto. -->
       <div v-else class="overflow-hidden rounded-xl border border-border">
         <div class="grid grid-cols-1 divide-y divide-border md:grid-cols-7 md:divide-x md:divide-y-0">
           <div
             v-for="dia in diasSemana"
             :key="dia.iso"
-            :ref="(el) => { if (dia.esHoy) diaHoyRef.value = el }"
             class="flex flex-col"
             :class="dia.esFinDeSemana && !dia.esHoy ? 'bg-gray-50/60' : ''"
           >

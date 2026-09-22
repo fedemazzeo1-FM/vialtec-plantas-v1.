@@ -74,6 +74,14 @@ export function usePedidos() {
     return pedido?.obra_id ? obrasPorId.value[pedido.obra_id]?.nombre ?? `Obra #${pedido.obra_id}` : ''
   }
 
+  // `baseListo` (rediseño Mobile-First 2026-09-22): el FAB de MobileLayout
+  // navega a /pedidos?nuevo=1 desde cualquier pantalla para abrir el modal
+  // de alta — PedidosView necesita saber cuándo obras/fórmulas/clientes ya
+  // cargaron antes de llamar abrirNuevo(), si no los <select> del wizard
+  // quedan vacíos un instante. Se marca true en el `finally` (incluso si
+  // cargarBase() falló) para no dejar el deep-link esperando para siempre.
+  const baseListo = ref(false)
+
   async function cargarBase() {
     // Fix 2026-09-01: sin try/catch acá, un fallo de red dejaba
     // `iniciar()` (`cargarBase().then(cargarPedidos)`) como una promesa
@@ -97,6 +105,8 @@ export function usePedidos() {
       clientes.value = listaClientes
     } catch (e) {
       error.value = e.message
+    } finally {
+      baseListo.value = true
     }
   }
 
@@ -272,6 +282,28 @@ export function usePedidos() {
   const guardandoNuevo = ref(false)
   const formNuevo = reactive(formularioPedidoVacio())
 
+  // Wizard de 3 pasos (rediseño Mobile-First 2026-09-22, solo se usa en
+  // mobile — PedidosView.vue muestra todos los campos juntos en Desktop,
+  // igual que antes, ignorando `pasoNuevo`): 1) Obra/cliente + responsable,
+  // 2) Mezcla + cantidad, 3) Fecha + notas/ubicación. `guardarNuevo()` sigue
+  // validando el formulario completo al final (defensa real, sea cual sea
+  // el camino por el que se llegó) — esto solo gatea el botón "Siguiente"
+  // para no dejar avanzar con el paso actual incompleto.
+  const pasoNuevo = ref(1)
+
+  const paso1Valido = computed(() =>
+    formNuevo.tipo_pedido === 'venta' ? !!formNuevo.cliente_externo.trim() : !!formNuevo.obra_id
+  )
+  const paso2Valido = computed(() => !!formNuevo.formula_id && !!formNuevo.cantidad_solicitada)
+
+  function siguientePasoNuevo() {
+    if (pasoNuevo.value < 3) pasoNuevo.value += 1
+  }
+
+  function pasoAnteriorNuevo() {
+    if (pasoNuevo.value > 1) pasoNuevo.value -= 1
+  }
+
   function abrirNuevo() {
     Object.assign(formNuevo, formularioPedidoVacio())
     // Responsable precargado con el usuario logueado (2026-09-17, pedido de
@@ -279,6 +311,7 @@ export function usePedidos() {
     // defecto. auth.nombre ya resuelve el nombre real vía flota_usuarios_email
     // (o cae al email si no hay match, ver auth.store.js#_cargarPerfil).
     formNuevo.encargado = auth.nombre || ''
+    pasoNuevo.value = 1
     modalNuevoAbierto.value = true
   }
 
@@ -562,9 +595,15 @@ export function usePedidos() {
     verHistoricoCompleto,
     whatsappToasts,
     descartarToastWhatsapp,
+    baseListo,
     modalNuevoAbierto,
     guardandoNuevo,
     formNuevo,
+    pasoNuevo,
+    paso1Valido,
+    paso2Valido,
+    siguientePasoNuevo,
+    pasoAnteriorNuevo,
     abrirNuevo,
     alSeleccionarFormula,
     guardarNuevo,
