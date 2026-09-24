@@ -27,6 +27,37 @@ function unidad(pedido) {
   return pedido.tipo === 'hormigon' ? 'm³' : 'tn'
 }
 
+function materialLabel(pedido) {
+  return pedido.tipo === 'hormigon' ? 'hormigón' : 'asfalto'
+}
+
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
+/** 'YYYY-MM-DD' → 'jueves 24/09/2026' (día de la semana ayuda a no confundir la fecha en el chat). */
+function fechaLabel(fechaIso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(fechaIso || '')
+  if (!m) return fechaIso || '—'
+  const [, anio, mes, dia] = m
+  const diaSemana = DIAS[new Date(Number(anio), Number(mes) - 1, Number(dia)).getDay()]
+  return `${diaSemana} ${dia}/${mes}/${anio}`
+}
+
+/**
+ * Cuerpo común a los 3 avisos: destino + cantidad, mezcla, fecha y los datos
+ * opcionales del pedido (solo si están cargados, para no mandar líneas vacías).
+ */
+function lineasDetalle(pedido, { obraNombre, formulaNombre, conEncargado = false }) {
+  const lineas = [
+    `${destinoLabel(pedido, obraNombre)} — ${pedido.cantidad_solicitada} ${unidad(pedido)}`,
+    `Mezcla: ${formulaNombre || '—'}`,
+    `Fecha: ${fechaLabel(pedido.fecha_programada)}`,
+  ]
+  if (pedido.ubicacion) lineas.push(`Ubicación: ${pedido.ubicacion}`)
+  if (conEncargado) lineas.push(`Solicitado por: ${pedido.encargado || '—'}`)
+  if (pedido.observaciones) lineas.push(`Obs.: ${pedido.observaciones}`)
+  return lineas
+}
+
 export function urlWhatsapp(mensaje, telefono) {
   const texto = encodeURIComponent(mensaje)
   return telefono ? `https://wa.me/${telefono}?text=${texto}` : `https://wa.me/?text=${texto}`
@@ -40,8 +71,11 @@ export function urlWhatsapp(mensaje, telefono) {
  * telefono (lookup falló o no está cargado), cae a wa.me sin destinatario,
  * mismo criterio de respaldo que el resto de estos toasts.
  */
-export function toastCrearPedido(pedido, { obraNombre, telefono } = {}) {
-  const mensaje = `🔔 Nuevo pedido de ${pedido.tipo === 'hormigon' ? 'hormigón' : 'asfalto'}\n${destinoLabel(pedido, obraNombre)} — ${pedido.cantidad_solicitada} ${unidad(pedido)}\nFecha: ${pedido.fecha_programada}\nSolicitado por: ${pedido.encargado || '—'}`
+export function toastCrearPedido(pedido, { obraNombre, formulaNombre, telefono } = {}) {
+  const mensaje = [
+    `🔔 Nuevo pedido de ${materialLabel(pedido)}`,
+    ...lineasDetalle(pedido, { obraNombre, formulaNombre, conEncargado: true }),
+  ].join('\n')
   return { titulo: 'Avisar al plantista', mensaje, url: urlWhatsapp(mensaje, telefono) }
 }
 
@@ -50,8 +84,11 @@ export function toastCrearPedido(pedido, { obraNombre, telefono } = {}) {
  * `telefono` (opcional, ver flota.service.js#fetchTelefonoPorNombre) manda
  * el link directo a su chat personal en vez de abrir wa.me sin destinatario.
  */
-export function toastConfirmarPedido(pedido, { obraNombre, telefono } = {}) {
-  const mensaje = `✅ Tu pedido de ${pedido.tipo === 'hormigon' ? 'hormigón' : 'asfalto'} fue confirmado\n${destinoLabel(pedido, obraNombre)} — ${pedido.cantidad_solicitada} ${unidad(pedido)}\nFecha: ${pedido.fecha_programada}`
+export function toastConfirmarPedido(pedido, { obraNombre, formulaNombre, telefono } = {}) {
+  const mensaje = [
+    `✅ Tu pedido de ${materialLabel(pedido)} fue confirmado`,
+    ...lineasDetalle(pedido, { obraNombre, formulaNombre }),
+  ].join('\n')
   return { titulo: 'Avisar al encargado', mensaje, url: urlWhatsapp(mensaje, telefono) }
 }
 
@@ -59,9 +96,13 @@ export function toastConfirmarPedido(pedido, { obraNombre, telefono } = {}) {
  * Al confirmar un pedido de HORMIGÓN — mensaje adicional para el operador de
  * hormigón (en el legado va a un usuario hardcodeado "angel"/u12 — acá no
  * hardcodeamos ningún contacto puntual, el balancero/plantista elige el
- * destinatario real en WhatsApp).
+ * destinatario real en WhatsApp). Incluye la mezcla (ej. "H-8") y quién lo
+ * pidió, para que el operador sepa qué producir y a quién consultar.
  */
-export function toastConfirmarHormigonOperador(pedido, { obraNombre }) {
-  const mensaje = `🧱 Hormigón confirmado para producción\n${destinoLabel(pedido, obraNombre)} — ${pedido.cantidad_solicitada} m³\nFecha: ${pedido.fecha_programada}`
+export function toastConfirmarHormigonOperador(pedido, { obraNombre, formulaNombre } = {}) {
+  const mensaje = [
+    '🧱 Hormigón confirmado para producción',
+    ...lineasDetalle(pedido, { obraNombre, formulaNombre, conEncargado: true }),
+  ].join('\n')
   return { titulo: 'Avisar al operador de hormigón', mensaje, url: urlWhatsapp(mensaje) }
 }

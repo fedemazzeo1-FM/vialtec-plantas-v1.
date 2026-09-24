@@ -365,7 +365,11 @@ export function usePedidos() {
         telefonoPlantista = null
       }
       mostrarToastWhatsapp(
-        toastCrearPedido(pedidoCreado, { obraNombre: obraNombreDe(pedidoCreado), telefono: telefonoPlantista })
+        toastCrearPedido(pedidoCreado, {
+          obraNombre: obraNombreDe(pedidoCreado),
+          formulaNombre: formulasPorId.value[pedidoCreado.formula_id]?.nombre,
+          telefono: telefonoPlantista,
+        })
       )
       aplicarFiltros()
     } catch (e) {
@@ -455,9 +459,11 @@ export function usePedidos() {
       } catch (e) {
         telefonoEncargado = null
       }
-      mostrarToastWhatsapp(toastConfirmarPedido(pedido, { obraNombre: obraNombreDe(pedido), telefono: telefonoEncargado }))
+      const formulaNombre = formulasPorId.value[pedido.formula_id]?.nombre
+      const obraNombre = obraNombreDe(pedido)
+      mostrarToastWhatsapp(toastConfirmarPedido(pedido, { obraNombre, formulaNombre, telefono: telefonoEncargado }))
       if (pedido.tipo === 'hormigon') {
-        mostrarToastWhatsapp(toastConfirmarHormigonOperador(pedido, { obraNombre: obraNombreDe(pedido) }))
+        mostrarToastWhatsapp(toastConfirmarHormigonOperador(pedido, { obraNombre, formulaNombre }))
       }
       await cargarPedidos()
     } catch (e) {
