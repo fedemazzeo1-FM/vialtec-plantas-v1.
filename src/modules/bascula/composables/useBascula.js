@@ -91,9 +91,9 @@ export const OPCIONES_TIPO_PUERTA = [
 // campos, para que el formulario se lea mejor. `!` porque VCard ya trae
 // bg-white.
 export const COLOR_PUERTA = {
-  asfalto: { borde: 'border-l-vialtec', texto: 'text-vialtec', fondo: '!bg-vialtec/15' },
-  ingreso_arido: { borde: 'border-l-success', texto: 'text-success', fondo: '!bg-success/15' },
-  egreso_arido: { borde: 'border-l-orange-500', texto: 'text-orange-600', fondo: '!bg-orange-500/15' },
+  asfalto: { borde: 'border-l-vialtec', texto: 'text-vialtec', fondo: '!bg-vialtec/25' },
+  ingreso_arido: { borde: 'border-l-success', texto: 'text-success', fondo: '!bg-success/25' },
+  egreso_arido: { borde: 'border-l-orange-500', texto: 'text-orange-600', fondo: '!bg-orange-500/25' },
 }
 
 // Mismo esquema de color que COLOR_PUERTA de arriba, pero como franja +
