@@ -574,6 +574,10 @@ export function useBascula() {
       pesoNetoLabel: `${v.peso_neto} ${v.unidad}`,
       fechaLabel: new Date(v.fecha_pesada).toLocaleString('es-AR'),
       horaLabel: new Date(v.fecha_pesada).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+      // Columna "Fecha/Hora" del listado (2026-09-28, pedido de Federico):
+      // "28/09/2026 11:45". horaLabel sigue aparte para el Excel, que ya
+      // tiene su propia columna Fecha.
+      fechaHoraLabel: `${new Date(v.fecha_pesada).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${new Date(v.fecha_pesada).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`,
       diferenciaLabel: diferencia == null ? '—' : `${diferencia > 0 ? '+' : ''}${diferencia.toFixed(2)} tn`,
       // MATERIAL/OBRA combinada (columna única en el legado): obra para
       // asfalto, material de texto libre para ingreso/egreso — ambos ya

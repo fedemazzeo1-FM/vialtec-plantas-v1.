@@ -131,13 +131,13 @@ async function descargarPdf() {
 // Mobile (roadmap 2026-09-07, "menos sobrecarga de datos secundarios"):
 // con 14 columnas, la card de VTable.vue quedaba mostrando 14 renglones de
 // golpe por vale — mucho para una consulta rápida parado en la báscula.
-// `secundaria: true` (VTable.vue) deja Hora/Tipo/Material-Obra/Patente/N°
+// `secundaria: true` (VTable.vue) deja Fecha-Hora/Tipo/Material-Obra/Patente/N°
 // Vale/Neto siempre visibles (lo que un balancero necesita de un vistazo) y
 // el resto (Remito/Responsable/Bruto/Tara/Acum./S-Remito/Dif./E-S) atrás de
 // un "Ver más" por card — mismo dato, un toque para verlo completo. Ningún
 // cambio en desktop (esa columna se sigue viendo siempre en la tabla).
 const columnasHistorial = [
-  { key: 'horaLabel', label: 'Hora' },
+  { key: 'fechaHoraLabel', label: 'Fecha/Hora' },
   { key: 'tipo_vale', label: 'Tipo' },
   { key: 'materialObraLabel', label: 'Material/Obra' },
   { key: 'patente', label: 'Patente' },
@@ -510,6 +510,9 @@ watch(
           :row-class="(row) => [COLOR_FILA_VALE[row.tipo_vale], row.anulado ? 'opacity-50 line-through decoration-danger/60' : '']"
           @update:page="cambiarPaginaHistorial"
         >
+          <template #cell-fechaHoraLabel="{ row }">
+            <span class="whitespace-nowrap">{{ row.fechaHoraLabel }}</span>
+          </template>
           <template #cell-tipo_vale="{ row }">
             <div class="flex flex-wrap items-center gap-1">
               <VBadge :variant="VARIANTE_TIPO_VALE[row.tipo_vale]" :title="ETIQUETA_TIPO_VALE[row.tipo_vale]">
