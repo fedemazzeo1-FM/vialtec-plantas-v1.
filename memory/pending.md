@@ -1,6 +1,12 @@
 # pending.md — Pendientes vigentes
 
-## ▶ RETOMAR AQUÍ (actualizado 2026-09-22)
+## ▶ RETOMAR AQUÍ (actualizado 2026-09-28)
+
+**2026-09-28: migración 45 aplicada + deploy** (confirmación explícita de
+Federico). Ver §5b. Deploy `dpl_46GzZuDdboRKhwKmztXNo5AzsunH`,
+`produccion.vialtec.app` sirve el bundle nuevo. Incluye también la columna
+"Fecha/Hora" del listado de Báscula (`28/09/2026 11:05`, 24 hs) — verificada
+en vivo.
 
 **Migraciones 42, 43 y 44 ya aplicadas en producción** (2026-09-22,
 confirmación explícita de Federico en cada una — ver §2, §3 y §5 para el
@@ -42,6 +48,7 @@ Detalle completo de la auditoría: `memory/auditoria-2026-09-19.md`.
 | 42 | Numeración propia ingreso/egreso de áridos (`I-00001`) | **APLICADA en producción (2026-09-22).** Ver §2. |
 | 43 | Seguridad: revoke de helpers de stock + `security_invoker` en 2 vistas | **APLICADA en producción (2026-09-22).** Ver §3. |
 | 44 | Ingreso de áridos: `cantidad_remito` obligatoria en `registrar_pesada_bascula` (ya no se sustituye por el peso neto pesado) | **APLICADA en producción (2026-09-22).** Ver §5. |
+| 45 | Remito Manual: `unidad` por item (Tn/Kg/m³/Lts/Unidades) + `generar_remito_manual` la exige si hay cantidad | **APLICADA en producción (2026-09-28).** Ver §5b. |
 
 ## 2. Migración 42 — numeración `I-00001` — APLICADA en producción (2026-09-22)
 
@@ -186,6 +193,21 @@ neto/bruto pesado por la báscula.
 - **Aplicada en producción (2026-09-22, `apply_migration`) — confirmación
   explícita de Federico.** Verificado post-aplicación: la validación nueva
   está presente en `pg_get_functiondef('registrar_pesada_bascula')`.
+
+## 5b. Migración 45 — unidad de medida en Remito Manual — APLICADA (2026-09-28)
+
+- Columna `plantas_remitos_manuales_items.unidad` + CHECK con la lista cerrada
+  (misma que `UNIDADES_REMITO_MANUAL` en `remitos-manuales.service.js`).
+  `generar_remito_manual` la guarda y rechaza cantidad sin unidad. Se imprime
+  junto a la cantidad ("20 Unidades"). Los 11 remitos/17 items previos quedan
+  con unidad null (se imprimen como antes).
+- Verificado post-aplicación: columna, CHECK, RPC nueva, EXECUTE de
+  `authenticated` intacto; en vivo, el selector aparece en el modal con las 5
+  opciones. **No se generó un remito real de prueba** (consumiría un N°
+  oficial de la secuencia): falta confirmar con el primer remito real que la
+  unidad sale impresa.
+- Remitos manuales no figuran en ningún Excel/reporte hoy; si se quiere un
+  export, definir columnas con Federico.
 
 ## 6. Pendientes operativos (heredados del histórico, sin confirmar en vivo)
 
