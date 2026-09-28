@@ -76,6 +76,7 @@ const {
   modalRemitoAbierto,
   imprimir,
   remitosManuales,
+  unidadesRemitoManual,
   cargandoRemitosManuales,
   remitosManualesColapsado,
   toggleRemitosManualesColapsado,
@@ -517,7 +518,7 @@ async function descargarPdfVale() {
           <div
             v-for="(item, idx) in formRemitoManual.items"
             :key="idx"
-            class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_2fr_auto]"
+            class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_1fr_2fr_auto]"
           >
             <label class="text-xs text-text-mid">
               Cantidad (opcional)
@@ -527,6 +528,16 @@ async function descargarPdfVale() {
                 placeholder="Ej.: 20"
                 class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
               />
+            </label>
+            <label class="text-xs text-text-mid">
+              Unidad
+              <select
+                v-model="item.unidad"
+                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
+              >
+                <option value="">—</option>
+                <option v-for="u in unidadesRemitoManual" :key="u" :value="u">{{ u }}</option>
+              </select>
             </label>
             <label class="text-xs text-text-mid">
               Descripción *

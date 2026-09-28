@@ -43,6 +43,7 @@ import {
   generarRemitoManual,
   fetchRemitosManuales,
   fetchItemsDeRemitoManual,
+  UNIDADES_REMITO_MANUAL,
 } from '@/modules/despachos/services/remitos-manuales.service'
 
 const TAMANO_PAGINA = 20
@@ -482,7 +483,7 @@ export function useDespachos() {
   }
 
   function itemVacio() {
-    return { cantidad: null, descripcion: '' }
+    return { cantidad: null, unidad: '', descripcion: '' }
   }
 
   function formRemitoManualVacio() {
@@ -532,7 +533,9 @@ export function useDespachos() {
       fecha: remito.fecha,
       destino: remito.destino,
       items: items.map((i) => ({
-        cantidad: i.cantidad != null ? String(i.cantidad) : '',
+        // Unidad junto a la cantidad ("20 Unidades", "5 Tn") — migración 45.
+        // Items anteriores no tienen unidad: salen como antes, solo el número.
+        cantidad: i.cantidad != null ? [i.cantidad, i.unidad].filter(Boolean).join(' ') : '',
         detalle: i.descripcion,
       })),
       patente: remito.patente || '',
@@ -545,6 +548,10 @@ export function useDespachos() {
     const itemsValidos = formRemitoManual.items.filter((i) => i.descripcion.trim())
     if (!itemsValidos.length) {
       errorRemitoManual.value = 'Agregá al menos un item con descripción.'
+      return
+    }
+    if (itemsValidos.some((i) => String(i.cantidad ?? '').trim() && !i.unidad)) {
+      errorRemitoManual.value = 'Elegí la unidad de medida de cada item con cantidad.'
       return
     }
     generandoRemitoManual.value = true
@@ -703,6 +710,7 @@ export function useDespachos() {
     modalRemitoAbierto,
     imprimir,
     remitosManuales,
+    unidadesRemitoManual: UNIDADES_REMITO_MANUAL,
     cargandoRemitosManuales,
     remitosManualesColapsado,
     toggleRemitosManualesColapsado,

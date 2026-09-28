@@ -12,15 +12,19 @@
 import { supabase } from '@/config/supabase'
 import { fetchPaginado } from '@/services/fetch-paginado'
 
+// Unidades de medida de un item (migración 45). Misma lista que el CHECK
+// plantas_remitos_manuales_items_unidad_chk — si se agrega una, va en los dos.
+export const UNIDADES_REMITO_MANUAL = ['Tn', 'Kg', 'm³', 'Lts', 'Unidades']
+
 /**
- * @param {{ items: Array<{ cantidad?: number, descripcion: string }>, destino?: string,
+ * @param {{ items: Array<{ cantidad?: number, unidad?: string, descripcion: string }>, destino?: string,
  *   patente?: string, transportista?: string, fecha?: string|Date }} datos
- * @returns {Promise<{ remito: object, items: Array<{ cantidad: number|null, descripcion: string }> }>}
+ * @returns {Promise<{ remito: object, items: Array<{ cantidad: number|null, unidad: string|null, descripcion: string }> }>}
  */
 export async function generarRemitoManual(datos) {
   const fecha = datos.fecha ? new Date(datos.fecha).toISOString().slice(0, 10) : undefined
   const { data, error } = await supabase.rpc('generar_remito_manual', {
-    p_items: datos.items.map((i) => ({ cantidad: i.cantidad ?? null, descripcion: i.descripcion })),
+    p_items: datos.items.map((i) => ({ cantidad: i.cantidad ?? null, unidad: i.unidad || null, descripcion: i.descripcion })),
     p_destino: datos.destino || null,
     p_patente: datos.patente || null,
     p_transportista: datos.transportista || null,
