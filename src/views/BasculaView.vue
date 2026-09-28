@@ -214,7 +214,12 @@ watch(
            tipo/colapso/cierre y un color de identificación según el tipo
            (violeta=asfalto, verde=ingreso, naranja=egreso). -->
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <VCard v-for="slot in slots" :key="slot.id" class="border-l-4" :class="COLOR_PUERTA[slot.tipo].borde">
+        <VCard
+          v-for="slot in slots"
+          :key="slot.id"
+          class="border-l-4 [&_input:not(:disabled)]:bg-white [&_select]:bg-white [&_textarea]:bg-white"
+          :class="[COLOR_PUERTA[slot.tipo].borde, COLOR_PUERTA[slot.tipo].fondo]"
+        >
           <div class="mb-3 flex items-center justify-between">
             <select
               :value="slot.tipo"

@@ -86,10 +86,14 @@ export const OPCIONES_TIPO_PUERTA = [
 // violeta = Vale Asfalto (mismo tono que la marca, #7B2F8E = token `vialtec`),
 // verde = Ingreso de Áridos (token `success`), naranja = Egreso de Áridos
 // (Tailwind `orange`, no tenemos un token semántico propio para esto todavía).
+// `fondo` (2026-09-28, pedido de Federico): la card de la puerta abierta
+// lleva un fondo tintado del color del tipo, más oscuro que el blanco de los
+// campos, para que el formulario se lea mejor. `!` porque VCard ya trae
+// bg-white.
 export const COLOR_PUERTA = {
-  asfalto: { borde: 'border-l-vialtec', texto: 'text-vialtec' },
-  ingreso_arido: { borde: 'border-l-success', texto: 'text-success' },
-  egreso_arido: { borde: 'border-l-orange-500', texto: 'text-orange-600' },
+  asfalto: { borde: 'border-l-vialtec', texto: 'text-vialtec', fondo: '!bg-vialtec/15' },
+  ingreso_arido: { borde: 'border-l-success', texto: 'text-success', fondo: '!bg-success/15' },
+  egreso_arido: { borde: 'border-l-orange-500', texto: 'text-orange-600', fondo: '!bg-orange-500/15' },
 }
 
 // Mismo esquema de color que COLOR_PUERTA de arriba, pero como franja +
