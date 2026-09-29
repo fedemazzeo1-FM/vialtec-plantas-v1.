@@ -4,7 +4,8 @@
 
 **2026-09-29: migración 46 aplicada + corrección de datos de Autovía Mercosur**
 (confirmación explícita de Federico). Ver §5c. Sin cambios de frontend, no
-requiere deploy.
+requiere deploy. Mismo día: revisión general Resumen vs Detalle de Pesadas en
+todas las obras + corrección de vales mal ligados en 4 obras (§5d).
 
 
 **2026-09-28: migración 45 aplicada + deploy** (confirmación explícita de
@@ -249,6 +250,34 @@ service_role). Reescrito el único residual existente (`1824b242-…`, 30/09):
 observación y motivo de historial pasaron de "…del dbc209f0-a0e4-480a-99e4-955845645709"
 / "Residual del pedido dbc209f0-…" a "…del pedido del 26/09/2026 (30 tn,
 Remito N° 00033)".
+
+## 5d. 2026-09-29 — Revisión general Resumen vs Detalle de Pesadas — APLICADO
+
+Cruce pedido por pedido (`cantidad_despachada` vs suma de vales de asfalto /
+cargas de hormigón), validado contra los `camiones` de `vt_p9` (patente +
+cantidad). 4 obras con vales ligados al pedido equivocado; corregido en una
+transacción con guardas por fila (confirmación explícita de Federico). **Stock
+sin tocar** (solo `plantas_vales.pedido_id` + estado del duplicado).
+
+| Obra | Vales | pedido_id antes | pedido_id después |
+|---|---|---|---|
+| Autovía Mercosur | 9815–9824 (10/08, 285,13 tn) | null | `e5058382-…` (10/08) |
+| Autovía Mercosur | 9835, 9840 (11/08, 59,61 tn) | `e5058382-…` (10/08) | `677f19e1-…` (11/08) |
+| HV-VIAL | 9782, 9783, 9786 (29/07, 62,94 tn) | null | `eaa1657a-…` (29/07, remito 1211) |
+| G y C Construcciones | 9603–9605 (04/06, 123,84 tn) | `d00404a3-…` (03/06) | `4634dcd0-…` (04/06, remito 1169) |
+| Previal UTE | 10003–10005 (03/09, 76,62 tn) | `77e8e5ff-…` (viejo) | `734b5545-…` (despachado 10/09, remito 2) |
+
+- Previal: el pedido legado `f2bgrer` se despachó en el legado el 04/09 pero
+  quedó `postergado` en plantas (`77e8e5ff-…`, 85 tn, remito 12); Felix lo
+  recargó el 10/09 como pedido nuevo `734b5545-…` (el que descontó stock).
+  `77e8e5ff-…`: `postergado` → `cancelado`, motivo "Duplicado del pedido del
+  03/09 despachado el 10/09 (remito 00002)" + fila en historial. No tenía
+  movimientos de stock (chequeado en la transacción).
+- Resultado: 0 vales de asfalto sin pedido; desde junio todas las obras/meses
+  cuadran salvo diferencias de tipeo (G y C jun -0,06; Mercosur sep 0,034).
+- Sin arreglo (falta de dato de origen, no error): mayo/2026 — asfalto sin
+  vales (la báscula arranca el 29/05) y hormigón legado sin cargas de mixer
+  (Predio Vialtec, Colegio Moorlands, Previal).
 
 ## 6. Pendientes operativos (heredados del histórico, sin confirmar en vivo)
 
