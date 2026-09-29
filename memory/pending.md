@@ -1,6 +1,11 @@
 # pending.md — Pendientes vigentes
 
-## ▶ RETOMAR AQUÍ (actualizado 2026-09-28)
+## ▶ RETOMAR AQUÍ (actualizado 2026-09-29)
+
+**2026-09-29: migración 46 aplicada + corrección de datos de Autovía Mercosur**
+(confirmación explícita de Federico). Ver §5c. Sin cambios de frontend, no
+requiere deploy.
+
 
 **2026-09-28: migración 45 aplicada + deploy** (confirmación explícita de
 Federico). Ver §5b. Deploy `dpl_46GzZuDdboRKhwKmztXNo5AzsunH`,
@@ -48,6 +53,7 @@ Detalle completo de la auditoría: `memory/auditoria-2026-09-19.md`.
 | 42 | Numeración propia ingreso/egreso de áridos (`I-00001`) | **APLICADA en producción (2026-09-22).** Ver §2. |
 | 43 | Seguridad: revoke de helpers de stock + `security_invoker` en 2 vistas | **APLICADA en producción (2026-09-22).** Ver §3. |
 | 44 | Ingreso de áridos: `cantidad_remito` obligatoria en `registrar_pesada_bascula` (ya no se sustituye por el peso neto pesado) | **APLICADA en producción (2026-09-22).** Ver §5. |
+| 46 | Pedido residual referencia al padre por fecha/cantidad/remito, no por UUID; `finalizar_despacho` sin EXECUTE para `anon` | **APLICADA en producción (2026-09-29).** Ver §5c. |
 | 45 | Remito Manual: `unidad` por item (Tn/Kg/m³/Lts/Unidades) + `generar_remito_manual` la exige si hay cantidad | **APLICADA en producción (2026-09-28).** Ver §5b. |
 
 ## 2. Migración 42 — numeración `I-00001` — APLICADA en producción (2026-09-22)
@@ -208,6 +214,41 @@ neto/bruto pesado por la báscula.
   unidad sale impresa.
 - Remitos manuales no figuran en ningún Excel/reporte hoy; si se quiere un
   export, definir columnas con Federico.
+
+## 5c. 2026-09-29 — Excel mensual Autovía Mercosur + residual con UUID — APLICADO
+
+**Excel mensual (sep/2026): Resumen 3.848,45 tn vs Detalle de Pesadas 3.674,16 tn.**
+No era la query (ambas tablas usan el mismo universo de pedidos); era un dato
+mal migrado: las 6 pesadas del 03/09 tarde (vales 10006–10011, 174,26 tn)
+estaban ligadas al pedido del 02/09, que quedó con `cantidad_despachada`
+350,28 (el legado `vt_p9` id `0ch9y6k` dice 176,02, remito 1246, vale 8983),
+mientras el residual del 03/09 (legado `pxee3q6`, 174,26, remito 1247) volvía
+a sumar esas mismas 174,26. Único caso en todo el sistema (cruzados todos los
+despachados contra `vt_p9`). Corregido con UPDATE directo (Federico):
+
+| Qué | Antes | Después |
+|---|---|---|
+| Pedido `52a1a0a9-c2cc-4c8b-b9ed-2cf23f0fe41c` (02/09) `cantidad_despachada` | 350.28 | 176.02 |
+| mismo pedido `nro_remito_global` / `nro_vale_global` | null / null | 1246 / 8983 |
+| Vales asfalto 10006–10011 `pedido_id` | `52a1a0a9-…` | `e239ab86-0465-4938-934c-631e750f3206` (03/09) |
+
+- **Stock NO se tocó** (a propósito, no se usó `corregir_despacho`): el pedido
+  del 02/09 conserva sus 3 movimientos `egreso_despacho` (-366.743,16 kg, que
+  cubren las 350,28 tn) y el del 03/09 sigue sin movimiento — el total
+  descontado es el correcto, solo queda atribuido al pedido del 02/09.
+- Post-fix: sep/2026 Mercosur Resumen 3.674,194 vs Pesadas 3.674,16. Los 0,034
+  restantes son del pedido del 24/09 (511,094 tipeado vs 511,06 pesado), esperable.
+- Agosto/2026 sigue con 285,13 tn de diferencia: pedidos del legado 10/08 y
+  11/08 con menos vales que el remito. Otra causa, sin tocar.
+
+**Residual con UUID en observaciones.** Migración 46: `finalizar_despacho`
+arma "…al dividir el despacho del pedido del 24/09/2026 (550 tn, Remito N°
+00030)" (hormigón: solo fecha + m³); el motivo del historial igual. Además
+revoca EXECUTE a `anon` (verificado en `proacl`: postgres, authenticated,
+service_role). Reescrito el único residual existente (`1824b242-…`, 30/09):
+observación y motivo de historial pasaron de "…del dbc209f0-a0e4-480a-99e4-955845645709"
+/ "Residual del pedido dbc209f0-…" a "…del pedido del 26/09/2026 (30 tn,
+Remito N° 00033)".
 
 ## 6. Pendientes operativos (heredados del histórico, sin confirmar en vivo)
 
