@@ -275,6 +275,22 @@ export async function corregirValeBascula(valeId, cambios) {
   return data
 }
 
+/**
+ * Reasigna un vale de asfalto a otro pedido confirmado (migración 48, opción
+ * A aprobada por Federico 2026-09-30) — conserva el N° de vale, motivo
+ * obligatorio, queda en plantas_vales_historial. Las reglas (ambos pedidos
+ * confirmados, sin carga en Pedidos con ese N°) las valida la RPC.
+ */
+export async function reasignarValeBascula(valeId, pedidoId, motivo) {
+  const { data, error } = await supabase.rpc('reasignar_vale_bascula', {
+    p_vale_id: valeId,
+    p_pedido_id: pedidoId,
+    p_motivo: motivo,
+  })
+  if (error) throw error
+  return data
+}
+
 export async function anularValeBascula(valeId, motivo) {
   const { data, error } = await supabase.rpc('anular_vale_bascula', {
     p_vale_id: valeId,

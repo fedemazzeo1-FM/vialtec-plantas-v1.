@@ -83,6 +83,9 @@ const {
   formEditar,
   guardandoEdicion,
   abrirEdicion,
+  pedidosParaReasignar,
+  puedeReasignarPedido,
+  cambiaPedido,
   guardarEdicion,
   modalAnularAbierto,
   valeAnular,
@@ -611,6 +614,43 @@ watch(
         </p>
 
         <div v-if="error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ error }}</div>
+
+        <!-- Pedido del vale de asfalto (migración 48, 2026-09-30): reasignar
+             si se pesó contra el pedido equivocado — conserva el N° de vale,
+             motivo obligatorio, queda en el historial del vale. -->
+        <div v-if="valeEditar.tipo_vale === 'asfalto'" class="rounded-lg border border-border p-3">
+          <template v-if="puedeReasignarPedido">
+            <label class="block text-sm text-text-mid">
+              Pedido
+              <select v-model="formEditar.pedidoId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
+                <option v-if="!valeEditar.pedido_id" value="" disabled>Sin pedido — elegir…</option>
+                <optgroup v-if="pedidosParaReasignar.delDia.length" label="Del día de la pesada">
+                  <option v-for="p in pedidosParaReasignar.delDia" :key="p.id" :value="p.id">
+                    {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn
+                  </option>
+                </optgroup>
+                <optgroup v-if="pedidosParaReasignar.otros.length" label="Otros días (confirmados)">
+                  <option v-for="p in pedidosParaReasignar.otros" :key="p.id" :value="p.id">
+                    {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn ({{ p.fecha_programada.split('-').reverse().join('/') }})
+                  </option>
+                </optgroup>
+              </select>
+            </label>
+            <label v-if="cambiaPedido" class="mt-2 block text-sm text-text-mid">
+              Motivo del cambio de pedido (obligatorio)
+              <input
+                v-model="formEditar.motivoReasignacion"
+                type="text"
+                placeholder="Ej.: se pesó contra el pedido equivocado"
+                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              />
+              <span class="mt-1 block text-xs text-text-soft">El vale conserva su número. El cambio queda registrado con tu usuario.</span>
+            </label>
+          </template>
+          <p v-else class="text-xs text-text-soft">
+            El pedido de este vale ya no está confirmado (se despachó o se postergó): no se puede cambiar de pedido desde acá. Si estaba mal, anulá el vale y, si corresponde, corregí el despacho desde Pedidos.
+          </p>
+        </div>
 
         <div class="grid grid-cols-2 gap-3">
           <label class="text-sm text-text-mid">

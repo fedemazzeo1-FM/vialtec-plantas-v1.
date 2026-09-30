@@ -25,6 +25,7 @@ import {
   fetchTodosLosVales,
   registrarPesada,
   corregirValeBascula,
+  reasignarValeBascula,
   anularValeBascula,
   obtenerAcumuladoHastaFecha,
   obtenerProximoNumeroVale,
@@ -439,8 +440,43 @@ export function useBascula() {
     numeroRemito: '',
     cantidadRemito: null,
     obraId: '',
+    // Reasignación de pedido (solo asfalto, migración 48)
+    pedidoId: '',
+    motivoReasignacion: '',
   })
   const guardandoEdicion = ref(false)
+
+  /** 'YYYY-MM-DD' local de un timestamp (día operativo de la pesada). */
+  function fechaLocalISO(ts) {
+    const d = new Date(ts)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  // Selector "Pedido" del modal Editar (vale de asfalto): pedidos de asfalto
+  // confirmados, primero los programados para el día de la pesada. Son los
+  // únicos destinos válidos para reasignar_vale_bascula().
+  const pedidosParaReasignar = computed(() => {
+    const vale = valeEditar.value
+    if (!vale || vale.tipo_vale !== 'asfalto') return { delDia: [], otros: [] }
+    const dia = fechaLocalISO(vale.fecha_pesada)
+    return {
+      delDia: pedidosParaPesada.value.filter((p) => p.fecha_programada === dia),
+      otros: pedidosParaPesada.value.filter((p) => p.fecha_programada !== dia),
+    }
+  })
+
+  // Se puede reasignar si el pedido actual sigue confirmado (está entre los
+  // pedidos para pesar) o si el vale no tiene pedido. Si ya se despachó, la
+  // RPC lo rechazaría igual — la UI no ofrece el selector.
+  const puedeReasignarPedido = computed(() => {
+    const vale = valeEditar.value
+    if (!vale || vale.tipo_vale !== 'asfalto') return false
+    return !vale.pedido_id || Boolean(pedidosPorId.value[vale.pedido_id])
+  })
+
+  const cambiaPedido = computed(
+    () => puedeReasignarPedido.value && formEditar.pedidoId && formEditar.pedidoId !== (valeEditar.value?.pedido_id || '')
+  )
 
   function abrirEdicion(vale) {
     error.value = null
@@ -455,6 +491,8 @@ export function useBascula() {
     formEditar.numeroRemito = vale.numero_remito_ingreso || ''
     formEditar.cantidadRemito = vale.cantidad_remito_ingreso ?? null
     formEditar.obraId = vale.obra_id || ''
+    formEditar.pedidoId = vale.pedido_id || ''
+    formEditar.motivoReasignacion = ''
     modalEditarAbierto.value = true
   }
 
@@ -470,9 +508,18 @@ export function useBascula() {
       error.value = 'La cantidad según remito (declarada por el proveedor) es obligatoria y tiene que ser mayor a 0.'
       return
     }
+    if (cambiaPedido.value && !formEditar.motivoReasignacion.trim()) {
+      error.value = 'Para cambiar el pedido del vale, indicá el motivo.'
+      return
+    }
     guardandoEdicion.value = true
     error.value = null
     try {
+      // Primero la reasignación (la más restrictiva): si el servidor la
+      // rechaza, no se guarda nada del resto de la edición.
+      if (cambiaPedido.value) {
+        await reasignarValeBascula(valeEditar.value.id, formEditar.pedidoId, formEditar.motivoReasignacion.trim())
+      }
       await corregirValeBascula(valeEditar.value.id, {
         pesoBruto: formEditar.pesoBruto,
         tara: formEditar.tara,
@@ -979,6 +1026,9 @@ export function useBascula() {
     formEditar,
     guardandoEdicion,
     abrirEdicion,
+    pedidosParaReasignar,
+    puedeReasignarPedido,
+    cambiaPedido,
     guardarEdicion,
     modalAnularAbierto,
     valeAnular,
