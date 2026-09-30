@@ -2,13 +2,12 @@
 
 ## ▶ RETOMAR AQUÍ (actualizado 2026-09-30)
 
-**2026-09-30: migración 47 APLICADA + deploy** (`npx vercel --prod` tras
-`npx vercel login`; `produccion.vialtec.app` sirve el bundle nuevo, verificado
-por contenido de StockView/bascula.service). Incluye filtro por rango en
-Analítica de proveedores, Editar por matriz y selector "Pedido" en Editar
-vale. **Migración 48 escrita + dry-run OK, NO aplicada**: hasta aplicarla,
-cambiar el pedido desde el modal falla (la RPC no existe); el resto del modal
-funciona. Ver §5e.
+**2026-09-30: migraciones 47, 48 y 48b APLICADAS + deploy verificado en
+vivo** (Stock → Analítica de proveedores y Báscula, con sesión de Federico).
+Ver §5e. Además: contraste UI (tokens `border`/`fondo`/`panel`/`shadow-sm` en
+`tailwind.config.js` — un primer intento más marcado se descartó por pesado,
+quedó un intermedio cerca del original) y barras de scroll horizontal espejo
+en `VTable` (arriba + flotante al pie, `useScrollHorizontalEspejo.js`).
 
 
 **2026-09-29: migración 46 aplicada + corrección de datos de Autovía Mercosur**
@@ -63,7 +62,7 @@ Detalle completo de la auditoría: `memory/auditoria-2026-09-19.md`.
 | 42 | Numeración propia ingreso/egreso de áridos (`I-00001`) | **APLICADA en producción (2026-09-22).** Ver §2. |
 | 43 | Seguridad: revoke de helpers de stock + `security_invoker` en 2 vistas | **APLICADA en producción (2026-09-22).** Ver §3. |
 | 44 | Ingreso de áridos: `cantidad_remito` obligatoria en `registrar_pesada_bascula` (ya no se sustituye por el peso neto pesado) | **APLICADA en producción (2026-09-22).** Ver §5. |
-| 48 | `reasignar_vale_bascula` + `plantas_vales_historial` (reasignación/edición/anulación de vales quedan registradas) | **Escrita, dry-run OK (2026-09-30), NO aplicada.** Ver §5e. |
+| 48 | `reasignar_vale_bascula` + `plantas_vales_historial` (reasignación/edición/anulación de vales quedan registradas); 48b: sin TRUNCATE/REFERENCES/TRIGGER para `authenticated` en el historial | **APLICADA en producción (2026-09-30).** Ver §5e. |
 | 47 | Editar/Eliminar vales de Báscula según la matriz (`bascula:editar`/`bascula:eliminar`); plantista habilitado en ambas; sin EXECUTE para `anon` | **APLICADA en producción (2026-09-30).** Ver §5e. |
 | 46 | Pedido residual referencia al padre por fecha/cantidad/remito, no por UUID; `finalizar_despacho` sin EXECUTE para `anon` | **APLICADA en producción (2026-09-29).** Ver §5c. |
 | 45 | Remito Manual: `unidad` por item (Tn/Kg/m³/Lts/Unidades) + `generar_remito_manual` la exige si hay cantidad | **APLICADA en producción (2026-09-28).** Ver §5b. |
