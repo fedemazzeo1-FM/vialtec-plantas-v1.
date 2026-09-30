@@ -1,6 +1,14 @@
 # pending.md — Pendientes vigentes
 
-## ▶ RETOMAR AQUÍ (actualizado 2026-09-29)
+## ▶ RETOMAR AQUÍ (actualizado 2026-09-30)
+
+**2026-09-30: migración 47 APLICADA; migración 48 escrita + dry-run OK, NO
+aplicada; deploy PENDIENTE** (`npx vercel --prod` falló con "Not authorized":
+el CLI de Vercel no tiene sesión en esta máquina — hay que correr
+`npx vercel login`). Ver §5e. El frontend commiteado (filtro por rango en
+Analítica de proveedores, Editar por matriz, selector "Pedido" en Editar vale)
+todavía NO está en producción. Orden: aplicar 48 → deploy.
+
 
 **2026-09-29: migración 46 aplicada + corrección de datos de Autovía Mercosur**
 (confirmación explícita de Federico). Ver §5c. Sin cambios de frontend, no
@@ -54,6 +62,8 @@ Detalle completo de la auditoría: `memory/auditoria-2026-09-19.md`.
 | 42 | Numeración propia ingreso/egreso de áridos (`I-00001`) | **APLICADA en producción (2026-09-22).** Ver §2. |
 | 43 | Seguridad: revoke de helpers de stock + `security_invoker` en 2 vistas | **APLICADA en producción (2026-09-22).** Ver §3. |
 | 44 | Ingreso de áridos: `cantidad_remito` obligatoria en `registrar_pesada_bascula` (ya no se sustituye por el peso neto pesado) | **APLICADA en producción (2026-09-22).** Ver §5. |
+| 48 | `reasignar_vale_bascula` + `plantas_vales_historial` (reasignación/edición/anulación de vales quedan registradas) | **Escrita, dry-run OK (2026-09-30), NO aplicada.** Ver §5e. |
+| 47 | Editar/Eliminar vales de Báscula según la matriz (`bascula:editar`/`bascula:eliminar`); plantista habilitado en ambas; sin EXECUTE para `anon` | **APLICADA en producción (2026-09-30).** Ver §5e. |
 | 46 | Pedido residual referencia al padre por fecha/cantidad/remito, no por UUID; `finalizar_despacho` sin EXECUTE para `anon` | **APLICADA en producción (2026-09-29).** Ver §5c. |
 | 45 | Remito Manual: `unidad` por item (Tn/Kg/m³/Lts/Unidades) + `generar_remito_manual` la exige si hay cantidad | **APLICADA en producción (2026-09-28).** Ver §5b. |
 
@@ -278,6 +288,31 @@ sin tocar** (solo `plantas_vales.pedido_id` + estado del duplicado).
 - Sin arreglo (falta de dato de origen, no error): mayo/2026 — asfalto sin
   vales (la báscula arranca el 29/05) y hormigón legado sin cargas de mixer
   (Predio Vialtec, Colegio Moorlands, Previal).
+
+## 5e. 2026-09-30 — Analítica por rango, Editar para balancero, reasignar vale
+
+- **Stock → Analítica de proveedores**: selector Mes | Rango de fechas (el
+  service ya aceptaba cualquier rango). Excel con el período en el título.
+- **Báscula, Editar para balancero (migración 47, APLICADA)**: la matriz ya
+  tenía `bascula:editar` para balancero, pero UI y RPC tenían fijo
+  admin/plantista (y la matriz decía plantista editar/eliminar = false). Ahora
+  UI (`auth.tienePermiso`) y RPC (`plantas_tiene_permiso`) leen la matriz;
+  plantista `bascula:editar`/`bascula:eliminar` pasaron a true (antes false)
+  para no quitarle nada. Verificado simulando claims: balancero editar sí /
+  anular no; plantista y admin ambos; gerencia ninguno. EXECUTE sin `anon`.
+- **"Admin no podía editar"**: no hay llamadas fallidas en los logs (24 h) y
+  rol/RPC/UI dan bien para admin. Hallazgo: 30/09 11:52 UTC Felix anuló el
+  vale 10170 "mal obra" y repesó el mismo camión como 10171 en otro pedido —
+  el modal no permitía cambiar el pedido. Es el caso del punto 3.
+- **Reasignar vale (migración 48, NO aplicada)**: `reasignar_vale_bascula`
+  (bascula:editar, motivo obligatorio, solo asfalto no anulado, origen y
+  destino `confirmado`, rechaza si en Pedidos ya hay una carga con ese N° de
+  vale en el origen; destino toma remito si no tenía; sin impacto en stock) +
+  tabla `plantas_vales_historial` (también la usan ahora corregir/anular).
+  Dry-run atómico contra producción (bloque DO con raise final, verificado
+  que no persistió nada): 10 chequeos OK, sin consumir la secuencia de
+  remitos. Frontend: selector "Pedido" en el modal Editar (pedidos del día de
+  la pesada primero), motivo obligatorio si cambia.
 
 ## 6. Pendientes operativos (heredados del histórico, sin confirmar en vivo)
 
