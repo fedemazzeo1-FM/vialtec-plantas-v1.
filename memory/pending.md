@@ -6,12 +6,22 @@
 medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
 deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
 
+Estado de git/deploy al cerrar la sesión del 2026-09-30:
+- En producción (último deploy): todo hasta `7ebd81c` (contraste casi
+  original + cache immutable de `/assets` en `vercel.json`).
+- Commiteado, NO deployado: `fd79bea` (desempate por id).
+- Sin push a GitHub: 5 commits (`dfe2e12`..`fbd76c6`). Pedir OK antes de
+  `git push origin main`.
+- Contraste UI: Federico pidió bajarlo dos veces; valores finales casi
+  iguales al original (border `#E6E9EE`, fondo `#FAFBFC`, shadow-sm por
+  default). No volver a reforzarlo sin que lo pida.
+
 
 **2026-09-30: migraciones 47, 48 y 48b APLICADAS + deploy verificado en
 vivo** (Stock → Analítica de proveedores y Báscula, con sesión de Federico).
-Ver §5e. Además: contraste UI (tokens `border`/`fondo`/`panel`/`shadow-sm` en
-`tailwind.config.js` — un primer intento más marcado se descartó por pesado,
-quedó un intermedio cerca del original) y barras de scroll horizontal espejo
+Ver §5e. Además: contraste UI (tokens `border`/`fondo`/`panel` en
+`tailwind.config.js` — dos intentos más marcados se descartaron por pesados,
+quedó casi igual al original) y barras de scroll horizontal espejo
 en `VTable` (arriba + flotante al pie, `useScrollHorizontalEspejo.js`).
 
 
