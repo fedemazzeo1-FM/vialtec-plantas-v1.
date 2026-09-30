@@ -102,6 +102,9 @@ const {
   etiquetaTipo,
   catalogoMateriales,
   mesProveedores,
+  modoFiltroProveedores,
+  desdeProveedores,
+  hastaProveedores,
   analiticaProveedores,
   cargandoProveedores,
   cargarAnaliticaProveedores,
@@ -326,15 +329,50 @@ const columnasProveedorInsumo = [
       <template v-if="tabActiva === 'proveedores'">
         <VCard class="mb-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <label class="text-sm text-text-mid">
-              Mes
-              <input
-                v-model="mesProveedores"
-                type="month"
-                class="ml-2 rounded-lg border border-border px-2 py-1 text-sm focus:border-vialtec focus:outline-none"
-                @change="cargarAnaliticaProveedores"
-              />
-            </label>
+            <div class="flex flex-wrap items-center gap-3">
+              <!-- Mes o rango libre (2026-09-30, pedido de Federico) -->
+              <div class="inline-flex overflow-hidden rounded-lg border border-border text-sm">
+                <button
+                  v-for="modo in [{ valor: 'mes', label: 'Mes' }, { valor: 'rango', label: 'Rango de fechas' }]"
+                  :key="modo.valor"
+                  type="button"
+                  class="px-3 py-1"
+                  :class="modoFiltroProveedores === modo.valor ? 'bg-vialtec text-white' : 'bg-white text-text-mid'"
+                  @click="modoFiltroProveedores = modo.valor; cargarAnaliticaProveedores()"
+                >
+                  {{ modo.label }}
+                </button>
+              </div>
+              <label v-if="modoFiltroProveedores === 'mes'" class="text-sm text-text-mid">
+                Mes
+                <input
+                  v-model="mesProveedores"
+                  type="month"
+                  class="ml-2 rounded-lg border border-border px-2 py-1 text-sm focus:border-vialtec focus:outline-none"
+                  @change="cargarAnaliticaProveedores"
+                />
+              </label>
+              <template v-else>
+                <label class="text-sm text-text-mid">
+                  Desde
+                  <input
+                    v-model="desdeProveedores"
+                    type="date"
+                    class="ml-2 rounded-lg border border-border px-2 py-1 text-sm focus:border-vialtec focus:outline-none"
+                    @change="cargarAnaliticaProveedores"
+                  />
+                </label>
+                <label class="text-sm text-text-mid">
+                  Hasta
+                  <input
+                    v-model="hastaProveedores"
+                    type="date"
+                    class="ml-2 rounded-lg border border-border px-2 py-1 text-sm focus:border-vialtec focus:outline-none"
+                    @change="cargarAnaliticaProveedores"
+                  />
+                </label>
+              </template>
+            </div>
             <VButton
               v-if="!esMobile"
               size="sm"
@@ -352,7 +390,7 @@ const columnasProveedorInsumo = [
           v-else-if="!analiticaProveedores.length"
           class="rounded-lg border border-border bg-white p-6 text-center text-sm text-text-soft"
         >
-          No hay ingresos de proveedores registrados en el mes elegido.
+          No hay ingresos de proveedores registrados en el período elegido.
         </p>
         <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <VCard v-for="p in analiticaProveedores" :key="p.proveedor">

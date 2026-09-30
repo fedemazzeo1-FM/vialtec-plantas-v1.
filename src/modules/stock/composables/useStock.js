@@ -254,16 +254,47 @@ export function useStock() {
   }
 
   const mesProveedores = ref(mesActualInput())
+  // Filtro por rango libre (2026-09-30, pedido de Federico): se suma al de
+  // mes sin reemplazarlo. 'mes' | 'rango'; el rango arranca en el mes elegido.
+  const modoFiltroProveedores = ref('mes')
+  const desdeProveedores = ref(`${mesProveedores.value}-01`)
+  const hastaProveedores = ref(fechaHoyISO())
   const analiticaProveedores = ref([])
   const cargandoProveedores = ref(false)
 
+  function fechaHoyISO() {
+    const hoy = new Date()
+    return `${mesActualInput()}-${String(hoy.getDate()).padStart(2, '0')}`
+  }
+
+  /** { desde, hasta } 'YYYY-MM-DD' según el modo de filtro activo. */
+  function rangoProveedores() {
+    if (modoFiltroProveedores.value === 'rango') {
+      return { desde: desdeProveedores.value, hasta: hastaProveedores.value }
+    }
+    const [anio, mes] = mesProveedores.value.split('-').map(Number)
+    const ultimoDia = new Date(anio, mes, 0).getDate()
+    return { desde: `${mesProveedores.value}-01`, hasta: `${mesProveedores.value}-${String(ultimoDia).padStart(2, '0')}` }
+  }
+
+  /** 'DD/MM/YYYY al DD/MM/YYYY' del período consultado (título del Excel). */
+  function etiquetaPeriodoProveedores() {
+    const { desde, hasta } = rangoProveedores()
+    const aDMY = (iso) => iso.split('-').reverse().join('/')
+    return `${aDMY(desde)} al ${aDMY(hasta)}`
+  }
+
   async function cargarAnaliticaProveedores() {
+    const { desde, hasta } = rangoProveedores()
+    if (!desde || !hasta) return // rango a medio completar: no consultar todavía
+    if (desde > hasta) {
+      error.value = 'La fecha "Desde" no puede ser posterior a "Hasta".'
+      analiticaProveedores.value = []
+      return
+    }
     cargandoProveedores.value = true
     error.value = null
     try {
-      const [anio, mes] = mesProveedores.value.split('-').map(Number)
-      const desde = `${mesProveedores.value}-01`
-      const hasta = new Date(anio, mes, 0).toISOString().slice(0, 10) // último día del mes
       analiticaProveedores.value = await fetchAnaliticaProveedoresDetalle({ desde, hasta })
     } catch (e) {
       error.value = e.message
@@ -352,7 +383,7 @@ export function useStock() {
       await exportarPlanillaCorporativa(nombreArchivoConFecha('stock-analitica-proveedores'), [
         {
           nombre: 'Proveedores',
-          titulo: 'Analítica de proveedores',
+          titulo: `Analítica de proveedores — ${etiquetaPeriodoProveedores()}`,
           filas,
           columnas: [
             { key: 'proveedor', label: 'Proveedor' },
@@ -408,6 +439,9 @@ export function useStock() {
     cambiarPaginaHistorial,
     etiquetaTipo,
     mesProveedores,
+    modoFiltroProveedores,
+    desdeProveedores,
+    hastaProveedores,
     analiticaProveedores,
     cargandoProveedores,
     cargarAnaliticaProveedores,
