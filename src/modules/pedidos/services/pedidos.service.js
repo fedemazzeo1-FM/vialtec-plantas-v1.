@@ -67,7 +67,7 @@ export async function fetchHistorialPedido(pedidoId) {
  *   normal no los muestra salvo que se active el toggle).
  */
 function queryPedidos(filtros) {
-  let query = supabase.from(TABLA).select('*', { count: 'exact' }).order('fecha_programada', { ascending: false })
+  let query = supabase.from(TABLA).select('*', { count: 'exact' }).order('fecha_programada', { ascending: false }).order('id', { ascending: false })
 
   if (filtros.estado) query = query.eq('estado', filtros.estado)
   if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)

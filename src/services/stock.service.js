@@ -92,6 +92,7 @@ function queryMovimientos(filtros) {
     .from(VISTA_STOCK_MOVIMIENTOS_VIVA)
     .select('*', { count: 'exact' })
     .order('fecha_movimiento', { ascending: false })
+    .order('id', { ascending: false })
 
   if (filtros.materialId) query = query.eq('material_id', filtros.materialId)
   // filtros.tipo acepta un string (un tipo puntual, .eq) o un array (ej.

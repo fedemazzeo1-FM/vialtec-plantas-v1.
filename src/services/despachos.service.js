@@ -47,6 +47,7 @@ function queryDespachosFiltrados(filtros = {}, selectOpts) {
     .select('*', selectOpts)
     .eq('estado', 'despachado')
     .order('fecha_programada', { ascending: false })
+    .order('id', { ascending: false })
 
   if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
   if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)

@@ -326,6 +326,7 @@ function queryHistorialVales(filtros) {
     .from(VISTA_BASCULA_VIVA)
     .select('*', { count: 'exact' })
     .order('fecha_pesada', { ascending: false })
+    .order('id', { ascending: false })
 
   if (filtros.tipoVale) query = query.eq('tipo_vale', filtros.tipoVale)
   if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
