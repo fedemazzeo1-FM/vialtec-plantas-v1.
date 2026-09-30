@@ -2,12 +2,13 @@
 
 ## ▶ RETOMAR AQUÍ (actualizado 2026-09-30)
 
-**2026-09-30: migración 47 APLICADA; migración 48 escrita + dry-run OK, NO
-aplicada; deploy PENDIENTE** (`npx vercel --prod` falló con "Not authorized":
-el CLI de Vercel no tiene sesión en esta máquina — hay que correr
-`npx vercel login`). Ver §5e. El frontend commiteado (filtro por rango en
-Analítica de proveedores, Editar por matriz, selector "Pedido" en Editar vale)
-todavía NO está en producción. Orden: aplicar 48 → deploy.
+**2026-09-30: migración 47 APLICADA + deploy** (`npx vercel --prod` tras
+`npx vercel login`; `produccion.vialtec.app` sirve el bundle nuevo, verificado
+por contenido de StockView/bascula.service). Incluye filtro por rango en
+Analítica de proveedores, Editar por matriz y selector "Pedido" en Editar
+vale. **Migración 48 escrita + dry-run OK, NO aplicada**: hasta aplicarla,
+cambiar el pedido desde el modal falla (la RPC no existe); el resto del modal
+funciona. Ver §5e.
 
 
 **2026-09-29: migración 46 aplicada + corrección de datos de Autovía Mercosur**
