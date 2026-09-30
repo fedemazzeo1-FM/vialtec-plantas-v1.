@@ -230,7 +230,7 @@ iniciarPanelControl()
         <VCard>
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-bold text-text">Próximos despachos</h3>
-            <span class="rounded-full bg-vialtec/15 px-2 py-0.5 text-xs font-bold text-vialtec">{{ filasProximos.length }}</span>
+            <span class="rounded-full bg-vialtec/10 px-2 py-0.5 text-xs font-bold text-vialtec">{{ filasProximos.length }}</span>
           </div>
           <p class="text-xs text-text-soft">Todos los pedidos confirmados</p>
           <p v-if="cargandoProximos" class="mt-3 text-sm text-text-soft">Cargando…</p>

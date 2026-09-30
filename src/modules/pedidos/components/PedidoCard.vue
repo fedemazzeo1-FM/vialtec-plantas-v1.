@@ -227,7 +227,7 @@ function formatearFechaHoraCreacion(iso) {
     <p v-if="pedido.observaciones" class="mt-2 rounded-lg bg-panel px-3 py-2 text-sm text-text-mid">
       📝 {{ pedido.observaciones }}
     </p>
-    <p v-if="pedido.motivo" class="mt-2 rounded-lg bg-vialtec/10 px-3 py-2 text-sm text-vialtec">
+    <p v-if="pedido.motivo" class="mt-2 rounded-lg bg-vialtec/5 px-3 py-2 text-sm text-vialtec">
       ⚠ {{ pedido.motivo }}
     </p>
   </div>

@@ -261,7 +261,7 @@ cargarSemana()
             type="button"
             class="flex shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2"
             style="min-width: 56px; scroll-snap-align: start"
-            :class="dia.iso === diaSeleccionadoIso ? 'border-vialtec bg-vialtec/10' : 'border-border bg-white'"
+            :class="dia.iso === diaSeleccionadoIso ? 'border-vialtec bg-vialtec/5' : 'border-border bg-white'"
             @click="diaSeleccionadoIso = dia.iso"
           >
             <span
@@ -338,7 +338,7 @@ cargarSemana()
           >
             <div
               class="flex items-baseline justify-between gap-2 border-b px-3 py-2"
-              :class="dia.esHoy ? 'border-vialtec/30 bg-vialtec/10' : 'border-border'"
+              :class="dia.esHoy ? 'border-vialtec/30 bg-vialtec/5' : 'border-border'"
             >
               <p
                 class="text-xs font-bold uppercase tracking-wide"
@@ -361,7 +361,7 @@ cargarSemana()
                  (2026-09-03, réplica exacta del legado pedida por Federico —
                  pill violeta debajo de la fecha, "N peds ✓ X tn · Y m³"). -->
             <div v-if="dia.todosDespachados" class="px-2 pt-2">
-              <p class="rounded-full bg-vialtec/15 px-2.5 py-1 text-center text-[11px] font-semibold text-vialtec">
+              <p class="rounded-full bg-vialtec/10 px-2.5 py-1 text-center text-[11px] font-semibold text-vialtec">
                 {{ dia.pedidos.length }} {{ dia.pedidos.length === 1 ? 'ped.' : 'peds' }}
                 ✓
                 <template v-if="dia.asfaltoTnDia > 0">{{ dia.asfaltoTnDia.toFixed(1) }} tn</template>

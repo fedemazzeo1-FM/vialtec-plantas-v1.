@@ -38,7 +38,7 @@ iniciar()
           <p class="text-sm text-text-soft">Calculá despachos sin afectar el sistema real</p>
         </div>
         <div v-if="entradas.length" class="flex items-center gap-2">
-          <span class="rounded-full bg-vialtec/15 px-2.5 py-1 text-xs font-semibold text-vialtec">
+          <span class="rounded-full bg-vialtec/10 px-2.5 py-1 text-xs font-semibold text-vialtec">
             {{ entradas.length }} simulación{{ entradas.length === 1 ? '' : 'es' }}
           </span>
           <VButton variant="danger" size="sm" @click="limpiarTodo">Limpiar todo</VButton>
@@ -89,7 +89,7 @@ iniciar()
         <ul class="divide-y divide-border">
           <li v-for="(entrada, i) in entradas" :key="entrada.id" class="flex items-center justify-between gap-3 py-2.5">
             <div class="flex items-center gap-2.5 text-sm">
-              <span class="rounded-full bg-vialtec/15 px-2 py-0.5 text-xs font-semibold text-vialtec">#{{ i + 1 }}</span>
+              <span class="rounded-full bg-vialtec/10 px-2 py-0.5 text-xs font-semibold text-vialtec">#{{ i + 1 }}</span>
               <span class="font-semibold text-text">{{ entrada.etiqueta || entrada.formulaNombre }}</span>
               <span class="text-text-soft">{{ entrada.formulaNombre }}</span>
             </div>

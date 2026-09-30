@@ -81,7 +81,7 @@ const iniciales = computed(() =>
                 :to="link.to"
                 class="flex items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold transition-colors duration-150"
                 :class="colapsado ? 'justify-center' : ''"
-                active-class="bg-vialtec/15 text-vialtec"
+                active-class="bg-vialtec/10 text-vialtec"
                 :title="colapsado ? link.label : null"
               >
                 <svg
@@ -111,7 +111,7 @@ const iniciales = computed(() =>
               :to="link.to"
               class="flex items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold transition-colors duration-150"
               :class="colapsado ? 'justify-center' : ''"
-              active-class="bg-vialtec/15 text-vialtec"
+              active-class="bg-vialtec/10 text-vialtec"
               :title="colapsado ? link.label : null"
             >
               <svg

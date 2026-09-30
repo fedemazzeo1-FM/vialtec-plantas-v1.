@@ -73,7 +73,7 @@ onBeforeUnmount(() => document.removeEventListener('click', cerrarSiEsAfuera))
         :key="sistema.value"
         type="button"
         class="block w-full whitespace-nowrap px-3 py-2 text-left text-xs font-semibold transition-colors duration-150"
-        :class="sistema.value === SISTEMA_ACTUAL ? 'bg-vialtec/15 text-vialtec' : 'text-text-soft hover:bg-panel hover:text-text-mid'"
+        :class="sistema.value === SISTEMA_ACTUAL ? 'bg-vialtec/10 text-vialtec' : 'text-text-soft hover:bg-panel hover:text-text-mid'"
         @click="elegirSistema(sistema)"
       >
         {{ sistema.label }}
