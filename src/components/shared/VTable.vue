@@ -41,6 +41,7 @@
 // toca — ahí siempre se ven todas las columnas, como siempre.
 import { reactive } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { useScrollHorizontalEspejo } from '@/composables/useScrollHorizontalEspejo'
 
 defineProps({
   columns: { type: Array, required: true },
@@ -54,6 +55,11 @@ defineProps({
 defineEmits(['update:page'])
 
 const { esMobile } = useBreakpoint()
+
+// Tablas anchas en desktop (2026-09-30): barra horizontal arriba de la tabla
+// + barra flotante al pie de la ventana, sincronizadas — no hace falta bajar
+// hasta la última fila para desplazarse (ver useScrollHorizontalEspejo.js).
+const { contenedor, barraSuperior, barraFlotante, estado: scrollH, sincronizarDesde } = useScrollHorizontalEspejo()
 
 const filasExpandidas = reactive(new Set())
 function toggleExpandida(key) {
@@ -122,9 +128,18 @@ function toggleExpandida(key) {
     </div>
 
     <!-- Desktop: tabla clásica -->
-    <div v-else class="overflow-x-auto">
+    <template v-else>
+    <div
+      v-show="scrollH.hayOverflow"
+      ref="barraSuperior"
+      class="barra-scroll-h mb-1 overflow-x-auto overflow-y-hidden"
+      @scroll="sincronizarDesde($event.target)"
+    >
+      <div :style="{ width: `${scrollH.anchoContenido}px`, height: '1px' }" />
+    </div>
+    <div ref="contenedor" class="overflow-x-auto" @scroll="sincronizarDesde($event.target)">
       <table class="min-w-full divide-y divide-border text-sm">
-        <thead class="bg-gray-50">
+        <thead class="bg-panel">
           <tr>
             <th
               v-for="col in columns"
@@ -139,7 +154,7 @@ function toggleExpandida(key) {
           <tr
             v-for="(row, i) in rows"
             :key="row.id ?? i"
-            class="text-text transition-colors duration-150 hover:bg-gray-50"
+            class="text-text transition-colors duration-150 hover:bg-panel"
             :class="rowClass?.(row)"
           >
             <td v-for="col in columns" :key="col.key" class="px-4 py-3 align-middle">
@@ -151,6 +166,16 @@ function toggleExpandida(key) {
         </tbody>
       </table>
     </div>
+    <div
+      v-show="scrollH.flotanteVisible"
+      ref="barraFlotante"
+      class="barra-scroll-h fixed bottom-0 z-30 overflow-x-auto overflow-y-hidden border-t border-border bg-white/95 shadow-[0_-2px_6px_rgb(15_23_42/0.10)]"
+      :style="{ left: `${scrollH.left}px`, width: `${scrollH.width}px` }"
+      @scroll="sincronizarDesde($event.target)"
+    >
+      <div :style="{ width: `${scrollH.anchoContenido}px`, height: '1px' }" />
+    </div>
+    </template>
 
     <div v-if="total != null" class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-text-soft">
       <p>
@@ -179,3 +204,26 @@ function toggleExpandida(key) {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Barra horizontal espejo: bien visible y cómoda con mouse (en Windows la
+   barra nativa de un contenedor casi vacío queda muy finita). */
+.barra-scroll-h {
+  scrollbar-width: auto;
+  scrollbar-color: #94a3b8 #e2e8f0;
+}
+.barra-scroll-h::-webkit-scrollbar {
+  height: 14px;
+}
+.barra-scroll-h::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+.barra-scroll-h::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 7px;
+  border: 3px solid #e2e8f0;
+}
+.barra-scroll-h::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+</style>
