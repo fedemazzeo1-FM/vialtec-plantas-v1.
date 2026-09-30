@@ -69,6 +69,10 @@ create policy plantas_vales_historial_select on plantas_vales_historial
 
 revoke all on plantas_vales_historial from anon;
 revoke insert, update, delete on plantas_vales_historial from authenticated;
+-- TRUNCATE no pasa por RLS: sin esto cualquier usuario logueado podía vaciar
+-- el historial (grant por defecto de Supabase). Aplicado aparte como
+-- "48b_historial_vales_sin_truncate" el mismo 2026-09-30.
+revoke truncate, references, trigger on plantas_vales_historial from authenticated;
 grant select on plantas_vales_historial to authenticated;
 
 -- ----------------------------------------------------------------------------
