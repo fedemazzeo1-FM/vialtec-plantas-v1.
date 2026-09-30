@@ -25,17 +25,16 @@ export function useScrollHorizontalEspejo() {
     width: 0,
   })
 
-  let sincronizando = false
+  // Sin candado: solo se copia la posición a las barras que difieren, así
+  // el scroll "rebote" que dispara cada asignación llega con el mismo valor
+  // y no hace nada (no hay loop). Un candado con requestAnimationFrame se
+  // trababa en pestañas en segundo plano (Chrome pausa rAF).
   function sincronizarDesde(origen) {
-    if (sincronizando || !origen) return
-    sincronizando = true
+    if (!origen) return
     const x = origen.scrollLeft
     for (const el of [contenedor.value, barraSuperior.value, barraFlotante.value]) {
-      if (el && el !== origen && el.scrollLeft !== x) el.scrollLeft = x
+      if (el && el !== origen && Math.abs(el.scrollLeft - x) > 0.5) el.scrollLeft = x
     }
-    requestAnimationFrame(() => {
-      sincronizando = false
-    })
   }
 
   function medir() {
