@@ -208,22 +208,27 @@ function toggleExpandida(key) {
 <style scoped>
 /* Barra horizontal espejo: bien visible y cómoda con mouse (en Windows la
    barra nativa de un contenedor casi vacío queda muy finita). */
-.barra-scroll-h {
-  scrollbar-width: auto;
-  scrollbar-color: #94a3b8 #e2e8f0;
-}
+/* Chrome/Edge: si se definen scrollbar-width/scrollbar-color (estándar),
+   ignoran ::-webkit-scrollbar y en macOS la barra queda "overlay" sin alto
+   propio. Por eso el estándar va solo para Firefox. */
 .barra-scroll-h::-webkit-scrollbar {
-  height: 14px;
+  height: 12px;
 }
 .barra-scroll-h::-webkit-scrollbar-track {
-  background: #e2e8f0;
+  background: #eef1f5;
 }
 .barra-scroll-h::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 7px;
-  border: 3px solid #e2e8f0;
+  background: #b8c1cd;
+  border-radius: 6px;
+  border: 3px solid #eef1f5;
 }
 .barra-scroll-h::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #8d98a8;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .barra-scroll-h {
+    scrollbar-width: auto;
+    scrollbar-color: #b8c1cd #eef1f5;
+  }
 }
 </style>
