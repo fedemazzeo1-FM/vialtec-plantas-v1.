@@ -15,11 +15,11 @@ const variantClass = {
   info: 'bg-blue-100 text-blue-700',
   // Violeta — solo para el estado "postergado" de pedidos, distinto del
   // ámbar de "solicitado" (memory/relevamiento-sistema-viejo.md Etapa 3:
-  // colores reales del legado, no un tono inventado). bg-vialtec/10 en vez
+  // colores reales del legado, no un tono inventado). bg-vialtec/15 en vez
   // de un tono fijo tipo bg-purple-100 porque el resto de esta paleta
   // todavía es la vieja (sin los tokens success/danger/etc de Flota) — se
   // homologa cuando se aplique el refactor visual completo.
-  postergado: 'bg-vialtec/10 text-vialtec',
+  postergado: 'bg-vialtec/15 text-vialtec',
 }
 </script>
 

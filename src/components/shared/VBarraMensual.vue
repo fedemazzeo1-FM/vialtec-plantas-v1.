@@ -118,7 +118,7 @@ const estiloTooltip = computed(() => {
     <!-- Vista de tabla (interaction.md/components.md: alternativa accesible, siempre disponible). -->
     <div v-else-if="mostrarTabla" class="max-h-48 overflow-y-auto rounded-lg border border-border">
       <table class="w-full text-xs">
-        <thead class="sticky top-0 bg-gray-50 text-text-soft">
+        <thead class="sticky top-0 bg-panel text-text-soft">
           <tr>
             <th class="px-2.5 py-1.5 text-left font-semibold">Mes</th>
             <th class="px-2.5 py-1.5 text-right font-semibold">{{ unidad }}</th>

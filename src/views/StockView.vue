@@ -410,7 +410,7 @@ const columnasProveedorInsumo = [
             <VTable :columns="columnasProveedorInsumo" :rows="p.insumos" />
             <!-- Fila TOTAL resaltada (igual que el legado) — VTable no tiene
                  footer de agregados, se agrega acá al pie de cada card. -->
-            <div class="mt-2 flex items-center justify-between rounded-lg bg-vialtec/5 px-3 py-2 text-sm font-bold text-vialtec">
+            <div class="mt-2 flex items-center justify-between rounded-lg bg-vialtec/10 px-3 py-2 text-sm font-bold text-vialtec">
               <span>TOTAL</span>
               <span>{{ p.viajes }} viajes · {{ p.totalTn.toFixed(2) }} tn</span>
             </div>

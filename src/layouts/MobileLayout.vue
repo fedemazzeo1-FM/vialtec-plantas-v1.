@@ -89,7 +89,7 @@ function abrirNuevoPedido() {
       </button>
     </header>
 
-    <main class="min-w-0 flex-1 overflow-x-hidden p-4 pb-20">
+    <main class="min-w-0 flex-1 overflow-x-hidden bg-fondo p-4 pb-20">
       <router-view />
     </main>
 

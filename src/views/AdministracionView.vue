@@ -244,7 +244,7 @@ const columnasRoles = [
             v-model="formData.email"
             type="email"
             :disabled="!!editandoId"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none disabled:bg-gray-50 disabled:text-text-soft"
+            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none disabled:bg-panel disabled:text-text-soft"
           />
         </label>
 
@@ -313,7 +313,7 @@ const columnasRoles = [
             type="text"
             required
             :disabled="!!rolEditando?.es_sistema"
-            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none disabled:bg-gray-50 disabled:text-text-soft"
+            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none disabled:bg-panel disabled:text-text-soft"
             placeholder="Ej: Administrativo Taller"
           />
         </label>
@@ -333,7 +333,7 @@ const columnasRoles = [
           <p v-if="cargandoPermisos" class="text-sm text-text-soft">Cargando…</p>
           <div v-else class="overflow-x-auto rounded-lg border border-border">
             <table class="min-w-full divide-y divide-border text-sm">
-              <thead class="bg-gray-50">
+              <thead class="bg-panel">
                 <tr>
                   <th class="px-3 py-2 text-left text-xs font-bold uppercase tracking-wide text-text-soft">Módulo</th>
                   <th

@@ -43,7 +43,7 @@ const iniciales = computed(() =>
 <template>
   <div class="flex min-h-screen">
     <aside
-      class="sticky top-0 flex h-screen shrink-0 flex-col self-start overflow-y-auto border-r border-gray-200 bg-gray-50 text-gray-600 transition-all duration-200"
+      class="sticky top-0 flex h-screen shrink-0 flex-col self-start overflow-y-auto border-r border-border bg-panel text-gray-600 transition-all duration-200"
       :class="colapsado ? 'w-[52px]' : 'w-[216px]'"
     >
       <div class="relative flex items-center justify-between px-3 py-4">
@@ -81,7 +81,7 @@ const iniciales = computed(() =>
                 :to="link.to"
                 class="flex items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold transition-colors duration-150"
                 :class="colapsado ? 'justify-center' : ''"
-                active-class="bg-vialtec/10 text-vialtec"
+                active-class="bg-vialtec/15 text-vialtec"
                 :title="colapsado ? link.label : null"
               >
                 <svg
@@ -111,7 +111,7 @@ const iniciales = computed(() =>
               :to="link.to"
               class="flex items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold transition-colors duration-150"
               :class="colapsado ? 'justify-center' : ''"
-              active-class="bg-vialtec/10 text-vialtec"
+              active-class="bg-vialtec/15 text-vialtec"
               :title="colapsado ? link.label : null"
             >
               <svg
@@ -162,7 +162,7 @@ const iniciales = computed(() =>
       </div>
     </aside>
 
-    <main class="min-w-0 flex-1 overflow-x-auto p-6">
+    <main class="min-h-screen min-w-0 flex-1 overflow-x-auto bg-fondo p-6">
       <router-view />
     </main>
   </div>

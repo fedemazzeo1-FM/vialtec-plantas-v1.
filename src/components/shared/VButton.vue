@@ -30,7 +30,7 @@ const SIZE_CLASS = {
 
 const VARIANT_CLASS = {
   primary: 'bg-vialtec text-white hover:opacity-90',
-  secondary: 'border border-border text-text-mid hover:bg-gray-50',
+  secondary: 'border border-border text-text-mid hover:bg-panel',
   danger: 'bg-danger text-white hover:opacity-90',
   success: 'bg-success text-white hover:opacity-90',
   // No es de Flota (no vimos un botón "ghost" con estas medidas), pero

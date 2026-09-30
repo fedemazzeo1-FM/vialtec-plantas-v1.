@@ -212,7 +212,7 @@ iniciarPanelControl()
               </div>
               <div class="flex items-end gap-1">
                 <div v-for="(celda, i) in fila.celdas" :key="i" class="flex flex-1 flex-col items-center gap-0.5" :title="`${ganttSemanas[i]}: ${celda.label}`">
-                  <div class="flex h-8 w-full items-end rounded-sm bg-gray-50">
+                  <div class="flex h-8 w-full items-end rounded-sm bg-panel">
                     <div
                       class="w-full rounded-sm transition-all"
                       :class="[fila.color.barra, celda.pct === 0 ? '' : 'min-h-[3px]']"
@@ -230,7 +230,7 @@ iniciarPanelControl()
         <VCard>
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-bold text-text">Próximos despachos</h3>
-            <span class="rounded-full bg-vialtec/10 px-2 py-0.5 text-xs font-bold text-vialtec">{{ filasProximos.length }}</span>
+            <span class="rounded-full bg-vialtec/15 px-2 py-0.5 text-xs font-bold text-vialtec">{{ filasProximos.length }}</span>
           </div>
           <p class="text-xs text-text-soft">Todos los pedidos confirmados</p>
           <p v-if="cargandoProximos" class="mt-3 text-sm text-text-soft">Cargando…</p>
@@ -245,7 +245,7 @@ iniciarPanelControl()
                 :class="{
                   'bg-danger-light text-danger': p.etiquetaVariante === 'danger',
                   'bg-warning-light text-warning': p.etiquetaVariante === 'warning',
-                  'bg-gray-50 text-text-soft': p.etiquetaVariante === 'default',
+                  'bg-panel text-text-soft': p.etiquetaVariante === 'default',
                 }"
               >
                 <span class="text-sm font-bold">{{ p.diaCorto }}</span>
@@ -269,7 +269,7 @@ iniciarPanelControl()
           </template>
           <RouterLink
             to="/plan-semanal"
-            class="mt-3 block rounded-lg bg-gray-50 py-2 text-center text-sm font-semibold text-vialtec hover:bg-gray-100"
+            class="mt-3 block rounded-lg bg-panel py-2 text-center text-sm font-semibold text-vialtec hover:bg-gray-100"
           >
             Ver plan semanal →
           </RouterLink>

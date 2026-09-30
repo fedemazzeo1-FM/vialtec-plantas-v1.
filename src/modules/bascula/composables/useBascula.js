@@ -105,7 +105,7 @@ export const COLOR_PUERTA = {
 // texto de color (borde + texto), acá es una fila de tabla con fondo tenue
 // (borde + bg) — mismo criterio de color, presentación distinta.
 export const COLOR_FILA_VALE = {
-  asfalto: 'border-l-4 border-l-vialtec bg-vialtec/5',
+  asfalto: 'border-l-4 border-l-vialtec bg-vialtec/10',
   ingreso_arido: 'border-l-4 border-l-success bg-success-light',
   egreso_arido: 'border-l-4 border-l-orange-500 bg-orange-50',
 }

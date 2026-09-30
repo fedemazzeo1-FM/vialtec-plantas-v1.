@@ -398,7 +398,7 @@ watch(
                 :value="netoSlot(slot)"
                 type="text"
                 disabled
-                class="mt-1 w-full rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm text-text-soft"
+                class="mt-1 w-full rounded-lg border border-border bg-panel px-3 py-2 text-sm text-text-soft"
               />
             </label>
           </div>

@@ -400,7 +400,7 @@ async function confirmarEliminar() {
           <button
             type="button"
             class="rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-150"
-            :class="vistaObras === 'activas' ? 'bg-vialtec text-white' : 'text-text-mid hover:bg-gray-50'"
+            :class="vistaObras === 'activas' ? 'bg-vialtec text-white' : 'text-text-mid hover:bg-panel'"
             @click="vistaObras = 'activas'"
           >
             Activas
@@ -408,7 +408,7 @@ async function confirmarEliminar() {
           <button
             type="button"
             class="rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-150"
-            :class="vistaObras === 'archivadas' ? 'bg-vialtec text-white' : 'text-text-mid hover:bg-gray-50'"
+            :class="vistaObras === 'archivadas' ? 'bg-vialtec text-white' : 'text-text-mid hover:bg-panel'"
             @click="vistaObras = 'archivadas'"
           >
             Archivadas

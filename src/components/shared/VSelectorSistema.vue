@@ -48,7 +48,7 @@ onBeforeUnmount(() => document.removeEventListener('click', cerrarSiEsAfuera))
   <div ref="menuRef" class="relative shrink-0">
     <button
       type="button"
-      class="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2.5 text-xs font-semibold text-text-soft transition-colors duration-150 hover:bg-gray-50 hover:text-text-mid"
+      class="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2.5 text-xs font-semibold text-text-soft transition-colors duration-150 hover:bg-panel hover:text-text-mid"
       @click="toggleMenu"
     >
       <span>{{ sistemaActual.label }}</span>
@@ -73,7 +73,7 @@ onBeforeUnmount(() => document.removeEventListener('click', cerrarSiEsAfuera))
         :key="sistema.value"
         type="button"
         class="block w-full whitespace-nowrap px-3 py-2 text-left text-xs font-semibold transition-colors duration-150"
-        :class="sistema.value === SISTEMA_ACTUAL ? 'bg-vialtec/10 text-vialtec' : 'text-text-soft hover:bg-gray-50 hover:text-text-mid'"
+        :class="sistema.value === SISTEMA_ACTUAL ? 'bg-vialtec/15 text-vialtec' : 'text-text-soft hover:bg-panel hover:text-text-mid'"
         @click="elegirSistema(sistema)"
       >
         {{ sistema.label }}

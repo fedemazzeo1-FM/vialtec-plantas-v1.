@@ -213,7 +213,7 @@ function formatearFechaHoraCreacion(iso) {
             :key="item.evento"
             type="button"
             class="block w-full px-3 py-2.5 text-left text-sm font-semibold"
-            :class="item.peligroso ? 'text-danger active:bg-danger-light' : 'text-text-mid active:bg-gray-50'"
+            :class="item.peligroso ? 'text-danger active:bg-danger-light' : 'text-text-mid active:bg-panel'"
             @click="emitirDesdeMenu(item.evento)"
           >
             {{ item.label }}
@@ -224,10 +224,10 @@ function formatearFechaHoraCreacion(iso) {
 
     <!-- Observaciones (📝, cualquier estado) y motivo (⚠, ej. cancelación) —
          confirmado en vivo que pueden convivir las dos, no son excluyentes. -->
-    <p v-if="pedido.observaciones" class="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-sm text-text-mid">
+    <p v-if="pedido.observaciones" class="mt-2 rounded-lg bg-panel px-3 py-2 text-sm text-text-mid">
       📝 {{ pedido.observaciones }}
     </p>
-    <p v-if="pedido.motivo" class="mt-2 rounded-lg bg-vialtec/5 px-3 py-2 text-sm text-vialtec">
+    <p v-if="pedido.motivo" class="mt-2 rounded-lg bg-vialtec/10 px-3 py-2 text-sm text-vialtec">
       ⚠ {{ pedido.motivo }}
     </p>
   </div>
