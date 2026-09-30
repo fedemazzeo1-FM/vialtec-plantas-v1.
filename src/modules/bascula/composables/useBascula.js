@@ -151,13 +151,16 @@ export function useBascula() {
   const error = ref(null)
   const auth = useAuthStore()
 
-  // "Editar"/"Eliminar" del historial (migración 31, pedido de Federico
-  // 2026-09-08) — restringido a admin/plantista, más angosto que quién puede
-  // REGISTRAR una pesada (que además incluye balancero). Gate tanto acá
+  // "Editar"/"Eliminar" del historial (migración 31, 2026-09-08). Desde la
+  // migración 47 (2026-09-30, pedido de Federico: habilitar Editar a
+  // balancero) sale de la matriz de Roles — 'bascula:editar' y
+  // 'bascula:eliminar' — en vez de roles fijos: la matriz ya decía que
+  // balancero podía editar, pero ni la UI ni las RPC la leían. Gate tanto acá
   // (oculta los botones en BasculaView.vue) como server-side en las 2 RPC
   // (corregir_vale_bascula/anular_vale_bascula) — la UI nunca es la única
   // barrera.
-  const puedeGestionarVales = computed(() => ['admin', 'plantista'].includes(auth.rol))
+  const puedeEditarVales = computed(() => auth.tienePermiso('bascula', 'editar'))
+  const puedeAnularVales = computed(() => auth.tienePermiso('bascula', 'eliminar'))
 
   // -------------------------------------------------------------------------
   // Datos base (pedidos para pesar, obras, patentes/proveedores conocidos,
@@ -923,7 +926,8 @@ export function useBascula() {
 
   return {
     error,
-    puedeGestionarVales,
+    puedeEditarVales,
+    puedeAnularVales,
     cargandoBase,
     obras,
     patentes,

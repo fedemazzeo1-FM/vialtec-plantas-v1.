@@ -35,7 +35,8 @@ const router = useRouter()
 
 const {
   error,
-  puedeGestionarVales,
+  puedeEditarVales,
+  puedeAnularVales,
   obras,
   patentes,
   proveedores,
@@ -549,13 +550,13 @@ watch(
                 <VButton variant="secondary" size="sm" @click="abrirImpresionVale(row)">Vale</VButton>
                 <VButton v-if="row.tipo_vale === 'asfalto'" variant="secondary" size="sm" @click="abrirImpresionRemito(row)">Remito</VButton>
               </template>
-              <!-- 2026-09-08 (pedido de Federico): Editar/Eliminar, EXCLUSIVO
-                   admin/plantista (puedeGestionarVales, useBascula.js) — ni
-                   siquiera se muestran para otros roles. No aplica a filas
-                   legado (sin id real) ni a un vale ya anulado. -->
-              <template v-if="puedeGestionarVales && !row.pendiente_migracion && !row.anulado">
-                <VButton variant="secondary" size="sm" @click="abrirEdicion(row)">Editar</VButton>
-                <VButton variant="danger" size="sm" @click="abrirAnulacion(row)">Eliminar</VButton>
+              <!-- Editar/Eliminar (2026-09-08): según la matriz de Roles
+                   (bascula:editar / bascula:eliminar, migración 47) — sin el
+                   permiso ni siquiera se muestran. No aplica a filas legado
+                   (sin id real) ni a un vale ya anulado. -->
+              <template v-if="!row.pendiente_migracion && !row.anulado">
+                <VButton v-if="puedeEditarVales" variant="secondary" size="sm" @click="abrirEdicion(row)">Editar</VButton>
+                <VButton v-if="puedeAnularVales" variant="danger" size="sm" @click="abrirAnulacion(row)">Eliminar</VButton>
               </template>
               <span v-if="row.pendiente_migracion && row.tipo_vale !== 'asfalto' && row.tipo_vale !== 'egreso_arido'" class="text-xs text-gray-300">—</span>
             </div>
