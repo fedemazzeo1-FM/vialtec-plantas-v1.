@@ -1,6 +1,11 @@
 # pending.md — Pendientes vigentes
 
-## ▶ RETOMAR AQUÍ (actualizado 2026-09-30)
+## ▶ RETOMAR AQUÍ (actualizado 2026-09-30, tarde)
+
+**EN CURSO: optimización de rendimiento — FASE 1 aprobada por Federico, a
+medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
+deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
+
 
 **2026-09-30: migraciones 47, 48 y 48b APLICADAS + deploy verificado en
 vivo** (Stock → Analítica de proveedores y Báscula, con sesión de Federico).
@@ -313,6 +318,54 @@ sin tocar** (solo `plantas_vales.pedido_id` + estado del duplicado).
   que no persistió nada): 10 chequeos OK, sin consumir la secuencia de
   remitos. Frontend: selector "Pedido" en el modal Editar (pedidos del día de
   la pesada primero), motivo obligatorio si cambia.
+
+## 9. Optimización de rendimiento (2026-09-30) — FASE 1 EN CURSO
+
+Baseline medido con `scripts/medir-rendimiento.js` (pegar en la consola de
+produccion.vialtec.app con sesión y correr `await medirRendimiento()`;
+navega por el router de la app e intercepta fetch). Medido como admin, SPA.
+Ranking por requests/KB/cadenas, no por tiempos (red lenta ese día).
+
+Baseline (requests / KB / filas / niveles en cadena / duplicadas):
+Despachos 11/329/713/2/0 · Home 23/100/615/2/4 · Báscula 10/71/167/2/0 ·
+Pedidos 7/37/117/3/0 · Simulador 3/25/53/1/0 · Stock actual 5/23/81/2/0 ·
+Stock→Analítica 1/8/87 · Plan semanal 4/23/40/1/0 · Fórmulas 1/19/20 ·
+Usuarios 6/8/96 · Maestros 1–2 req por tab. Carga en frío: 3 niveles
+(index → sesión/rol → ~20 chunks de la ruta → datos).
+
+Hallazgos clave: DB no es el cuello de botella (bascula_viva 17 ms con RLS);
+Despachos baja 263 KB (196 pedidos `select *`, 82 % es `datos_legados`) para
+"Totales del filtro"; fórmulas (19 KB) se pide ~10 veces por recorrido (Home
+×3); Home hace 9 queries por mes para el Resumen anual + 2 anuales. Sistema
+viejo (kv_store) sin tráfico (0 requests 24 h, última escritura 06/09).
+Flota usada por plantas (solo lectura): `flota_obras` (Maestros→Obras,
+Usuarios, vistas `plantas_v_obras_visibles`/`plantas_v_bascula_viva`) y
+`flota_usuarios_email` (nombres). Bundle: exceljs/PDF ya son lazy.
+
+FASE 1 (aprobada; un commit por cambio, `npm run build` limpio, no tocar la
+lectura de `flota_obras` — por eso NO se toca `fetchPaginado` global):
+- [x] Desempate `.order('id')` en Pedidos, Despachos, Báscula y movimientos
+  de Stock — `fd79bea` (no deployado).
+- [ ] Ítems 1+6: `select('*')` → columnas explícitas en
+  `queryDespachosFiltrados` (listado, totales, Excel del filtro, informe
+  mensual). Campos que usa Despachos: id, obra_id, formula_id, tipo,
+  cantidad_solicitada, cantidad_despachada, fecha_programada, estado,
+  encargado, tipo_pedido, cliente_externo, motivo, nro_remito_global,
+  nro_vale_global. Sin uso: datos_legados, observaciones, ubicacion,
+  created_at, creado_por, motivo_en, archivado. Falta relevar y aplicar lo
+  mismo en el listado de Pedidos (`queryPedidos`).
+- [ ] Ítem 2: cache por sesión de fórmulas (invalidar al editar); Báscula y
+  Despachos piden solo `id, nombre`.
+- [ ] Ítem 3: Home sin duplicados (materiales ×2, stock ×2, fórmulas ×3).
+- [ ] Ítem 7: Stock → Historial de ingresos lazy al abrir el tab (hoy se
+  carga en `iniciar()`); unificar las 2 queries de materiales.
+- [ ] Re-medir con el script y armar comparativo Baseline vs Fase 1.
+- [ ] Deploy + push (pedir OK).
+Fase 2 (SQL, no aprobada aún): RPC de totales de Despachos y de resumen
+anual; simplificar `plantas_v_bascula_viva` (sacar ramas kv_store, acumulado
+solo sobre el rango); envolver `plantas_rol_actual()` en `(select …)` en la
+RLS de pedidos. Fase 3: prefetch del chunk de ruta en paralelo a la sesión,
+cache de catálogos, limpieza de índices/políticas duplicadas.
 
 ## 6. Pendientes operativos (heredados del histórico, sin confirmar en vivo)
 
