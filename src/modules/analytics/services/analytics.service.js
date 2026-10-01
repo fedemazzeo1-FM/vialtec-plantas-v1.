@@ -211,7 +211,7 @@ export async function fetchAnaliticaProveedoresDetalle(rangoFechas = {}) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {{ material?: 'asfalto'|'hormigon', obraId?: number, desde?: string, hasta?: string }} filtros
+ * @param {{ material?: string, obraId?: number, desde?: string, hasta?: string }} filtros
  */
 export async function fetchDetalleDespachosCamion(filtros = {}) {
   // La vista plantas_v_despachos_camion (migración 05) garantiza por

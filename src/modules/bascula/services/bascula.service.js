@@ -20,6 +20,7 @@
 import { supabase } from '@/config/supabase'
 import { fetchPagina, fetchPaginado } from '@/services/fetch-paginado'
 import { limiteInicioDiaLocal, limiteFinDiaLocalExclusivo } from '@/services/fecha'
+import { CIRCUITO, tiposDeCircuito } from '@/config/tipos-producto'
 
 const TABLA_PEDIDOS = 'plantas_pedidos'
 const TABLA_VALES = 'plantas_vales'
@@ -93,7 +94,7 @@ export async function fetchPedidosAsfaltoParaPesada() {
     supabase
       .from(TABLA_PEDIDOS)
       .select('*')
-      .eq('tipo', 'asfalto')
+      .in('tipo', tiposDeCircuito(CIRCUITO.BASCULA))
       .eq('estado', 'confirmado')
       .order('fecha_programada', { ascending: true })
   )
