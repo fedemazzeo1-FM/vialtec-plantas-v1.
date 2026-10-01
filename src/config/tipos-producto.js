@@ -22,6 +22,8 @@ export const CIRCUITO = {
 // en 0. Los que no, solo aparecen cuando hay algo que mostrar.
 // `ordenListado`: orden de las secciones de Pedidos (el legado muestra
 // Hormigón primero y Asfalto después).
+// `color` / `clases`: color que identifica al tipo en gráficos y leyendas
+// (las clases van escritas enteras para que Tailwind las genere).
 // `avisoProduccion`: título del WhatsApp al operador cuando se confirma un
 // pedido que se produce en el circuito de mixer.
 export const TIPOS_PRODUCTO = {
@@ -34,6 +36,8 @@ export const TIPOS_PRODUCTO = {
     total: 'asfaltoTn',
     siempreVisible: true,
     ordenListado: 2,
+    color: '#2a78d6',
+    clases: { barra: 'bg-[#2a78d6]', texto: 'text-[#2a78d6]', punto: 'bg-[#2a78d6]' },
   },
   hormigon: {
     id: 'hormigon',
@@ -44,6 +48,8 @@ export const TIPOS_PRODUCTO = {
     total: 'hormigonM3',
     siempreVisible: true,
     ordenListado: 1,
+    color: '#eb6834',
+    clases: { barra: 'bg-[#eb6834]', texto: 'text-[#eb6834]', punto: 'bg-[#eb6834]' },
     avisoProduccion: 'Hormigón confirmado para producción',
   },
   mezcla_cemento: {
@@ -55,6 +61,8 @@ export const TIPOS_PRODUCTO = {
     total: 'mezclaCementoTn',
     siempreVisible: false,
     ordenListado: 3,
+    color: '#64748b',
+    clases: { barra: 'bg-[#64748b]', texto: 'text-[#64748b]', punto: 'bg-[#64748b]' },
     avisoProduccion: 'Mezcla cemento confirmada para producción',
   },
 }
@@ -134,4 +142,21 @@ export function magnitudTotales(totales) {
  */
 export function tiposConTotalVisible(totales) {
   return LISTA_TIPOS_PRODUCTO.filter((t) => t.siempreVisible || (Number(totales?.[t.total]) || 0) > 0)
+}
+
+/**
+ * Totales como texto, uno por tipo: ['12.0 tn', '3.0 m³', '6.0 tn mezcla cemento'].
+ * Los tipos que no son `siempreVisible` llevan su nombre, para no confundirse
+ * con otro de la misma unidad, y solo aparecen si tienen algo.
+ * @param {{ decimales?: number, soloConValor?: boolean }} opciones
+ *   `soloConValor`: omite también los `siempreVisible` que estén en 0.
+ */
+export function etiquetasTotales(totales, { decimales = 1, soloConValor = false } = {}) {
+  return LISTA_TIPOS_PRODUCTO.filter((t) => {
+    const valor = Number(totales?.[t.total]) || 0
+    return valor > 0 || (t.siempreVisible && !soloConValor)
+  }).map((t) => {
+    const valor = (Number(totales?.[t.total]) || 0).toFixed(decimales)
+    return `${valor} ${t.unidadLabel}${t.siempreVisible ? '' : ` ${t.nombre.toLowerCase()}`}`
+  })
 }

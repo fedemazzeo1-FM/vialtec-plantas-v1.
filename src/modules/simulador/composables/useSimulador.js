@@ -12,6 +12,7 @@
 import { computed, reactive, ref } from 'vue'
 import { fetchFormulas, calcularConsumoTotalKg } from '@/modules/maestros/services/formulas.service'
 import { fetchStockActual } from '@/services/stock.service'
+import { LISTA_TIPOS_PRODUCTO, sumarEnTotal, totalesVacios, unidadLabelTipoProducto } from '@/config/tipos-producto'
 
 const MATERIALES_SIN_DESCUENTO = ['agua', 'purgue'] // memory/business-rules.md
 
@@ -55,7 +56,7 @@ export function useSimulador() {
   let contador = 0
 
   const formulaSeleccionada = computed(() => formulas.value.find((f) => f.id === form.formulaId) ?? null)
-  const unidadForm = computed(() => (formulaSeleccionada.value?.tipo === 'hormigon' ? 'm³' : 'tn'))
+  const unidadForm = computed(() => unidadLabelTipoProducto(formulaSeleccionada.value?.tipo))
 
   function limpiarForm() {
     form.formulaId = ''
@@ -96,16 +97,22 @@ export function useSimulador() {
   }
 
   // -------------------------------------------------------------------------
-  // Subtotales por tipo de mezcla ("Total asfalto" / "Total hormigón") —
-  // solo se muestra el que tenga al menos una entrada, igual que producción.
+  // Subtotales por tipo de producto ("Total asfalto" / "Total hormigón" /
+  // "Total mezcla cemento", config/tipos-producto.js) — solo se muestra el
+  // que tenga al menos una entrada, igual que producción.
   // -------------------------------------------------------------------------
 
-  const totalAsfaltoTn = computed(() =>
-    entradas.value.filter((e) => e.tipo === 'asfalto').reduce((acc, e) => acc + e.cantidad, 0)
-  )
-  const totalHormigonM3 = computed(() =>
-    entradas.value.filter((e) => e.tipo === 'hormigon').reduce((acc, e) => acc + e.cantidad, 0)
-  )
+  const CLASES_SUBTOTAL = ['text-vialtec', 'text-success', 'text-text-mid']
+
+  const subtotales = computed(() => {
+    const totales = totalesVacios()
+    for (const e of entradas.value) sumarEnTotal(totales, e.tipo, e.cantidad)
+    return LISTA_TIPOS_PRODUCTO.map((t, i) => ({
+      tipo: t,
+      total: totales[t.total],
+      clase: CLASES_SUBTOTAL[i] ?? 'text-text-mid',
+    })).filter((s) => s.total > 0)
+  })
 
   // -------------------------------------------------------------------------
   // Impacto en stock: consumo combinado de TODAS las entradas, por insumo,
@@ -161,8 +168,7 @@ export function useSimulador() {
     agregarEntrada,
     quitarEntrada,
     limpiarTodo,
-    totalAsfaltoTn,
-    totalHormigonM3,
+    subtotales,
     impactoStock,
     iniciar,
   }

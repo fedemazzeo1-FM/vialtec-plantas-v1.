@@ -20,6 +20,7 @@
 import { supabase } from '@/config/supabase'
 import { fetchPaginado, fetchPagina } from '@/services/fetch-paginado'
 import { HORMIGON_PRE_MAYO_2026_M3 } from '@/modules/dashboard/services/dashboard.service'
+import { esCircuitoMixer, magnitudTotales, sumarEnTotal, totalesVacios } from '@/config/tipos-producto'
 
 const TABLA_PEDIDOS = 'plantas_pedidos'
 const TABLA_HISTORIAL = 'plantas_pedidos_historial'
@@ -31,7 +32,7 @@ const TABLA_HISTORIAL = 'plantas_pedidos_historial'
 /** Filtros comunes a fetchDespachos()/fetchTodosLosDespachosFiltrados() — un
  * solo lugar para no repetir la cadena de `.eq()/.gte()/.lte()` (memory/
  * conventions.md).
- * @param {{ tipo?: 'asfalto'|'hormigon', obraId?: number, formulaId?: string,
+ * @param {{ tipo?: string, obraId?: number, formulaId?: string,
  *   clienteExterno?: string, desde?: string, hasta?: string }} filtros
  *   desde/hasta en 'YYYY-MM-DD', sobre fecha_programada (memory/relevamiento:
  *   el legado usa `fecha` como fecha planificada Y de despacho, no hay una
@@ -90,14 +91,10 @@ export async function fetchAcumuladoHistorico() {
     supabase.from(TABLA_PEDIDOS).select('tipo, cantidad_despachada').eq('estado', 'despachado')
   )
 
-  let asfaltoTn = 0
-  let hormigonM3 = HORMIGON_PRE_MAYO_2026_M3
-  for (const p of filas) {
-    const cantidad = Number(p.cantidad_despachada) || 0
-    if (p.tipo === 'hormigon') hormigonM3 += cantidad
-    else asfaltoTn += cantidad
-  }
-  return { asfaltoTn, hormigonM3 }
+  const totales = totalesVacios()
+  totales.hormigonM3 = HORMIGON_PRE_MAYO_2026_M3
+  for (const p of filas) sumarEnTotal(totales, p.tipo, p.cantidad_despachada)
+  return totales
 }
 
 /** 'YYYY-MM' -> { desde, hasta } 'YYYY-MM-DD'. Exportada (2026-09-02, informe mensual): reusada por informe-mensual.service.js, no duplicada. */
@@ -121,14 +118,9 @@ export async function fetchTotalesMes(mes) {
       .gte('fecha_programada', desde)
       .lte('fecha_programada', hasta)
   )
-  let asfaltoTn = 0
-  let hormigonM3 = 0
-  for (const p of filas) {
-    const cantidad = Number(p.cantidad_despachada) || 0
-    if (p.tipo === 'hormigon') hormigonM3 += cantidad
-    else asfaltoTn += cantidad
-  }
-  return { asfaltoTn, hormigonM3 }
+  const totales = totalesVacios()
+  for (const p of filas) sumarEnTotal(totales, p.tipo, p.cantidad_despachada)
+  return totales
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +130,8 @@ export async function fetchTotalesMes(mes) {
 
 /**
  * @param {string} mes 'YYYY-MM'
- * @returns {Promise<Array<{ obraId: number|null, asfaltoTn: number, hormigonM3: number, cantidadDespachos: number }>>}
+ * @returns {Promise<Array<{ obraId: number|null, cantidadDespachos: number } & Record<string, number>>>}
+ *   más un total por tipo de producto (config/tipos-producto.js).
  */
 export async function fetchResumenPorObra(mes) {
   const { desde, hasta } = rangoDelMes(mes)
@@ -160,19 +153,16 @@ export async function fetchResumenPorObra(mes) {
       porObra.set(clave, {
         obraId: p.obra_id,
         clienteExterno: p.obra_id ? null : p.cliente_externo || 'Venta externa',
-        asfaltoTn: 0,
-        hormigonM3: 0,
+        ...totalesVacios(),
         cantidadDespachos: 0,
       })
     }
     const acc = porObra.get(clave)
-    const cantidad = Number(p.cantidad_despachada) || 0
-    if (p.tipo === 'hormigon') acc.hormigonM3 += cantidad
-    else acc.asfaltoTn += cantidad
+    sumarEnTotal(acc, p.tipo, p.cantidad_despachada)
     acc.cantidadDespachos += 1
   }
 
-  return Array.from(porObra.values()).sort((a, b) => b.asfaltoTn + b.hormigonM3 - (a.asfaltoTn + a.hormigonM3))
+  return Array.from(porObra.values()).sort((a, b) => magnitudTotales(b) - magnitudTotales(a))
 }
 
 // ---------------------------------------------------------------------------
@@ -185,11 +175,13 @@ export async function fetchResumenPorObra(mes) {
 
 /**
  * @param {string} pedidoId
- * @param {'asfalto'|'hormigon'} tipo
+ * @param {string} tipo tipo de producto del pedido; el circuito (báscula/mixer,
+ *   config/tipos-producto.js) define de qué tabla salen las cargas.
  * @returns {Promise<Array<{ id, patente, cantidad, numeroRemitoOVale, fecha, fuente: 'cargas'|'bascula' }>>}
  */
 export async function fetchCargasDelPedido(pedidoId, tipo) {
-  const tabla = tipo === 'hormigon' ? 'plantas_cargas_hormigon' : 'plantas_cargas_asfalto'
+  const esMixer = esCircuitoMixer(tipo)
+  const tabla = esMixer ? 'plantas_cargas_hormigon' : 'plantas_cargas_asfalto'
   const { data, error } = await supabase
     .from(tabla)
     .select('*')
@@ -201,13 +193,13 @@ export async function fetchCargasDelPedido(pedidoId, tipo) {
   // modal no tenga que conocer las columnas específicas de cada tabla.
   const cargas = (data ?? []).map((c) => ({
     id: c.id,
-    patente: tipo === 'hormigon' ? c.patente_mixer : c.patente,
-    cantidad: tipo === 'hormigon' ? c.volumen_m3 : c.cantidad_tn,
-    numeroRemitoOVale: tipo === 'hormigon' ? c.numero_remito : c.numero_vale,
+    patente: esMixer ? c.patente_mixer : c.patente,
+    cantidad: esMixer ? c.volumen_m3 : c.cantidad_tn,
+    numeroRemitoOVale: esMixer ? c.numero_remito : c.numero_vale,
     fecha: c.fecha_carga,
     fuente: 'cargas',
   }))
-  if (cargas.length || tipo === 'hormigon') return cargas
+  if (cargas.length || esMixer) return cargas
 
   // Fallback a Báscula (2026-09-02, roadmap Mobile — gap real encontrado al
   // auditar la comparativa "Real vs. Pedido" del legado): los despachos de

@@ -27,6 +27,7 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 // de proveedores (memory/conventions.md, no duplicar la query/agregación).
 import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
 import { PRODUCCION_PRE_MAYO_2026 } from '@/modules/dashboard/services/dashboard.service'
+import { sumarTotales } from '@/config/tipos-producto'
 
 /**
  * Despachos por obra del mes, separados interno (obra real, tipo_pedido
@@ -124,16 +125,9 @@ export async function fetchResumenAnual(mesHasta) {
   // objeto solo tiene esas 4 claves).
   const filas = meses.map((m, i) => {
     const historico = PRODUCCION_PRE_MAYO_2026[m]
-    return {
-      mes: nombreMesLargo(m),
-      asfaltoTn: totales[i].asfaltoTn + (historico?.asfaltoTn ?? 0),
-      hormigonM3: totales[i].hormigonM3 + (historico?.hormigonM3 ?? 0),
-    }
+    return { mes: nombreMesLargo(m), ...sumarTotales(totales[i], historico) }
   })
-  const totalAcumulado = {
-    hormigonM3: filas.reduce((acc, f) => acc + f.hormigonM3, 0),
-    asfaltoTn: filas.reduce((acc, f) => acc + f.asfaltoTn, 0),
-  }
+  const totalAcumulado = sumarTotales(...filas)
   return { filas, totalAcumulado, anio }
 }
 

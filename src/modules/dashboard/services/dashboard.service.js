@@ -12,6 +12,7 @@
 import { supabase } from '@/config/supabase'
 import { obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+import { sumarEnTotal, tiposDelTotal, totalesVacios } from '@/config/tipos-producto'
 
 const TABLA_PEDIDOS = 'plantas_pedidos'
 
@@ -26,7 +27,8 @@ function aFechaISO(date) {
  *   ("en curso" — NO incluye despachado/cancelado, a diferencia de
  *   fetchPedidosSemana() de Plan Semanal, que tiene otro criterio).
  * - confirmados: solo confirmado ("X para despachar").
- * - despachos: cantidad + tn(asfalto)/m³(hormigón) de lo DESPACHADO esta semana.
+ * - despachos: cantidad + un total por tipo de producto (config/tipos-producto.js)
+ *   de lo DESPACHADO esta semana.
  */
 export async function fetchResumenSemanaHome(fechaReferencia = new Date()) {
   const { lunes, domingo } = obtenerRangoSemana(fechaReferencia)
@@ -43,21 +45,18 @@ export async function fetchResumenSemanaHome(fechaReferencia = new Date()) {
   let pedidosActivos = 0
   let confirmados = 0
   let despachosCantidad = 0
-  let asfaltoTn = 0
-  let hormigonM3 = 0
+  const totales = totalesVacios()
 
   for (const p of data ?? []) {
     if (p.estado === 'solicitado' || p.estado === 'confirmado' || p.estado === 'postergado') pedidosActivos += 1
     if (p.estado === 'confirmado') confirmados += 1
     if (p.estado === 'despachado') {
       despachosCantidad += 1
-      const cantidad = Number(p.cantidad_despachada) || 0
-      if (p.tipo === 'hormigon') hormigonM3 += cantidad
-      else asfaltoTn += cantidad
+      sumarEnTotal(totales, p.tipo, p.cantidad_despachada)
     }
   }
 
-  return { pedidosActivos, confirmados, despachos: { cantidad: despachosCantidad, asfaltoTn, hormigonM3 } }
+  return { pedidosActivos, confirmados, despachos: { cantidad: despachosCantidad, ...totales } }
 }
 
 /**
@@ -134,7 +133,7 @@ export async function fetchProduccionAnualAsfalto() {
   const { data, error } = await supabase
     .from(TABLA_PEDIDOS)
     .select('cantidad_despachada')
-    .eq('tipo', 'asfalto')
+    .in('tipo', tiposDelTotal('asfaltoTn'))
     .eq('estado', 'despachado')
     .gte('fecha_programada', '2026-05-01')
 
@@ -158,7 +157,7 @@ export async function fetchProduccionAnualHormigon() {
   const { data, error } = await supabase
     .from(TABLA_PEDIDOS)
     .select('cantidad_despachada')
-    .eq('tipo', 'hormigon')
+    .in('tipo', tiposDelTotal('hormigonM3'))
     .eq('estado', 'despachado')
     .gte('fecha_programada', '2026-05-01')
 
@@ -173,8 +172,8 @@ export async function fetchProduccionAnualHormigon() {
 // Gantt de despachos por fórmula (2026-09-06, pedido de Federico: reemplaza
 // la card "Consumo de material" que había antes — "qué fórmula sale más,
 // cantidades, algo copado con respecto a la producción"). DESPACHOS reales
-// por fórmula en su propia unidad (tn asfalto / m³ hormigón) — asfalto y
-// hormigón nunca comparten un mismo eje (cada fórmula se normaliza contra
+// por fórmula en su propia unidad (config/tipos-producto.js) — dos tipos
+// nunca comparten un mismo eje (cada fórmula se normaliza contra
 // su propio máximo en el Gantt, ver useDashboardHome.js). Mismo patrón de
 // ventana de 8 semanas que el resto de este archivo.
 //

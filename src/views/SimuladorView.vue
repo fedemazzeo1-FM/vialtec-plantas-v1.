@@ -9,6 +9,7 @@ import VCard from '@/components/shared/VCard.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
 import { useSimulador } from '@/modules/simulador/composables/useSimulador'
+import { nombreTipoProducto, unidadLabelTipoProducto } from '@/config/tipos-producto'
 
 const {
   error,
@@ -20,8 +21,7 @@ const {
   agregarEntrada,
   quitarEntrada,
   limpiarTodo,
-  totalAsfaltoTn,
-  totalHormigonM3,
+  subtotales,
   impactoStock,
   iniciar,
 } = useSimulador()
@@ -57,7 +57,7 @@ iniciar()
             Fórmula
             <select v-model="form.formulaId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
               <option value="" disabled>— Seleccioná —</option>
-              <option v-for="f in formulas" :key="f.id" :value="f.id">{{ f.nombre }} ({{ f.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto' }})</option>
+              <option v-for="f in formulas" :key="f.id" :value="f.id">{{ f.nombre }} ({{ nombreTipoProducto(f.tipo) }})</option>
             </select>
           </label>
           <label class="block text-sm text-text-mid">
@@ -94,14 +94,15 @@ iniciar()
               <span class="text-text-soft">{{ entrada.formulaNombre }}</span>
             </div>
             <div class="flex items-center gap-3">
-              <span class="text-sm font-bold text-text">{{ entrada.cantidad.toFixed(2) }} {{ entrada.tipo === 'hormigon' ? 'm³' : 'tn' }}</span>
+              <span class="text-sm font-bold text-text">{{ entrada.cantidad.toFixed(2) }} {{ unidadLabelTipoProducto(entrada.tipo) }}</span>
               <button type="button" class="text-text-soft hover:text-danger" @click="quitarEntrada(entrada.id)">✕</button>
             </div>
           </li>
         </ul>
         <div class="mt-3 flex gap-4 border-t border-border pt-3 text-sm font-semibold">
-          <p v-if="totalAsfaltoTn > 0" class="text-vialtec">Total asfalto: {{ totalAsfaltoTn.toFixed(2) }} tn</p>
-          <p v-if="totalHormigonM3 > 0" class="text-success">Total hormigón: {{ totalHormigonM3.toFixed(2) }} m³</p>
+          <p v-for="s in subtotales" :key="s.tipo.id" :class="s.clase">
+            Total {{ s.tipo.nombre.toLowerCase() }}: {{ s.total.toFixed(2) }} {{ s.tipo.unidadLabel }}
+          </p>
         </div>
       </VCard>
 

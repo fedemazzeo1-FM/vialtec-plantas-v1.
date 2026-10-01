@@ -15,6 +15,7 @@ import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
 import { hoyISO } from '@/services/fecha'
+import { LISTA_TIPOS_PRODUCTO, tipoProducto, totalesVacios, unidadLabelTipoProducto } from '@/config/tipos-producto'
 // Mismo cálculo mes a mes que ya usa el Informe Mensual (Despachos →
 // Resumen anual) — no se duplica acá (memory/conventions.md). Cruzado a
 // nivel composable, no de service-a-service: dashboard.service.js ya lo
@@ -39,7 +40,7 @@ export function useDashboardHome() {
   // -------------------------------------------------------------------------
 
   const cargandoKpis = ref(false)
-  const resumenSemana = reactive({ pedidosActivos: 0, confirmados: 0, despachos: { cantidad: 0, asfaltoTn: 0, hormigonM3: 0 } })
+  const resumenSemana = reactive({ pedidosActivos: 0, confirmados: 0, despachos: { cantidad: 0, ...totalesVacios() } })
   const stockActual = ref([])
 
   const materialesAjustados = computed(() => stockActual.value.filter((m) => m.estado === 'amarillo').length)
@@ -77,7 +78,7 @@ export function useDashboardHome() {
     proximosDespachos.value.map((p) => {
       const destino = p.tipo_pedido === 'venta' ? p.cliente_externo || '—' : obrasPorId.value[p.obra_id]?.nombre ?? 'Obra sin asignar'
       const formulaNombre = formulasPorId.value[p.formula_id]?.nombre ?? '—'
-      const unidad = p.tipo === 'hormigon' ? 'm³' : 'tn'
+      const unidad = unidadLabelTipoProducto(p.tipo)
       let etiqueta = null
       let etiquetaVariante = 'default'
       if (p.fecha_programada < hoy) {
@@ -174,6 +175,10 @@ export function useDashboardHome() {
   const cargandoProduccionMensual = ref(false)
   const produccionMensualAsfalto = ref([])
   const produccionMensualHormigon = ref([])
+  // Tipos que no tienen sección fija en Home (los que no son `siempreVisible`
+  // en config/tipos-producto.js, hoy mezcla cemento): una sección por cada
+  // uno que tenga producción en el año, con su total y su gráfico mensual.
+  const produccionOtrosTipos = ref([])
 
   async function cargarProduccionMensual() {
     cargandoProduccionMensual.value = true
@@ -183,6 +188,13 @@ export function useDashboardHome() {
       const { filas } = await fetchResumenAnual(mesActual)
       produccionMensualAsfalto.value = filas.map((f) => ({ mes: f.mes, valor: f.asfaltoTn }))
       produccionMensualHormigon.value = filas.map((f) => ({ mes: f.mes, valor: f.hormigonM3 }))
+      produccionOtrosTipos.value = LISTA_TIPOS_PRODUCTO.filter((t) => !t.siempreVisible)
+        .map((t) => ({
+          tipo: t,
+          total: filas.reduce((acc, f) => acc + (f[t.total] || 0), 0),
+          filas: filas.map((f) => ({ mes: f.mes, valor: f[t.total] || 0 })),
+        }))
+        .filter((p) => p.total > 0)
     } catch (e) {
       error.value = e.message
     } finally {
@@ -204,24 +216,19 @@ export function useDashboardHome() {
   const ganttSemanas = ref([])
   const ganttFilasRaw = ref([])
 
-  const COLOR_TIPO = {
-    asfalto: { barra: 'bg-[#2a78d6]', texto: 'text-[#2a78d6]', punto: 'bg-[#2a78d6]' },
-    hormigon: { barra: 'bg-[#eb6834]', texto: 'text-[#eb6834]', punto: 'bg-[#eb6834]' },
-  }
-
   const ganttFilas = computed(() =>
     ganttFilasRaw.value
       .map((f) => {
         const total = f.valores.reduce((a, b) => a + b, 0)
         const max = Math.max(...f.valores, 0)
-        const unidad = f.tipo === 'hormigon' ? 'm³' : 'tn'
+        const unidad = unidadLabelTipoProducto(f.tipo)
         return {
           nombre: f.nombre,
           tipo: f.tipo,
           unidad,
           total,
           totalLabel: `${total.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${unidad}`,
-          color: COLOR_TIPO[f.tipo] ?? COLOR_TIPO.asfalto,
+          color: tipoProducto(f.tipo).clases,
           celdas: f.valores.map((valor) => ({
             valor,
             pct: max > 0 ? Math.max(Math.round((valor / max) * 100), valor > 0 ? 10 : 0) : 0,
@@ -231,6 +238,11 @@ export function useDashboardHome() {
       })
       .sort((a, b) => b.total - a.total)
       .slice(0, 8)
+  )
+
+  // Leyenda del Gantt: los tipos fijos más cualquier otro que aparezca en las filas.
+  const ganttTiposLeyenda = computed(() =>
+    LISTA_TIPOS_PRODUCTO.filter((t) => t.siempreVisible || ganttFilas.value.some((f) => tipoProducto(f.tipo).id === t.id))
   )
 
   async function cargarGantt() {
@@ -278,6 +290,8 @@ export function useDashboardHome() {
     cargandoProduccionMensual,
     produccionMensualAsfalto,
     produccionMensualHormigon,
+    produccionOtrosTipos,
+    ganttTiposLeyenda,
     cargandoGantt,
     ganttSemanas,
     ganttFilas,

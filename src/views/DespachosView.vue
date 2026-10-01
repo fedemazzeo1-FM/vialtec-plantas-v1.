@@ -18,6 +18,13 @@ import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 import { formatearNumeroRemito } from '@/services/formato-numeros'
 import { ref } from 'vue'
+import {
+  LISTA_TIPOS_PRODUCTO,
+  esCircuitoBascula,
+  esCircuitoMixer,
+  tiposConTotalVisible,
+  unidadLabelTipoProducto,
+} from '@/config/tipos-producto'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const mesActualLabel = MESES[new Date().getMonth()]
@@ -108,9 +115,11 @@ const {
 
 iniciar()
 
-function unidadDe(tipo) {
-  return tipo === 'hormigon' ? 'm³' : 'tn'
-}
+const unidadDe = unidadLabelTipoProducto
+
+// Tipos sin KPI fijo arriba (los que no son `siempreVisible` en
+// config/tipos-producto.js, hoy mezcla cemento): se muestran solo si tienen algo.
+const tiposSinKpiFijo = LISTA_TIPOS_PRODUCTO.filter((t) => !t.siempreVisible)
 
 function formatearTn(valor) {
   return valor.toLocaleString('es-AR', { maximumFractionDigits: 1 })
@@ -171,6 +180,10 @@ async function descargarPdfVale() {
         <VKpiCard :label="`Asfalto ${mesActualLabel}`" :value="kpisMes.asfaltoTn.toFixed(1)" unidad="tn" />
         <VKpiCard :label="`Hormigón ${mesActualLabel}`" :value="kpisMes.hormigonM3.toFixed(1)" unidad="m³" />
         <VKpiCard label="Total hormigón acumulado" :value="kpisHistorico.hormigonM3.toFixed(1)" unidad="m³" />
+        <template v-for="t in tiposSinKpiFijo" :key="t.id">
+          <VKpiCard v-if="kpisMes[t.total] > 0" :label="`${t.nombre} ${mesActualLabel}`" :value="kpisMes[t.total].toFixed(1)" :unidad="t.unidadLabel" />
+          <VKpiCard v-if="kpisHistorico[t.total] > 0" :label="`Total ${t.nombre.toLowerCase()} acumulado`" :value="kpisHistorico[t.total].toFixed(1)" :unidad="t.unidadLabel" />
+        </template>
       </div>
 
       <!-- Producción de asfalto — año 2026 (2026-09-06, pedido de Federico:
@@ -205,11 +218,14 @@ async function descargarPdfVale() {
           <VButton size="sm" :variant="filtros.tipo === '' ? 'primary' : 'secondary'" @click="filtros.tipo = ''; aplicarFiltros()">
             Todos
           </VButton>
-          <VButton size="sm" :variant="filtros.tipo === 'asfalto' ? 'primary' : 'secondary'" @click="filtros.tipo = 'asfalto'; aplicarFiltros()">
-            Asfalto
-          </VButton>
-          <VButton size="sm" :variant="filtros.tipo === 'hormigon' ? 'primary' : 'secondary'" @click="filtros.tipo = 'hormigon'; aplicarFiltros()">
-            Hormigón
+          <VButton
+            v-for="t in LISTA_TIPOS_PRODUCTO"
+            :key="t.id"
+            size="sm"
+            :variant="filtros.tipo === t.id ? 'primary' : 'secondary'"
+            @click="filtros.tipo = t.id; aplicarFiltros()"
+          >
+            {{ t.nombre }}
           </VButton>
         </div>
         <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -270,8 +286,13 @@ async function descargarPdfVale() {
         </div>
         <p v-if="cargandoTotalesFiltro" class="mt-2 text-sm text-text-soft">Calculando…</p>
         <div v-else class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <VKpiCard label="Asfalto despachado" :value="totalesFiltro.asfaltoTn.toFixed(1)" unidad="tn" />
-          <VKpiCard label="Hormigón despachado" :value="totalesFiltro.hormigonM3.toFixed(1)" unidad="m³" />
+          <VKpiCard
+            v-for="t in tiposConTotalVisible(totalesFiltro)"
+            :key="t.id"
+            :label="`${t.nombre} despachado`"
+            :value="totalesFiltro[t.total].toFixed(1)"
+            :unidad="t.unidadLabel"
+          />
           <VKpiCard label="Despachos" :value="totalesFiltro.cantidadDespachos" unidad="" />
         </div>
       </VCard>
@@ -303,8 +324,9 @@ async function descargarPdfVale() {
         <div v-else-if="resumenObras.length" class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <VCard v-for="r in resumenObras" :key="r.obraId ?? r.nombre">
             <p class="truncate text-sm font-semibold text-text">{{ r.nombre }}</p>
-            <p v-if="r.asfaltoTn > 0" class="mt-1 text-lg font-bold text-text">{{ r.asfaltoTn.toFixed(1) }} <span class="text-xs font-normal text-text-soft">tn asfalto</span></p>
-            <p v-if="r.hormigonM3 > 0" class="mt-1 text-lg font-bold text-text">{{ r.hormigonM3.toFixed(1) }} <span class="text-xs font-normal text-text-soft">m³ hormigón</span></p>
+            <template v-for="t in LISTA_TIPOS_PRODUCTO" :key="t.id">
+              <p v-if="r[t.total] > 0" class="mt-1 text-lg font-bold text-text">{{ r[t.total].toFixed(1) }} <span class="text-xs font-normal text-text-soft">{{ t.unidadLabel }} {{ t.nombre.toLowerCase() }}</span></p>
+            </template>
             <p class="mt-1 text-xs text-text-soft">{{ r.cantidadDespachos }} despacho{{ r.cantidadDespachos === 1 ? '' : 's' }}</p>
           </VCard>
         </div>
@@ -401,7 +423,7 @@ async function descargarPdfVale() {
                    el mismo documento. "Remito Manual" (más arriba, sin
                    pedido asociado) es una funcionalidad distinta, no se
                    toca. -->
-              <VButton v-if="row.tipo === 'asfalto'" variant="ghost" size="sm" @click="abrirImpresionVale(row)">
+              <VButton v-if="esCircuitoBascula(row.tipo)" variant="ghost" size="sm" @click="abrirImpresionVale(row)">
                 🖨 Vale
               </VButton>
             </div>
@@ -430,13 +452,13 @@ async function descargarPdfVale() {
         <ul v-if="cargasDetalle.length" class="space-y-1.5">
           <li v-for="(carga, i) in cargasDetalle" :key="carga.id" class="rounded-lg border border-border px-3 py-2 text-sm">
             Carga {{ i + 1 }} — {{ carga.patente || 'sin patente' }} — {{ Number(carga.cantidad).toFixed(2) }} {{ unidadDe(pedidoDetalle.tipo) }}
-            <span class="text-text-soft">— {{ pedidoDetalle.tipo === 'hormigon' ? 'Remito' : 'Vale' }}: {{ carga.numeroRemitoOVale || '—' }}</span>
+            <span class="text-text-soft">— {{ esCircuitoMixer(pedidoDetalle.tipo) ? 'Remito' : 'Vale' }}: {{ carga.numeroRemitoOVale || '—' }}</span>
           </li>
         </ul>
         <p v-else class="text-sm text-text-soft">No hay cargas registradas para este despacho.</p>
         <div v-if="cargasDetalle.length" class="mt-3 rounded-lg bg-success-light px-3 py-2 text-sm font-semibold text-success">
           Total despachado: {{ pedidoDetalle.cantidad_despachada }} {{ unidadDe(pedidoDetalle.tipo) }}
-          <span class="ml-2 font-normal text-text-mid">N° {{ pedidoDetalle.tipo === 'hormigon' ? 'remito' : 'vale' }}: {{ rangoNumerosDetalle }}</span>
+          <span class="ml-2 font-normal text-text-mid">N° {{ esCircuitoMixer(pedidoDetalle.tipo) ? 'remito' : 'vale' }}: {{ rangoNumerosDetalle }}</span>
         </div>
       </div>
       <div class="mt-4 flex justify-end">
@@ -463,7 +485,7 @@ async function descargarPdfVale() {
           N° de remito
           <input v-model="formCorregir.nroRemitoGlobal" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
         </label>
-        <label v-if="pedidoCorregir.tipo === 'asfalto'" class="block text-sm text-text-mid">
+        <label v-if="esCircuitoBascula(pedidoCorregir.tipo)" class="block text-sm text-text-mid">
           N° de vale
           <input v-model="formCorregir.nroValeGlobal" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
         </label>

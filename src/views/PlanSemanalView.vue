@@ -19,6 +19,13 @@ import {
 import { fetchObras } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { hoyISO } from '@/services/fecha'
+import {
+  etiquetasTotales,
+  sumarEnTotal,
+  tiposConTotalVisible,
+  totalesVacios,
+  unidadLabelTipoProducto,
+} from '@/config/tipos-producto'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useAuthStore } from '@/stores/auth.store'
 
@@ -42,7 +49,7 @@ const VARIANTE_ESTADO = {
 
 const fechaRef = ref(new Date())
 const pedidos = ref([])
-const totales = ref({ rango: null, porObra: [], total: { asfaltoTn: 0, hormigonM3: 0 } })
+const totales = ref({ rango: null, porObra: [], total: totalesVacios() })
 const obras = ref([])
 const formulas = ref([])
 const cargando = ref(false)
@@ -98,16 +105,17 @@ const diasSemana = computed(() => {
 
     // Tilde + cantidades cuando el día cerró 100% despachado (2026-09-03,
     // réplica del legado pedida por Federico: "como tiene el sistema
-    // viejo, abajo de la fecha"). asfaltoTn/hormigonM3 usan cantidad_despachada
+    // viejo, abajo de la fecha"). Los totales del día usan cantidad_despachada
     // (cantidadReal) — mismo criterio de "fuente de verdad" que el resto de
     // la app (memory/business-rules.md), no cantidad_solicitada.
     const todosDespachados = pedidosDia.length > 0 && pedidosDia.every((p) => p.estado === 'despachado')
-    const asfaltoTnDia = pedidosDia
-      .filter((p) => p.tipo !== 'hormigon' && p.estado === 'despachado')
-      .reduce((acc, p) => acc + (Number(p.cantidad_despachada) || 0), 0)
-    const hormigonM3Dia = pedidosDia
-      .filter((p) => p.tipo === 'hormigon' && p.estado === 'despachado')
-      .reduce((acc, p) => acc + (Number(p.cantidad_despachada) || 0), 0)
+    // Un total por tipo de producto (config/tipos-producto.js), solo los
+    // que tienen algo.
+    const totalesDia = totalesVacios()
+    for (const p of pedidosDia) {
+      if (p.estado === 'despachado') sumarEnTotal(totalesDia, p.tipo, p.cantidad_despachada)
+    }
+    const totalesDiaLabels = etiquetasTotales(totalesDia, { soloConValor: true })
 
     return {
       etiqueta: NOMBRES_DIA[i],
@@ -119,8 +127,7 @@ const diasSemana = computed(() => {
       esFinDeSemana: i >= 5,
       pedidos: pedidosDia,
       todosDespachados,
-      asfaltoTnDia,
-      hormigonM3Dia,
+      totalesDiaLabels,
     }
   })
 })
@@ -225,9 +232,14 @@ cargarSemana()
       <template v-if="!esMobile">
         <VCard class="mb-4">
           <p class="mb-2 text-sm font-semibold text-text-soft">Total semana — todas las obras</p>
-          <div class="grid grid-cols-2 gap-3">
-            <VKpiCard label="Asfalto" :value="totales.total.asfaltoTn.toFixed(1)" unidad="tn" />
-            <VKpiCard label="Hormigón" :value="totales.total.hormigonM3.toFixed(1)" unidad="m³" />
+          <div class="grid gap-3" :class="tiposConTotalVisible(totales.total).length > 2 ? 'grid-cols-3' : 'grid-cols-2'">
+            <VKpiCard
+              v-for="tipo in tiposConTotalVisible(totales.total)"
+              :key="tipo.id"
+              :label="tipo.nombre"
+              :value="totales.total[tipo.total].toFixed(1)"
+              :unidad="tipo.unidadLabel"
+            />
           </div>
         </VCard>
 
@@ -235,8 +247,13 @@ cargarSemana()
           <VCard v-for="t in totales.porObra" :key="t.obraId ?? t.clienteExterno">
             <p class="mb-2 text-sm font-semibold text-text-soft">{{ nombreDestinoTotal(t) }}</p>
             <div class="grid grid-cols-2 gap-3">
-              <VKpiCard label="Asfalto" :value="t.asfaltoTn.toFixed(1)" unidad="tn" />
-              <VKpiCard label="Hormigón" :value="t.hormigonM3.toFixed(1)" unidad="m³" />
+              <VKpiCard
+                v-for="tipo in tiposConTotalVisible(t)"
+                :key="tipo.id"
+                :label="tipo.nombre"
+                :value="t[tipo.total].toFixed(1)"
+                :unidad="tipo.unidadLabel"
+              />
             </div>
           </VCard>
         </div>
@@ -308,7 +325,7 @@ cargarSemana()
                 <p class="truncate text-sm font-bold text-text">{{ nombreDestinoPedido(p) }}</p>
                 <p class="text-xs text-text-soft">
                   {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
-                  <span class="font-semibold text-vialtec">{{ p.cantidad_solicitada }} {{ p.tipo === 'hormigon' ? 'm³' : 'tn' }}</span>
+                  <span class="font-semibold text-vialtec">{{ p.cantidad_solicitada }} {{ unidadLabelTipoProducto(p.tipo) }}</span>
                 </p>
               </div>
               <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>
@@ -364,9 +381,7 @@ cargarSemana()
               <p class="rounded-full bg-vialtec/10 px-2.5 py-1 text-center text-[11px] font-semibold text-vialtec">
                 {{ dia.pedidos.length }} {{ dia.pedidos.length === 1 ? 'ped.' : 'peds' }}
                 ✓
-                <template v-if="dia.asfaltoTnDia > 0">{{ dia.asfaltoTnDia.toFixed(1) }} tn</template>
-                <template v-if="dia.asfaltoTnDia > 0 && dia.hormigonM3Dia > 0"> · </template>
-                <template v-if="dia.hormigonM3Dia > 0">{{ dia.hormigonM3Dia.toFixed(1) }} m³</template>
+                {{ dia.totalesDiaLabels.join(' · ') }}
               </p>
             </div>
 
@@ -380,7 +395,7 @@ cargarSemana()
                 <p class="truncate font-semibold text-text" :title="nombreDestinoPedido(p)">{{ nombreDestinoPedido(p) }}</p>
                 <p class="truncate text-text-soft">
                   {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
-                  {{ p.cantidad_solicitada }} {{ p.tipo === 'hormigon' ? 'm³' : 'tn' }}
+                  {{ p.cantidad_solicitada }} {{ unidadLabelTipoProducto(p.tipo) }}
                 </p>
                 <div class="mt-1.5 flex items-center justify-between gap-1">
                   <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>

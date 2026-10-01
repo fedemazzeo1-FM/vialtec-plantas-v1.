@@ -33,6 +33,7 @@ import { clientesService } from '@/modules/maestros/services/maestros.service'
 // de asfalto de Despachos tienen que mostrar exactamente lo mismo que las
 // 3 cards de Home (Total año / Ammann 140 / Marini 180), mismo cálculo.
 import { fetchProduccionAnualAsfalto } from '@/modules/dashboard/services/dashboard.service'
+import { nombreTipoProducto, sumarEnTotal, totalesVacios } from '@/config/tipos-producto'
 import { patentesService } from '@/modules/maestros/services/maestros.service'
 // Reuso de Báscula (memory/conventions.md: no duplicar lógica compartida
 // entre módulos) — el acumulado dinámico del día y el formato de N° de vale
@@ -108,8 +109,8 @@ export function useDespachos() {
   // KPIs
   // -------------------------------------------------------------------------
 
-  const kpisMes = ref({ asfaltoTn: 0, hormigonM3: 0 })
-  const kpisHistorico = ref({ asfaltoTn: 0, hormigonM3: 0 })
+  const kpisMes = ref(totalesVacios())
+  const kpisHistorico = ref(totalesVacios())
 
   async function cargarKpis() {
     try {
@@ -188,14 +189,9 @@ export function useDespachos() {
   const todosFiltrados = ref([])
 
   const totalesFiltro = computed(() => {
-    let asfaltoTn = 0
-    let hormigonM3 = 0
-    for (const p of todosFiltrados.value) {
-      const cantidad = Number(p.cantidad_despachada) || 0
-      if (p.tipo === 'hormigon') hormigonM3 += cantidad
-      else asfaltoTn += cantidad
-    }
-    return { asfaltoTn, hormigonM3, cantidadDespachos: todosFiltrados.value.length }
+    const totales = totalesVacios()
+    for (const p of todosFiltrados.value) sumarEnTotal(totales, p.tipo, p.cantidad_despachada)
+    return { ...totales, cantidadDespachos: todosFiltrados.value.length }
   })
 
   async function cargarTotalesFiltro() {
@@ -216,7 +212,7 @@ export function useDespachos() {
    * (excel-despachos-filtro.js) para que el archivo se explique solo. */
   const resumenFiltrosLabel = computed(() => {
     const partes = []
-    if (filtros.tipo) partes.push(`Tipo: ${filtros.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto'}`)
+    if (filtros.tipo) partes.push(`Tipo: ${nombreTipoProducto(filtros.tipo)}`)
     if (filtros.obraId) partes.push(`Obra: ${obrasPorId.value[filtros.obraId]?.nombre ?? filtros.obraId}`)
     if (filtros.formulaId) partes.push(`Mezcla: ${formulasPorId.value[filtros.formulaId]?.nombre ?? filtros.formulaId}`)
     if (filtros.clienteExterno) partes.push(`Cliente: ${filtros.clienteExterno}`)

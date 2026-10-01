@@ -17,6 +17,7 @@ import VSemaforo from '@/components/shared/VSemaforo.vue'
 import VBarraMensual from '@/components/shared/VBarraMensual.vue'
 import { useAlertaStockSemana } from '@/modules/dashboard/composables/useAlertaStockSemana'
 import { useDashboardHome } from '@/modules/dashboard/composables/useDashboardHome'
+import { etiquetasTotales } from '@/config/tipos-producto'
 
 const error = ref(null)
 
@@ -41,6 +42,8 @@ const {
   cargandoProduccionMensual,
   produccionMensualAsfalto,
   produccionMensualHormigon,
+  produccionOtrosTipos,
+  ganttTiposLeyenda,
   cargandoGantt,
   ganttSemanas,
   ganttFilas,
@@ -117,7 +120,7 @@ iniciarPanelControl()
           <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Despachos esta semana</p>
           <p class="mt-2 text-2xl font-extrabold text-success">{{ resumenSemana.despachos.cantidad }}</p>
           <p class="text-xs text-text-soft">
-            {{ resumenSemana.despachos.asfaltoTn.toFixed(1) }} tn · {{ resumenSemana.despachos.hormigonM3.toFixed(1) }} m³
+            {{ etiquetasTotales(resumenSemana.despachos).join(' · ') }}
           </p>
         </div>
         <div class="rounded-xl border-t-4 border-t-warning bg-white p-4 shadow-sm">
@@ -184,6 +187,23 @@ iniciarPanelControl()
         </VCard>
       </div>
 
+      <!-- Otros tipos de producto con producción en el año (mezcla cemento):
+           siempre aparte, nunca sumados a asfalto ni a hormigón. Solo se
+           muestra cuando hay algo despachado. -->
+      <div v-for="p in produccionOtrosTipos" :key="p.tipo.id" class="mb-6">
+        <h3 class="mb-2 text-sm font-bold text-text">Producción de {{ p.tipo.nombre.toLowerCase() }} — año 2026</h3>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <VCard>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Total acumulado en el año</p>
+            <p class="mt-2 text-2xl font-extrabold text-text">{{ formatearTn(p.total) }} <span class="text-base font-semibold text-text-soft">{{ p.tipo.unidadLabel }}</span></p>
+            <p class="text-xs text-text-soft">Despachos cargados en este sistema</p>
+          </VCard>
+        </div>
+        <VCard class="mt-3">
+          <VBarraMensual :titulo="`${p.tipo.nombre} por mes`" :filas="p.filas" :color="p.tipo.color" :unidad="p.tipo.unidadLabel" />
+        </VCard>
+      </div>
+
       <!-- Gantt de despachos por fórmula (8 semanas) + Próximos despachos.
            Reemplaza la vieja card "Consumo de material" (2026-09-06, pedido
            de Federico: "qué fórmula sale más, cantidades, algo copado").
@@ -196,8 +216,9 @@ iniciarPanelControl()
           <div class="mb-3 flex items-center justify-between">
             <h3 class="text-sm font-bold text-text">Producción por fórmula — últimas 8 semanas</h3>
             <div class="flex items-center gap-3 text-xs text-text-soft">
-              <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-[#2a78d6]"></span>Asfalto</span>
-              <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-[#eb6834]"></span>Hormigón</span>
+              <span v-for="t in ganttTiposLeyenda" :key="t.id" class="flex items-center gap-1">
+                <span class="h-2 w-2 rounded-full" :class="t.clases.punto"></span>{{ t.nombre }}
+              </span>
             </div>
           </div>
           <p v-if="cargandoGantt" class="text-sm text-text-soft">Cargando…</p>
