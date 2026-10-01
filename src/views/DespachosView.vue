@@ -18,6 +18,8 @@ import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 import { formatearNumeroRemito } from '@/services/formato-numeros'
 import { ref } from 'vue'
+import ReporteEjecutivoMensual from '@/modules/despachos/components/ReporteEjecutivoMensual.vue'
+import { useReporteEjecutivo } from '@/modules/despachos/composables/useReporteEjecutivo'
 import {
   LISTA_TIPOS_PRODUCTO,
   esCircuitoBascula,
@@ -114,6 +116,8 @@ const {
 } = useDespachos()
 
 iniciar()
+
+const reporte = useReporteEjecutivo()
 
 const unidadDe = unidadLabelTipoProducto
 
@@ -318,8 +322,20 @@ async function descargarPdfVale() {
             <VButton size="sm" :disabled="exportandoInforme" @click="exportarInformeMensual">
               {{ exportandoInforme ? 'Generando…' : '📧 Exportar informe mensual' }}
             </VButton>
+            <!-- Reporte ejecutivo para el cuerpo del mail (2026-10-01, pedido
+                 de Federico): las 3 imágenes que antes se pegaban como
+                 capturas de pantalla, del mismo mes elegido arriba. -->
+            <VButton
+              size="sm"
+              variant="secondary"
+              :disabled="reporte.generando || cargandoResumen"
+              @click="reporte.generar(mesResumen, resumenObras)"
+            >
+              {{ reporte.generando ? 'Generando…' : '🖼 Imágenes para email' }}
+            </VButton>
           </div>
         </div>
+        <p v-if="reporte.error && !reporte.abierto" class="mb-2 text-sm text-danger">{{ reporte.error }}</p>
         <p v-if="cargandoResumen" class="text-sm text-text-soft">Cargando…</p>
         <div v-else-if="resumenObras.length" class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <VCard v-for="r in resumenObras" :key="r.obraId ?? r.nombre">
@@ -686,5 +702,53 @@ async function descargarPdfVale() {
         </div>
       </VModal>
     </Teleport>
+      <!-- Reporte ejecutivo: se monta fuera de pantalla solo mientras se
+         rasteriza (useReporteEjecutivo.js). `fixed` + left negativo y no
+         `display: none`: html2canvas necesita que esté renderizado. -->
+    <div
+      v-if="reporte.datos"
+      :ref="reporte.registrarContenedor"
+      class="pointer-events-none fixed top-0"
+      style="left: -99999px"
+      aria-hidden="true"
+    >
+      <ReporteEjecutivoMensual v-bind="reporte.datos" />
+    </div>
+
+    <VModal
+      :open="reporte.abierto"
+      :title="`Imágenes para email — ${reporte.mesLabel}`"
+      size="xl"
+      @update:open="reporte.abierto = $event"
+    >
+      <div class="space-y-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm text-text-mid">
+            {{ reporte.puedeCopiar ? 'Copiá cada imagen y pegala directo en el cuerpo del mail.' : 'Descargá las imágenes y adjuntalas o insertalas en el mail.' }}
+          </p>
+          <div class="flex gap-2">
+            <VButton size="sm" variant="secondary" @click="reporte.descargarTodas()">⬇ Descargar las 3 (PNG)</VButton>
+            <VButton size="sm" variant="secondary" :disabled="reporte.generandoPdf" @click="reporte.descargarPdf()">
+              {{ reporte.generandoPdf ? 'Generando…' : '⬇ Descargar PDF' }}
+            </VButton>
+          </div>
+        </div>
+        <div v-if="reporte.error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
+          {{ reporte.error }}
+        </div>
+        <div v-for="pieza in reporte.piezas" :key="pieza.id">
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p class="text-sm font-bold text-text">{{ pieza.titulo }}</p>
+            <div class="flex gap-2">
+              <VButton v-if="reporte.puedeCopiar" size="sm" @click="reporte.copiar(pieza)">
+                {{ pieza.copiada ? '✓ Copiada' : 'Copiar imagen' }}
+              </VButton>
+              <VButton size="sm" variant="secondary" @click="reporte.descargar(pieza)">Descargar PNG</VButton>
+            </div>
+          </div>
+          <img :src="pieza.url" :alt="pieza.titulo" class="w-full rounded-lg border border-border" />
+        </div>
+      </div>
+    </VModal>
   </div>
 </template>
