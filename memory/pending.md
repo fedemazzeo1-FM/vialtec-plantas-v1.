@@ -6,7 +6,13 @@
 medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
 deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
 
-**2026-10-01: informe mensual — COMMITEADO, SIN DEPLOY (falta OK de Federico)**
+**2026-10-01: informe mensual — EN PRODUCCIÓN** (deploy
+`dpl_7faWdK4My1udebzp6zmWHVn1bs4V`). Verificado en vivo: el Excel de
+septiembre da Arena 0/6 2.766,58 / Piedra 6/20 2.590,65 / total 5.729,68 tn
+(igual al cálculo contra la base) y el resto del archivo no cambió; el modal
+"Imágenes para email" genera las 3 piezas (2700 px). Sin probar: copiar al
+portapapeles y Descargar PDF. Push a GitHub pendiente (lo corre Federico).
+Detalle de los dos cambios:
 - `4837c83` Consumo de insumos = fórmula × cantidad despachada de los pedidos
   del mes (`fetchConsumoInsumosDelMes`, usa la fórmula vigente al exportar).
   Antes sumaba movimientos `egreso_despacho` por fecha del movimiento: los
