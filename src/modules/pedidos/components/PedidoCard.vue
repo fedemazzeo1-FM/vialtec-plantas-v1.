@@ -21,6 +21,7 @@ import VBadge from '@/components/shared/VBadge.vue'
 import VButton from '@/components/shared/VButton.vue'
 import { computed, ref } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { esCircuitoBascula, esCircuitoMixer, unidadLabelTipoProducto } from '@/config/tipos-producto'
 import {
   VARIANTE_ESTADO,
   COLOR_BORDE_ESTADO,
@@ -88,7 +89,7 @@ const itemsMenu = computed(() =>
   ].filter(Boolean)
 )
 
-const unidad = props.pedido.tipo === 'hormigon' ? 'm³' : 'tn'
+const unidad = unidadLabelTipoProducto(props.pedido.tipo)
 
 /** 'Mar 1 de septiembre' — mismo formato que el legado. `fecha` es 'YYYY-MM-DD'
  * (columna date): se parsea por componentes, no con `new Date(string)` a
@@ -134,7 +135,7 @@ function formatearFechaHoraCreacion(iso) {
         Confirmar
       </VButton>
       <VButton
-        v-else-if="pedido.estado === 'confirmado' && pedido.tipo === 'asfalto' && puedeDespacharAsfalto"
+        v-else-if="pedido.estado === 'confirmado' && esCircuitoBascula(pedido.tipo) && puedeDespacharAsfalto"
         variant="success"
         size="sm"
         @click="$emit('despachar', pedido)"
@@ -142,7 +143,7 @@ function formatearFechaHoraCreacion(iso) {
         ↑ Despachar
       </VButton>
       <VButton
-        v-else-if="pedido.estado === 'confirmado' && pedido.tipo === 'hormigon' && puedeDespacharHormigon"
+        v-else-if="pedido.estado === 'confirmado' && esCircuitoMixer(pedido.tipo) && puedeDespacharHormigon"
         variant="success"
         size="sm"
         @click="$emit('registrar-carga', pedido)"

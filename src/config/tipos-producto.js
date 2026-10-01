@@ -18,8 +18,12 @@ export const CIRCUITO = {
 // `total` es la clave bajo la que se acumula en los totales. Dos tipos con la
 // misma unidad NO comparten total (asfalto y mezcla cemento van los dos en tn
 // y nunca se suman entre sí).
-// `siempreVisible`: su total se muestra aunque esté en 0. Los que no, solo
-// aparecen cuando hay algo que mostrar.
+// `siempreVisible`: su total (o su sección en Pedidos) se muestra aunque esté
+// en 0. Los que no, solo aparecen cuando hay algo que mostrar.
+// `ordenListado`: orden de las secciones de Pedidos (el legado muestra
+// Hormigón primero y Asfalto después).
+// `avisoProduccion`: título del WhatsApp al operador cuando se confirma un
+// pedido que se produce en el circuito de mixer.
 export const TIPOS_PRODUCTO = {
   asfalto: {
     id: 'asfalto',
@@ -29,6 +33,7 @@ export const TIPOS_PRODUCTO = {
     unidadLabel: 'tn',
     total: 'asfaltoTn',
     siempreVisible: true,
+    ordenListado: 2,
   },
   hormigon: {
     id: 'hormigon',
@@ -38,6 +43,8 @@ export const TIPOS_PRODUCTO = {
     unidadLabel: 'm³',
     total: 'hormigonM3',
     siempreVisible: true,
+    ordenListado: 1,
+    avisoProduccion: 'Hormigón confirmado para producción',
   },
   mezcla_cemento: {
     id: 'mezcla_cemento',
@@ -47,11 +54,16 @@ export const TIPOS_PRODUCTO = {
     unidadLabel: 'tn',
     total: 'mezclaCementoTn',
     siempreVisible: false,
+    ordenListado: 3,
+    avisoProduccion: 'Mezcla cemento confirmada para producción',
   },
 }
 
 /** Todos los tipos, en el orden en que se cargan (selects de alta). */
 export const LISTA_TIPOS_PRODUCTO = Object.values(TIPOS_PRODUCTO)
+
+/** Todos los tipos, en el orden de las secciones de Pedidos. */
+export const TIPOS_PRODUCTO_EN_ORDEN_DE_LISTADO = [...LISTA_TIPOS_PRODUCTO].sort((a, b) => a.ordenListado - b.ordenListado)
 
 /** Tipo con el que arranca un formulario nuevo. */
 export const TIPO_PRODUCTO_INICIAL = LISTA_TIPOS_PRODUCTO[0].id

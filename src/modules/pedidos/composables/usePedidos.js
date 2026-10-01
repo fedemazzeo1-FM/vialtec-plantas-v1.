@@ -24,6 +24,12 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { patentesService, choferesService, clientesService } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { toastCrearPedido, toastConfirmarPedido, toastConfirmarHormigonOperador } from '@/modules/pedidos/whatsapp'
+import {
+  TIPOS_PRODUCTO_EN_ORDEN_DE_LISTADO,
+  esCircuitoMixer,
+  tipoProducto,
+  totalesVacios,
+} from '@/config/tipos-producto'
 
 // Destinatario fijo del aviso de "pedido nuevo" (2026-09-08, pedido
 // explícito de Federico — no un dato que el sistema deba adivinar). A
@@ -197,7 +203,7 @@ export function usePedidos() {
   // completo de ambos materiales siempre, el tab solo cambia qué lista se
   // ve debajo. Se refresca en cada cargarPedidos() (no bloqueante).
   const conteoEstados = ref({ solicitado: 0, confirmado: 0, despachado: 0, postergado: 0, cancelado: 0 })
-  const totalesPeriodo = ref({ asfaltoTn: 0, hormigonM3: 0 })
+  const totalesPeriodo = ref(totalesVacios())
 
   async function cargarResumenPeriodo() {
     try {
@@ -208,7 +214,7 @@ export function usePedidos() {
         incluirArchivados: filtros.incluirArchivados,
       })
       conteoEstados.value = resumen.conteoEstados
-      totalesPeriodo.value = { asfaltoTn: resumen.asfaltoTn, hormigonM3: resumen.hormigonM3 }
+      totalesPeriodo.value = resumen.totales
     } catch (e) {
       error.value = e.message
     }
@@ -229,10 +235,16 @@ export function usePedidos() {
   // Asfalto después — mismo orden confirmado en vivo contra produccion.vialtec.app.
   // Ya no hay tab que filtre a un solo tipo: las dos secciones conviven
   // siempre, mismos `filtros`/`vistaSemana` de arriba para las dos.
-  const pedidosPorTipo = computed(() => [
-    { tipo: 'hormigon', label: 'Hormigón', filas: filas.value.filter((p) => p.tipo === 'hormigon') },
-    { tipo: 'asfalto', label: 'Asfalto', filas: filas.value.filter((p) => p.tipo === 'asfalto') },
-  ])
+  // Los tipos que no son `siempreVisible` (mezcla cemento) solo tienen
+  // sección cuando hay pedidos de ese tipo (config/tipos-producto.js).
+  const pedidosPorTipo = computed(() =>
+    TIPOS_PRODUCTO_EN_ORDEN_DE_LISTADO.map((t) => ({
+      tipo: t.id,
+      label: t.nombre,
+      filas: filas.value.filter((p) => tipoProducto(p.tipo).id === t.id),
+      siempreVisible: t.siempreVisible,
+    })).filter((grupo) => grupo.siempreVisible || grupo.filas.length > 0)
+  )
 
   async function cargarPedidos() {
     cargando.value = true
@@ -462,7 +474,7 @@ export function usePedidos() {
       const formulaNombre = formulasPorId.value[pedido.formula_id]?.nombre
       const obraNombre = obraNombreDe(pedido)
       mostrarToastWhatsapp(toastConfirmarPedido(pedido, { obraNombre, formulaNombre, telefono: telefonoEncargado }))
-      if (pedido.tipo === 'hormigon') {
+      if (esCircuitoMixer(pedido.tipo)) {
         mostrarToastWhatsapp(toastConfirmarHormigonOperador(pedido, { obraNombre, formulaNombre }))
       }
       await cargarPedidos()

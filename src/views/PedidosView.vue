@@ -25,6 +25,7 @@ import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useAuthStore } from '@/stores/auth.store'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { tiposConTotalVisible, unidadLabelTipoProducto } from '@/config/tipos-producto'
 
 const { esMobile } = useBreakpoint()
 const auth = useAuthStore()
@@ -120,6 +121,9 @@ const {
 
 const despacho = useDespachoAsfalto(cargarPedidos)
 const cargaHormigon = useCargaHormigon(cargarPedidos)
+// El modal de cargas sirve a todo el circuito de mixer (hormigón en m³,
+// mezcla cemento en tn): la unidad sale del pedido que se está despachando.
+const unidadCargaMixer = computed(() => unidadLabelTipoProducto(cargaHormigon.pedido?.tipo))
 
 /**
  * KPI de estado como filtro rápido (2026-09-02, roadmap Mobile/UX): click
@@ -137,6 +141,12 @@ function filtrarPorEstado(estado) {
 // cargarPedidos() de nuevo) — en Desktop no hay UI para cambiarlo, así que
 // queda siempre en 'todos' y pedidosPorTipoFiltrado === pedidosPorTipo.
 const filtroTipoMobile = ref('todos')
+const opcionesFiltroTipoMobile = computed(() => [
+  { valor: 'todos', label: 'Todos' },
+  ...pedidosPorTipo.value.map((g) => ({ valor: g.tipo, label: g.label })),
+])
+// Totales del período: un KPI por tipo de producto (config/tipos-producto.js).
+const tiposConTotalPeriodo = computed(() => tiposConTotalVisible(totalesPeriodo.value))
 const pedidosPorTipoFiltrado = computed(() =>
   filtroTipoMobile.value === 'todos'
     ? pedidosPorTipo.value
@@ -205,9 +215,14 @@ iniciar()
            Ocultos en mobile (2026-09-07, pedido de Federico: "simplificar
            el uso en campo" — el foco pasa a ser crear/confirmar/despachar
            rápido, no mirar totales/conteos). Siguen en Desktop sin cambios. -->
-      <div v-if="!esMobile" class="mb-3 grid grid-cols-2 gap-3">
-        <VKpiCard label="Asfalto (período)" :value="totalesPeriodo.asfaltoTn.toFixed(1)" unidad="tn" />
-        <VKpiCard label="Hormigón (período)" :value="totalesPeriodo.hormigonM3.toFixed(1)" unidad="m³" />
+      <div v-if="!esMobile" class="mb-3 grid gap-3" :class="tiposConTotalPeriodo.length > 2 ? 'grid-cols-3' : 'grid-cols-2'">
+        <VKpiCard
+          v-for="t in tiposConTotalPeriodo"
+          :key="t.id"
+          :label="`${t.nombre} (período)`"
+          :value="totalesPeriodo[t.total].toFixed(1)"
+          :unidad="t.unidadLabel"
+        />
       </div>
 
       <!-- KPIs por estado (memory/relevamiento-sistema-viejo.md §1) — acotados
@@ -281,11 +296,7 @@ iniciar()
            interesa un material (rediseño Mobile-First 2026-09-22). -->
       <div v-if="esMobile" class="mb-3 flex gap-1.5">
         <button
-          v-for="opcion in [
-            { valor: 'todos', label: 'Todos' },
-            { valor: 'hormigon', label: 'Hormigón' },
-            { valor: 'asfalto', label: 'Asfalto' },
-          ]"
+          v-for="opcion in opcionesFiltroTipoMobile"
           :key="opcion.valor"
           type="button"
           class="flex-1 rounded-full border px-3 py-2 text-xs font-semibold"
@@ -486,7 +497,7 @@ iniciar()
             </select>
           </label>
           <label class="block text-sm text-text-mid">
-            Cantidad ({{ formNuevo.tipo === 'hormigon' ? 'm³' : 'tn' }})
+            Cantidad ({{ unidadLabelTipoProducto(formNuevo.tipo) }})
             <input
               v-model.number="formNuevo.cantidad_solicitada"
               type="number"
@@ -614,7 +625,7 @@ iniciar()
           </select>
         </label>
         <label class="block text-sm text-text-mid">
-          Cantidad ({{ formEditar.tipo === 'hormigon' ? 'm³' : 'tn' }})
+          Cantidad ({{ unidadLabelTipoProducto(formEditar.tipo) }})
           <input
             v-model.number="formEditar.cantidad_solicitada"
             type="number"
@@ -766,7 +777,7 @@ iniciar()
         </div>
         <p class="text-sm text-text-mid">
           {{ cargaHormigon.pedido?.tipo_pedido === 'venta' ? cargaHormigon.pedido?.cliente_externo : obras.find((o) => o.id === cargaHormigon.pedido?.obra_id)?.nombre }}
-          — Solicitado: {{ cargaHormigon.pedido?.cantidad_solicitada }} m³ · Saldo antes de este despacho: {{ cargaHormigon.saldoPendiente.toFixed(1) }} m³
+          — Solicitado: {{ cargaHormigon.pedido?.cantidad_solicitada }} {{ unidadCargaMixer }} · Saldo antes de este despacho: {{ cargaHormigon.saldoPendiente.toFixed(1) }} {{ unidadCargaMixer }}
         </p>
 
         <div class="space-y-2">
@@ -777,7 +788,7 @@ iniciar()
             class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_1fr_1fr_auto]"
           >
             <label class="text-xs text-text-mid">
-              Cantidad (m³) *
+              Cantidad ({{ unidadCargaMixer }}) *
               <input
                 v-model.number="carga.volumen_m3"
                 type="number"
@@ -814,11 +825,11 @@ iniciar()
           <VButton type="button" variant="secondary" size="sm" @click="cargaHormigon.agregarCarga">+ Agregar carga</VButton>
         </div>
 
-        <p class="text-sm font-semibold text-text">Total: {{ cargaHormigon.totalCargas.toFixed(2) }} m³</p>
+        <p class="text-sm font-semibold text-text">Total: {{ cargaHormigon.totalCargas.toFixed(2) }} {{ unidadCargaMixer }}</p>
 
         <div v-if="cargaHormigon.residualEstimado > 0" class="rounded-lg border border-warning/30 bg-warning-light/40 p-3">
           <p class="text-sm text-text-mid">
-            Con estas cargas queda un saldo de <strong>{{ cargaHormigon.residualEstimado.toFixed(2) }} m³</strong> sin despachar.
+            Con estas cargas queda un saldo de <strong>{{ cargaHormigon.residualEstimado.toFixed(2) }} {{ unidadCargaMixer }}</strong> sin despachar.
             El pedido se va a cerrar como <strong>despachado</strong> igual, con lo cargado.
           </p>
           <label class="mt-2 flex items-center gap-2 text-sm text-text-mid">

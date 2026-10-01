@@ -19,16 +19,18 @@
 // es lógica específica de sus 2 disparadores (crear/confirmar), no
 // compartida con otro módulo.
 
+import { nombreTipoProducto, tipoProducto, unidadLabelTipoProducto } from '@/config/tipos-producto'
+
 function destinoLabel(pedido, obraNombre) {
   return pedido.tipo_pedido === 'venta' ? pedido.cliente_externo || 'cliente externo' : obraNombre || 'obra'
 }
 
 function unidad(pedido) {
-  return pedido.tipo === 'hormigon' ? 'm³' : 'tn'
+  return unidadLabelTipoProducto(pedido.tipo)
 }
 
 function materialLabel(pedido) {
-  return pedido.tipo === 'hormigon' ? 'hormigón' : 'asfalto'
+  return nombreTipoProducto(pedido.tipo).toLowerCase()
 }
 
 const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
@@ -93,7 +95,8 @@ export function toastConfirmarPedido(pedido, { obraNombre, formulaNombre, telefo
 }
 
 /**
- * Al confirmar un pedido de HORMIGÓN — mensaje adicional para el operador de
+ * Al confirmar un pedido del circuito de mixer (hormigón, mezcla cemento —
+ * config/tipos-producto.js) — mensaje adicional para el operador de
  * hormigón (en el legado va a un usuario hardcodeado "angel"/u12 — acá no
  * hardcodeamos ningún contacto puntual, el balancero/plantista elige el
  * destinatario real en WhatsApp). Incluye la mezcla (ej. "H-8") y quién lo
@@ -101,7 +104,7 @@ export function toastConfirmarPedido(pedido, { obraNombre, formulaNombre, telefo
  */
 export function toastConfirmarHormigonOperador(pedido, { obraNombre, formulaNombre } = {}) {
   const mensaje = [
-    '🧱 Hormigón confirmado para producción',
+    `🧱 ${tipoProducto(pedido.tipo).avisoProduccion}`,
     ...lineasDetalle(pedido, { obraNombre, formulaNombre, conEncargado: true }),
   ].join('\n')
   return { titulo: 'Avisar al operador de hormigón', mensaje, url: urlWhatsapp(mensaje) }

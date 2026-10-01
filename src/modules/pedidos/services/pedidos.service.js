@@ -30,6 +30,7 @@
 
 import { supabase } from '@/config/supabase'
 import { fetchPagina, fetchPaginado } from '@/services/fetch-paginado'
+import { sumarEnTotal, totalesVacios } from '@/config/tipos-producto'
 
 const TABLA = 'plantas_pedidos'
 const TABLA_HISTORIAL = 'plantas_pedidos_historial'
@@ -129,7 +130,8 @@ export async function fetchConteoEstados() {
  * con el rango.
  *
  * @param {{ desde?: string, hasta?: string, obraId?: number, incluirArchivados?: boolean }} filtros
- * @returns {Promise<{ conteoEstados: Record<string, number>, asfaltoTn: number, hormigonM3: number }>}
+ * @returns {Promise<{ conteoEstados: Record<string, number>, totales: Record<string, number> }>}
+ *   `totales`: un acumulado por tipo de producto (config/tipos-producto.js).
  */
 export async function fetchResumenPeriodo(filtros = {}) {
   const conteo = Object.fromEntries(ESTADOS_CONTEO.map((e) => [e, 0]))
@@ -143,19 +145,17 @@ export async function fetchResumenPeriodo(filtros = {}) {
     return query
   })
 
-  let asfaltoTn = 0
-  let hormigonM3 = 0
+  const totales = totalesVacios()
   for (const p of filas) {
     if (Object.prototype.hasOwnProperty.call(conteo, p.estado)) conteo[p.estado] += 1
     // Mismo criterio que fetchTotalesSemana(): despachado usa cantidad_despachada
     // (cantidadReal), el resto usa cantidad_solicitada — un pedido todavía no
     // despachado no tiene "real" que sumar.
     const cantidad = Number(p.estado === 'despachado' ? p.cantidad_despachada ?? p.cantidad_solicitada : p.cantidad_solicitada) || 0
-    if (p.tipo === 'hormigon') hormigonM3 += cantidad
-    else asfaltoTn += cantidad
+    sumarEnTotal(totales, p.tipo, cantidad)
   }
 
-  return { conteoEstados: conteo, asfaltoTn, hormigonM3 }
+  return { conteoEstados: conteo, totales }
 }
 
 export async function getPedido(id) {
@@ -210,8 +210,8 @@ export async function fetchPedidosSemana(fechaReferencia = new Date()) {
 }
 
 /**
- * Totales acumulados de la semana, agrupados por obra, en dos métricas
- * paralelas (asfalto en tn, hormigón en m³). Solo cuenta `confirmado` y
+ * Totales acumulados de la semana, agrupados por obra, en un acumulado por
+ * tipo de producto, cada uno en su unidad (config/tipos-producto.js). Solo cuenta `confirmado` y
  * `despachado` — un pedido `solicitado` todavía no está comprometido (misma
  * regla que las alertas de stock del dashboard, ver memory/business-rules.md).
  * Para un pedido despachado usa cantidad_despachada; si no está informada
@@ -239,7 +239,7 @@ export async function fetchTotalesSemana(fechaReferencia = new Date()) {
   if (error) throw error
 
   const porObra = new Map()
-  const total = { asfaltoTn: 0, hormigonM3: 0 }
+  const total = totalesVacios()
 
   for (const pedido of data) {
     const cantidad = Number(
@@ -258,19 +258,13 @@ export async function fetchTotalesSemana(fechaReferencia = new Date()) {
       porObra.set(clave, {
         obraId: pedido.obra_id,
         clienteExterno: esVenta ? pedido.cliente_externo || 'Venta externa' : null,
-        asfaltoTn: 0,
-        hormigonM3: 0,
+        ...totalesVacios(),
       })
     }
     const acumObra = porObra.get(clave)
 
-    if (pedido.tipo === 'hormigon') {
-      acumObra.hormigonM3 += cantidad
-      total.hormigonM3 += cantidad
-    } else {
-      acumObra.asfaltoTn += cantidad
-      total.asfaltoTn += cantidad
-    }
+    sumarEnTotal(acumObra, pedido.tipo, cantidad)
+    sumarEnTotal(total, pedido.tipo, cantidad)
   }
 
   return {
