@@ -31,7 +31,7 @@ import {
   obtenerProximoNumeroVale,
   obtenerProximoNumeroValeArido,
   calcularDiferencia,
-  formatearNumeroVale,
+  leyendaValesRemito,
   formatearNumeroDeVale,
 } from '@/modules/bascula/services/bascula.service'
 import { fetchObras, fetchNombresPorEmail } from '@/services/flota.service'
@@ -803,7 +803,7 @@ export function useBascula() {
   // ver ValeImprimible.vue): pedido completo (nro_remito_global, ubicacion,
   // cliente_externo) + rango de vales correlativos del acumulado del día.
   const pedidoParaImprimir = ref(null)
-  const rangoValesParaImprimir = ref({ valeDesde: null, valeHasta: null, cantidadVales: 0 })
+  const rangoValesParaImprimir = ref({ valeDesde: null, valeHasta: null, cantidadVales: 0, numerosVale: [] })
 
   // Props genéricos para el remito ÚNICO y compartido con Despachos
   // (src/components/shared/RemitoImprimible.vue, 2026-09-09 — antes el modo
@@ -813,7 +813,7 @@ export function useBascula() {
   const remitoParaImprimir = computed(() => {
     const patenteCatalogo = patentes.value.find((p) => p.patente === valeParaImprimir.value?.patente)
     const esTransportePropio = patenteCatalogo ? !patenteCatalogo.es_externa : null
-    const { valeDesde, valeHasta, cantidadVales } = rangoValesParaImprimir.value
+    const { numerosVale } = rangoValesParaImprimir.value
     return {
       numeroRemito: pedidoParaImprimir.value?.nro_remito_global || null,
       fecha: valeParaImprimir.value?.fecha_pesada || null,
@@ -829,10 +829,7 @@ export function useBascula() {
           // vale de pesaje interno, ValeImprimible.vue, sigue mostrando la
           // mezcla real sin cambios, esto es solo del documento remito).
           detalle: 'MEZCLA ASFÁLTICA',
-          subtexto:
-            valeDesde != null
-              ? `S/Vale de báscula N° ${formatearNumeroVale(valeDesde)}${valeHasta !== valeDesde ? ` al ${formatearNumeroVale(valeHasta)}` : ''} (correlativos${cantidadVales ? ` — ${cantidadVales} pesada${cantidadVales === 1 ? '' : 's'}` : ''})`
-              : null,
+          subtexto: leyendaValesRemito(numerosVale),
         },
       ],
       transporte: esTransportePropio == null ? null : esTransportePropio ? 'Propio' : 'Tercero',
@@ -888,19 +885,19 @@ export function useBascula() {
     // devolvería 0/vacío igual, por el filtro fijo que tiene esa query).
     if (vale.tipo_vale === 'asfalto') {
       try {
-        const { acumuladoTn, valeDesde, valeHasta, cantidadVales } = await obtenerAcumuladoHastaFecha({
+        const { acumuladoTn, valeDesde, valeHasta, cantidadVales, numerosVale } = await obtenerAcumuladoHastaFecha({
           pedidoId: vale.pedido_id,
           obraId: vale.obra_id,
           fechaCorte: vale.fecha_pesada,
         })
         acumuladoParaImprimir.value = acumuladoTn
-        rangoValesParaImprimir.value = { valeDesde, valeHasta, cantidadVales }
+        rangoValesParaImprimir.value = { valeDesde, valeHasta, cantidadVales, numerosVale }
       } catch (e) {
         error.value = e.message
       }
     } else {
       acumuladoParaImprimir.value = null
-      rangoValesParaImprimir.value = { valeDesde: null, valeHasta: null, cantidadVales: 0 }
+      rangoValesParaImprimir.value = { valeDesde: null, valeHasta: null, cantidadVales: 0, numerosVale: [] }
     }
   }
 

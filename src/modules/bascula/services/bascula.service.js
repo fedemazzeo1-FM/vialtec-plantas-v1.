@@ -49,6 +49,39 @@ export function formatearNumeroVale(numero) {
   return String(numero).padStart(8, '0')
 }
 
+// Máximo de vales que el remito lista uno por uno cuando no son correlativos.
+const MAX_VALES_LISTADOS_EN_REMITO = 5
+
+/**
+ * Leyenda "S/Vale de báscula…" del remito, a partir de los N° de vale que
+ * respalda (2026-10-01, pedido de Federico). Cuando en el día se alternan
+ * pedidos, los vales de UN pedido no son consecutivos (quedan intercalados
+ * con los de otra obra), así que "N° X al Y (correlativos)" solo es cierto si
+ * de verdad no hay saltos:
+ *   - correlativos:        "S/Vale de báscula N° X al Y (correlativos — N pesadas)"
+ *   - con saltos, hasta 5: "S/Vales de báscula N° A, B, C (3 pesadas)"
+ *   - con saltos, más de 5: "S/Vales de báscula entre N° X y N° Y (N pesadas no correlativas)"
+ * @param {Array<number|null>} numeros N° de vale, en cualquier orden.
+ * @returns {string|null} null si no hay ningún vale.
+ */
+export function leyendaValesRemito(numeros) {
+  const vales = [...new Set((numeros ?? []).filter((n) => n != null).map(Number))].sort((a, b) => a - b)
+  if (!vales.length) return null
+
+  const primero = formatearNumeroVale(vales[0])
+  const ultimo = formatearNumeroVale(vales[vales.length - 1])
+  const pesadas = `${vales.length} pesada${vales.length === 1 ? '' : 's'}`
+  const sonCorrelativos = vales.every((n, i) => i === 0 || n === vales[i - 1] + 1)
+
+  if (sonCorrelativos) {
+    return `S/Vale de báscula N° ${primero}${vales.length > 1 ? ` al ${ultimo}` : ''} (correlativos — ${pesadas})`
+  }
+  if (vales.length <= MAX_VALES_LISTADOS_EN_REMITO) {
+    return `S/Vales de báscula N° ${vales.map(formatearNumeroVale).join(', ')} (${pesadas})`
+  }
+  return `S/Vales de báscula entre N° ${primero} y N° ${ultimo} (${pesadas} no correlativas)`
+}
+
 // Ingreso y egreso de áridos comparten una numeración propia, separada de la
 // de asfalto (migración 42, pedido de Federico 2026-09-19): "I-00001". Nunca
 // se mezcla con el N° de vale de asfalto.
@@ -158,14 +191,16 @@ export async function obtenerProximoNumeroValeArido() {
  * nunca se lee de `plantas_vales.acumulado_obra_tn` como fuente de verdad —
  * esa columna es solo una foto informativa al momento de pesar.
  *
- * Devuelve también el rango de `numero_vale` correlativos del día (2026-09-01,
+ * Devuelve también los `numero_vale` del día (el rango y, desde 2026-10-01,
+ * la lista completa — ver leyendaValesRemito(): no siempre son correlativos)
+ * (2026-09-01,
  * a pedido de Federico con una foto de un remito real de VialTec): el
  * "REMITO" impreso tiene que mostrar "S/VALE DE BALANZA N° <desde> AL
  * <hasta> (CORRELATIVOS)" — el respaldo de básculas de todo lo acumulado ese
  * día para ese pedido/obra, no solo el vale individual que se está mirando.
  *
  * @param {{ pedidoId?: string|null, obraId?: number|null, fechaCorte: string|Date }} args
- * @returns {Promise<{ acumuladoTn: number, valeDesde: number|null, valeHasta: number|null, cantidadVales: number }>}
+ * @returns {Promise<{ acumuladoTn: number, valeDesde: number|null, valeHasta: number|null, cantidadVales: number, numerosVale: number[] }>}
  */
 export async function obtenerAcumuladoHastaFecha({ pedidoId, obraId, fechaCorte }) {
   const corte = new Date(fechaCorte)
@@ -195,6 +230,7 @@ export async function obtenerAcumuladoHastaFecha({ pedidoId, obraId, fechaCorte 
     valeDesde: numeros.length ? Math.min(...numeros) : null,
     valeHasta: numeros.length ? Math.max(...numeros) : null,
     cantidadVales: numeros.length,
+    numerosVale: numeros,
   }
 }
 
