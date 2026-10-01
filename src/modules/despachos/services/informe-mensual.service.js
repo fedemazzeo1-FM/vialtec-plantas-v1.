@@ -4,8 +4,8 @@
 // conventions.md) — pero este service tampoco lo hace: arma el informe
 // combinando servicios YA existentes (despachos/stock), sin duplicar
 // queries. Lo único nuevo de verdad acá es fetchResumenAnual() (recorre
-// enero..mes elegido del año) y fetchConsumoInsumosDelMes() (agrupa
-// movimientos de egreso_despacho ya existentes, no recalcula fórmulas).
+// enero..mes elegido del año) y fetchConsumoInsumosDelMes() (fórmula ×
+// cantidad despachada de los pedidos del mes).
 //
 // El informe es 100% dinámico: todo lo que ve el usuario sale de estas
 // queries en el momento del export, según el mes elegido en el selector de
@@ -18,10 +18,12 @@ import {
   rangoDelMes,
   fetchValesDeVariosPedidos,
   fetchCargasHormigonDeVariosPedidos,
+  fetchCantidadesDespachadasDelMes,
 } from '@/services/despachos.service'
-import { fetchTodosLosMovimientos } from '@/services/stock.service'
 import { fetchObras } from '@/services/flota.service'
-import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+import { fetchFormulas, calcularConsumoTotalKg } from '@/modules/maestros/services/formulas.service'
+import { materialesService } from '@/modules/maestros/services/maestros.service'
+import { appConfig } from '@/config/app.config'
 // Analítica de proveedores del mes (2026-09-03, pedido de Federico: sumarla
 // al informe mensual) — reusa la misma función que ya usa Stock → Analítica
 // de proveedores (memory/conventions.md, no duplicar la query/agregación).
@@ -69,23 +71,43 @@ export async function fetchDespachosPorObraDelMes(mes) {
 }
 
 /**
- * Consumo de insumos del mes — agrupa por material los movimientos
- * `egreso_despacho` ya registrados por `finalizar_despacho()`/
- * `corregir_despacho()` (memory/business-rules.md: el descuento de stock
- * por despacho es automático al despachar). Reusa fetchTodosLosMovimientos()
- * de stock.service.js (memory/architecture.md, regla de paginación) — no
- * recalcula consumo desde fórmulas, lee lo que YA se descontó de stock, más
- * fiel a lo que realmente se consumió (incluye correcciones manuales).
+ * Consumo de insumos del mes = fórmula × cantidad despachada, sobre los
+ * pedidos despachados del mes (mismo universo que "Despachos por obra" de
+ * este informe, así las dos tablas siempre hablan de lo mismo).
+ *
+ * Fix 2026-10-01 (auditoría pedida por Federico: el consumo de áridos no
+ * cerraba y había que ajustarlo a mano). Antes se sumaban los movimientos de
+ * stock `egreso_despacho` por la FECHA DEL MOVIMIENTO, y eso desfasaba:
+ *   - un despacho del último día cerrado al día siguiente caía en el mes
+ *     siguiente (sep/2026: los 3 pedidos del 30/09, ~849 tn de insumos);
+ *   - las correcciones de despacho (`recalculo_despacho`) no se contaban;
+ *   - los pedidos migrados del legado sin movimiento de stock no aportaban.
+ * Usa la fórmula vigente al exportar. Excluye los materiales que nunca se
+ * descuentan (Agua, Purgue — memory/business-rules.md). El nombre del insumo
+ * se muestra como figura en el catálogo de materiales cuando existe ahí.
  * @param {string} mes 'YYYY-MM'
  */
 export async function fetchConsumoInsumosDelMes(mes) {
-  const { desde, hasta } = rangoDelMes(mes)
-  const movimientos = await fetchTodosLosMovimientos({ tipo: 'egreso_despacho', desde, hasta })
+  const [pedidos, formulas, materiales] = await Promise.all([
+    fetchCantidadesDespachadasDelMes(mes),
+    fetchFormulas({ soloActivas: false }),
+    materialesService.fetch(),
+  ])
+  const formulasPorId = Object.fromEntries(formulas.map((f) => [f.id, f]))
+  const clave = (nombre) => (nombre || '').trim().toLowerCase()
+  const nombreCatalogo = Object.fromEntries(materiales.map((m) => [clave(m.nombre), m.nombre]))
+  const sinDescuento = appConfig.stock.materialesSinDescuento.map(clave)
 
   const porMaterial = new Map()
-  for (const m of movimientos) {
-    const nombre = m.materialNombre || 'Sin especificar'
-    porMaterial.set(nombre, (porMaterial.get(nombre) ?? 0) + Math.abs(Number(m.cantidad_kg) || 0))
+  for (const p of pedidos) {
+    const formula = formulasPorId[p.formula_id]
+    const cantidad = Number(p.cantidad_despachada) || 0
+    if (!formula || cantidad <= 0) continue
+    for (const { material, kg } of calcularConsumoTotalKg(formula, cantidad)) {
+      if (sinDescuento.includes(clave(material))) continue
+      const nombre = nombreCatalogo[clave(material)] || (material || '').trim() || 'Sin especificar'
+      porMaterial.set(nombre, (porMaterial.get(nombre) ?? 0) + kg)
+    }
   }
 
   const filas = Array.from(porMaterial.entries())

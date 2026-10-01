@@ -123,6 +123,26 @@ export async function fetchTotalesMes(mes) {
   return totales
 }
 
+/**
+ * Fórmula y cantidad real de cada pedido despachado del mes — la base del
+ * "Consumo de insumos" del informe mensual (fórmula × cantidad despachada).
+ * Mismo universo que fetchTotalesMes()/fetchResumenPorObra(): pedidos
+ * `despachado` con fecha_programada dentro del mes.
+ * @param {string} mes 'YYYY-MM'
+ * @returns {Promise<Array<{ formula_id: string|null, cantidad_despachada: number|null }>>}
+ */
+export async function fetchCantidadesDespachadasDelMes(mes) {
+  const { desde, hasta } = rangoDelMes(mes)
+  return fetchPaginado(() =>
+    supabase
+      .from(TABLA_PEDIDOS)
+      .select('formula_id, cantidad_despachada')
+      .eq('estado', 'despachado')
+      .gte('fecha_programada', desde)
+      .lte('fecha_programada', hasta)
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Resumen por obra (selector de mes + grid de cards — memory/relevamiento
 // §3 Etapa 3: "<input type='month'>", no rango libre)
