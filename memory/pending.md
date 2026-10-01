@@ -6,7 +6,17 @@
 medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
 deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
 
-Estado de git/deploy al cerrar la sesión del 2026-09-30:
+**2026-10-01: Fórmulas — insumo con desplegable del catálogo de materiales**
+(`4887717`, deployado `dpl_6RoVbmMsR4s4JWfXdDbMtA62oTmJ`; el deploy incluyó
+también `fd79bea`). El insumo ya no es texto libre: `datalist` sobre
+`plantas_materiales` activos + validación al guardar. Sin probar en vivo con
+sesión. **Abierto**: la fórmula "HORMIGON  H-13" tiene 6 insumos que no
+existen en el catálogo (AD PLAS, Arena 0-6, Arena silicea, Piedra 6-20,
+Piedra 10-30, Cemento CP 40) — no descuenta stock hasta que se corrija
+(editándola desde la UI o con UPDATE, previa confirmación de Federico).
+
+Estado de git/deploy al cerrar la sesión del 2026-09-30 (desactualizado por
+lo de arriba: `fd79bea` ya está en producción):
 - En producción (último deploy): todo hasta `7ebd81c` (contraste casi
   original + cache immutable de `/assets` en `vercel.json`).
 - Commiteado, NO deployado: `fd79bea` (desempate por id).
