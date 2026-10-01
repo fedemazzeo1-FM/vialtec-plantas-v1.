@@ -49,8 +49,10 @@ export function formatearNumeroVale(numero) {
   return String(numero).padStart(8, '0')
 }
 
-// Máximo de vales que el remito lista uno por uno cuando no son correlativos.
-const MAX_VALES_LISTADOS_EN_REMITO = 5
+// Largo máximo de la leyenda de vales del remito (unos 3 renglones de la
+// columna Detalle). Con los datos reales no se alcanza: el remito con más
+// saltos tiene 4 tramos (~110 caracteres).
+const MAX_LARGO_LEYENDA_VALES = 300
 
 /**
  * Leyenda "S/Vale de báscula…" del remito, a partir de los N° de vale que
@@ -58,9 +60,11 @@ const MAX_VALES_LISTADOS_EN_REMITO = 5
  * pedidos, los vales de UN pedido no son consecutivos (quedan intercalados
  * con los de otra obra), así que "N° X al Y (correlativos)" solo es cierto si
  * de verdad no hay saltos:
- *   - correlativos:        "S/Vale de báscula N° X al Y (correlativos — N pesadas)"
- *   - con saltos, hasta 5: "S/Vales de báscula N° A, B, C (3 pesadas)"
- *   - con saltos, más de 5: "S/Vales de báscula entre N° X y N° Y (N pesadas no correlativas)"
+ *   - correlativos: "S/Vale de báscula N° X al Y (correlativos — N pesadas)"
+ *   - con saltos, por tramos continuos, para que se pueda auditar contra los
+ *     vales físicos: "S/Vales de báscula N° A al B, C, D al E (N pesadas)"
+ *   - con saltos y tantos tramos que no entran en el renglón:
+ *     "S/Vales de báscula entre N° X y N° Y (N pesadas no correlativas)"
  * @param {Array<number|null>} numeros N° de vale, en cualquier orden.
  * @returns {string|null} null si no hay ningún vale.
  */
@@ -68,17 +72,25 @@ export function leyendaValesRemito(numeros) {
   const vales = [...new Set((numeros ?? []).filter((n) => n != null).map(Number))].sort((a, b) => a - b)
   if (!vales.length) return null
 
+  // Tramos continuos: [[196, 198], [201, 201], [203, 204]]
+  const tramos = []
+  for (const n of vales) {
+    const ultimoTramo = tramos[tramos.length - 1]
+    if (ultimoTramo && n === ultimoTramo[1] + 1) ultimoTramo[1] = n
+    else tramos.push([n, n])
+  }
+  const textoTramo = ([desde, hasta]) =>
+    desde === hasta ? formatearNumeroVale(desde) : `${formatearNumeroVale(desde)} al ${formatearNumeroVale(hasta)}`
+  const pesadas = `${vales.length} pesada${vales.length === 1 ? '' : 's'}`
+
+  if (tramos.length === 1) {
+    return `S/Vale de báscula N° ${textoTramo(tramos[0])} (correlativos — ${pesadas})`
+  }
+  const porTramos = `S/Vales de báscula N° ${tramos.map(textoTramo).join(', ')} (${pesadas})`
+  if (porTramos.length <= MAX_LARGO_LEYENDA_VALES) return porTramos
+
   const primero = formatearNumeroVale(vales[0])
   const ultimo = formatearNumeroVale(vales[vales.length - 1])
-  const pesadas = `${vales.length} pesada${vales.length === 1 ? '' : 's'}`
-  const sonCorrelativos = vales.every((n, i) => i === 0 || n === vales[i - 1] + 1)
-
-  if (sonCorrelativos) {
-    return `S/Vale de báscula N° ${primero}${vales.length > 1 ? ` al ${ultimo}` : ''} (correlativos — ${pesadas})`
-  }
-  if (vales.length <= MAX_VALES_LISTADOS_EN_REMITO) {
-    return `S/Vales de báscula N° ${vales.map(formatearNumeroVale).join(', ')} (${pesadas})`
-  }
   return `S/Vales de báscula entre N° ${primero} y N° ${ultimo} (${pesadas} no correlativas)`
 }
 
