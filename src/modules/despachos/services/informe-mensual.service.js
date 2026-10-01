@@ -27,7 +27,14 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 // de proveedores (memory/conventions.md, no duplicar la query/agregación).
 import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
 import { PRODUCCION_PRE_MAYO_2026 } from '@/modules/dashboard/services/dashboard.service'
-import { sumarTotales } from '@/config/tipos-producto'
+import {
+  esCircuitoBascula,
+  esCircuitoMixer,
+  magnitudTotales,
+  nombreTipoProducto,
+  sumarTotales,
+  unidadLabelTipoProducto,
+} from '@/config/tipos-producto'
 
 /**
  * Despachos por obra del mes, separados interno (obra real, tipo_pedido
@@ -38,20 +45,16 @@ import { sumarTotales } from '@/config/tipos-producto'
  */
 export async function fetchDespachosPorObraDelMes(mes) {
   const resumen = await fetchResumenPorObra(mes)
-  const internos = resumen.filter((r) => r.obraId != null).sort((a, b) => b.asfaltoTn + b.hormigonM3 - (a.asfaltoTn + a.hormigonM3))
-  const externos = resumen.filter((r) => r.obraId == null).sort((a, b) => b.asfaltoTn + b.hormigonM3 - (a.asfaltoTn + a.hormigonM3))
+  const internos = resumen.filter((r) => r.obraId != null).sort((a, b) => magnitudTotales(b) - magnitudTotales(a))
+  const externos = resumen.filter((r) => r.obraId == null).sort((a, b) => magnitudTotales(b) - magnitudTotales(a))
 
-  const sumar = (lista, campo) => lista.reduce((acc, r) => acc + r[campo], 0)
-  const subtotalInterno = {
-    despachos: sumar(internos, 'cantidadDespachos'),
-    hormigonM3: sumar(internos, 'hormigonM3'),
-    asfaltoTn: sumar(internos, 'asfaltoTn'),
-  }
-  const subtotalExterno = {
-    despachos: sumar(externos, 'cantidadDespachos'),
-    hormigonM3: sumar(externos, 'hormigonM3'),
-    asfaltoTn: sumar(externos, 'asfaltoTn'),
-  }
+  // Un total por tipo de producto (config/tipos-producto.js) + cantidad de despachos.
+  const subtotal = (lista) => ({
+    despachos: lista.reduce((acc, r) => acc + r.cantidadDespachos, 0),
+    ...sumarTotales(...lista),
+  })
+  const subtotalInterno = subtotal(internos)
+  const subtotalExterno = subtotal(externos)
 
   return {
     internos,
@@ -60,8 +63,7 @@ export async function fetchDespachosPorObraDelMes(mes) {
     subtotalExterno,
     totalGeneral: {
       despachos: subtotalInterno.despachos + subtotalExterno.despachos,
-      hormigonM3: subtotalInterno.hormigonM3 + subtotalExterno.hormigonM3,
-      asfaltoTn: subtotalInterno.asfaltoTn + subtotalExterno.asfaltoTn,
+      ...sumarTotales(subtotalInterno, subtotalExterno),
     },
   }
 }
@@ -141,15 +143,15 @@ export async function fetchResumenAnual(mesHasta) {
  * no tiene chofer ni peso real, solo la cantidad declarada, y memory/
  * business-rules.md es explícito en que Báscula y Pedidos no se dedupean
  * entre sí, así que no se mezclan ambas fuentes en una sola fila acá.
- * Hormigón no tiene báscula (se mide por volumen del mixer, no se pesa) —
- * sale de plantas_cargas_hormigon, remito/chofer por carga siempre
- * poblados (ambos obligatorios al despachar).
+ * El circuito de mixer (hormigón, mezcla cemento — config/tipos-producto.js)
+ * no tiene báscula: sale de plantas_cargas_hormigon, remito por carga
+ * siempre poblado, y la cantidad va en la unidad del tipo del pedido.
  * @param {Array<{id: string, tipo: string}>} pedidos crudos (fetchDespachos)
- * @param {Record<string, {nro_remito_global: string|null}>} pedidosPorId
+ * @param {Record<string, {nro_remito_global: string|null, tipo: string}>} pedidosPorId
  */
 async function fetchDetallePesadasDelMes(pedidos, pedidosPorId) {
-  const idsAsfalto = pedidos.filter((p) => p.tipo === 'asfalto').map((p) => p.id)
-  const idsHormigon = pedidos.filter((p) => p.tipo === 'hormigon').map((p) => p.id)
+  const idsAsfalto = pedidos.filter((p) => esCircuitoBascula(p.tipo)).map((p) => p.id)
+  const idsHormigon = pedidos.filter((p) => esCircuitoMixer(p.tipo)).map((p) => p.id)
 
   const [vales, cargasHormigon] = await Promise.all([
     fetchValesDeVariosPedidos(idsAsfalto),
@@ -158,7 +160,7 @@ async function fetchDetallePesadasDelMes(pedidos, pedidosPorId) {
 
   const filasAsfalto = vales.map((v) => ({
     fecha: v.fecha_pesada,
-    tipo: 'Asfalto',
+    tipo: nombreTipoProducto(pedidosPorId[v.pedido_id]?.tipo),
     // N° Remito es 1 solo por PEDIDO (compartido por todas sus pesadas,
     // migración 39) — se resuelve acá contra el pedido dueño de cada vale,
     // no contra el vale (que no tiene remito propio).
@@ -172,13 +174,13 @@ async function fetchDetallePesadasDelMes(pedidos, pedidosPorId) {
 
   const filasHormigon = cargasHormigon.map((c) => ({
     fecha: c.fecha_carga,
-    tipo: 'Hormigón',
+    tipo: nombreTipoProducto(pedidosPorId[c.pedido_id]?.tipo),
     nroRemito: c.numero_remito || '', // por carga, no por pedido — "el remito ya es por carga" en hormigón
     nroVale: '', // hormigón no tiene concepto de vale (no se pesa en báscula)
     patente: c.patente_mixer || '',
     chofer: c.chofer || '',
     cantidad: Number(c.volumen_m3) || 0,
-    unidad: 'm³',
+    unidad: unidadLabelTipoProducto(pedidosPorId[c.pedido_id]?.tipo),
   }))
 
   return [...filasAsfalto, ...filasHormigon].sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
@@ -217,8 +219,8 @@ export async function fetchDetalleDestinoDelMes(destino, mes, formulasPorId) {
       id: p.id,
       fecha: p.fecha_programada,
       mezcla: formulasPorId[p.formula_id]?.nombre ?? '—',
-      tipo: p.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto',
-      unidad: p.tipo === 'hormigon' ? 'm³' : 'tn',
+      tipo: nombreTipoProducto(p.tipo),
+      unidad: unidadLabelTipoProducto(p.tipo),
       estado: p.estado,
       pedido: Number(p.cantidad_solicitada),
       real: Number(p.cantidad_despachada) || 0,

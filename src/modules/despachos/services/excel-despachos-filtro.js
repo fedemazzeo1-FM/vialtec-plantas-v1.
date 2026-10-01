@@ -24,16 +24,16 @@ import {
   GRIS_SUAVE,
 } from '@/services/excel-corporativo'
 
+import { nombreTipoProducto, unidadLabelTipoProducto } from '@/config/tipos-producto'
+
 const COLUMNAS = ['Fecha', 'Obra / Cliente', 'Mezcla', 'Tipo', 'Pedido', 'Real', 'Diferencia']
 
 function formatearCantidad(valor, tipo) {
-  const unidad = tipo === 'hormigon' ? 'm³' : 'tn'
+  const unidad = unidadLabelTipoProducto(tipo)
   return `${Number(valor || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })} ${unidad}`
 }
 
-function etiquetaTipo(tipo) {
-  return tipo === 'hormigon' ? 'Hormigón' : 'Asfalto'
-}
+const etiquetaTipo = nombreTipoProducto
 
 /**
  * @param {Array<object>} filas ya enriquecidas (destino/formulaNombre/diferencia
@@ -90,8 +90,8 @@ export async function exportarDespachosFiltroExcel(filas, resumenFiltros) {
     fila++
   })
 
-  // Una fila de TOTAL por tipo presente (asfalto en tn, hormigón en m³ —
-  // nunca se suman entre sí, mismo criterio que excel-informe-mensual.js).
+  // Una fila de TOTAL por tipo presente, cada uno en su unidad
+  // (config/tipos-producto.js) — nunca se suman entre sí, mismo criterio que excel-informe-mensual.js).
   const tiposPresentes = [...new Set(filas.map((f) => f.tipo))]
   for (const tipo of tiposPresentes) {
     const subset = filas.filter((f) => f.tipo === tipo)

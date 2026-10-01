@@ -15,6 +15,7 @@
 
 import { supabase } from '@/config/supabase'
 import { fetchPaginado } from '@/services/fetch-paginado'
+import { sumarEnTotal, totalesVacios } from '@/config/tipos-producto'
 import { limiteInicioDiaLocal, limiteFinDiaLocalExclusivo } from '@/services/fecha'
 
 function aTn(valor, unidad) {
@@ -61,20 +62,14 @@ export async function fetchResumenGeneral({ mes } = {}) {
     ),
   ])
 
-  let asfaltoTn = 0
-  let hormigonM3 = 0
-  for (const p of pedidosDespachados) {
-    const cantidad = Number(p.cantidad_despachada) || 0
-    if (p.tipo === 'hormigon') hormigonM3 += cantidad
-    else asfaltoTn += cantidad
-  }
+  const totales = totalesVacios()
+  for (const p of pedidosDespachados) sumarEnTotal(totales, p.tipo, p.cantidad_despachada)
 
   const ingresosInsumosTn = ingresos.reduce((acc, i) => acc + aTn(i.cantidad, i.unidad), 0)
 
   return {
     rango: { desde: desdeISO.slice(0, 10), hasta: hastaISO.slice(0, 10) },
-    asfaltoTn,
-    hormigonM3,
+    ...totales,
     despachosDelMes: pedidosDespachados.length,
     ingresosInsumosTn,
   }

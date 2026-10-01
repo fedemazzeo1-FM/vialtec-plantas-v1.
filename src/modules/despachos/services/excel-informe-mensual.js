@@ -34,6 +34,7 @@ import {
   agregarPieInstitucional,
   calcularAnchosAutoFit,
 } from '@/services/excel-corporativo'
+import { LISTA_TIPOS_PRODUCTO } from '@/config/tipos-producto'
 
 // Amarillo (2026-09-17, pedido de Federico): color de pestaña/solapa de
 // "Ventas Externas" — la única hoja que lo usa, para distinguirla a simple
@@ -42,6 +43,24 @@ const AMARILLO_TAB = 'FFFFEB3B'
 
 const TN = (v) => (v ? `${Number(v).toFixed(2)} tn` : '—')
 const M3 = (v) => (v ? `${Number(v).toFixed(1)} m³` : '—')
+
+// Las tablas resumen tienen dos columnas fijas (Hormigón m³ / Asfalto tn). Los
+// tipos de producto sin columna fija (los que no son `siempreVisible` en
+// config/tipos-producto.js, hoy mezcla cemento) agregan una columna propia a
+// la derecha, solo cuando la tabla tiene algo de ese tipo — nunca se suman a
+// las otras dos.
+function tiposConColumnaExtra(totales) {
+  return LISTA_TIPOS_PRODUCTO.filter((t) => !t.siempreVisible && (Number(totales?.[t.total]) || 0) > 0)
+}
+const headersExtra = (tipos) => tipos.map((t) => `${t.nombre} (${t.unidadLabel})`)
+const celdasExtra = (tipos, totales) =>
+  tipos.map((t) => (totales?.[t.total] ? `${Number(totales[t.total]).toFixed(2)} ${t.unidadLabel}` : '—'))
+/** Ancho de las columnas extra, a partir de la columna `desde` (1 = A). */
+function anchoColumnasExtra(ws, tipos, desde) {
+  tipos.forEach((_, i) => {
+    ws.getColumn(desde + i).width = 22
+  })
+}
 // Mismos valores que GRIS_TEXTO/GRIS_SUAVE de excel-corporativo.js, pero en
 // formato #RRGGBB (canvas 2D no entiende ARGB de 8 dígitos) — no vale la
 // pena una conversión genérica ARGB->CSS por 2 constantes usadas una vez
@@ -102,14 +121,17 @@ function armarHojaResumenMensual(workbook, datos) {
   ;['A', 'B', 'C', 'D', 'E'].forEach((c) => estiloSubtotal(ws.getCell(`${c}${fila}`)))
   fila++
 
+  const extra = tiposConColumnaExtra(datos.despachosPorObra.totalGeneral)
+  anchoColumnasExtra(ws, extra, 6)
+
   const headerRow = ws.getRow(fila)
-  headerRow.values = ['N°', 'Obra', 'Despachos', 'Hormigón (m³)', 'Asfalto (tn)']
+  headerRow.values = ['N°', 'Obra', 'Despachos', 'Hormigón (m³)', 'Asfalto (tn)', ...headersExtra(extra)]
   headerRow.eachCell((cell) => estiloHeaderTabla(cell))
   fila++
 
   datos.despachosPorObra.internos.forEach((r, i) => {
     const row = ws.getRow(fila)
-    row.values = [i + 1, r.nombre, r.cantidadDespachos, M3(r.hormigonM3), TN(r.asfaltoTn)]
+    row.values = [i + 1, r.nombre, r.cantidadDespachos, M3(r.hormigonM3), TN(r.asfaltoTn), ...celdasExtra(extra, r)]
     row.eachCell((cell) => estiloCuerpo(cell))
     fila++
   })
@@ -121,19 +143,20 @@ function armarHojaResumenMensual(workbook, datos) {
     datos.despachosPorObra.subtotalInterno.despachos,
     M3(datos.despachosPorObra.subtotalInterno.hormigonM3),
     TN(datos.despachosPorObra.subtotalInterno.asfaltoTn),
+    ...celdasExtra(extra, datos.despachosPorObra.subtotalInterno),
   ]
   subInt.eachCell((cell) => estiloSubtotal(cell))
   fila++
 
   const bandaExt = ws.getRow(fila)
-  bandaExt.values = ['  Ventas externas', null, null, 'Hormigón (m³)', 'Asfalto (tn)']
+  bandaExt.values = ['  Ventas externas', null, null, 'Hormigón (m³)', 'Asfalto (tn)', ...headersExtra(extra)]
   bandaExt.eachCell((cell) => estiloBandaExterna(cell))
   fila++
 
   const nInternos = datos.despachosPorObra.internos.length
   datos.despachosPorObra.externos.forEach((r, i) => {
     const row = ws.getRow(fila)
-    row.values = [nInternos + i + 1, r.nombre, r.cantidadDespachos, M3(r.hormigonM3), TN(r.asfaltoTn)]
+    row.values = [nInternos + i + 1, r.nombre, r.cantidadDespachos, M3(r.hormigonM3), TN(r.asfaltoTn), ...celdasExtra(extra, r)]
     row.eachCell((cell) => estiloCuerpo(cell))
     fila++
   })
@@ -145,6 +168,7 @@ function armarHojaResumenMensual(workbook, datos) {
     datos.despachosPorObra.subtotalExterno.despachos,
     M3(datos.despachosPorObra.subtotalExterno.hormigonM3),
     TN(datos.despachosPorObra.subtotalExterno.asfaltoTn),
+    ...celdasExtra(extra, datos.despachosPorObra.subtotalExterno),
   ]
   subExt.eachCell((cell) => estiloSubtotal(cell))
   fila++
@@ -156,6 +180,7 @@ function armarHojaResumenMensual(workbook, datos) {
     datos.despachosPorObra.totalGeneral.despachos,
     M3(datos.despachosPorObra.totalGeneral.hormigonM3),
     TN(datos.despachosPorObra.totalGeneral.asfaltoTn),
+    ...celdasExtra(extra, datos.despachosPorObra.totalGeneral),
   ]
   total.eachCell((cell) => estiloTotalGeneral(cell, 12))
   fila += 2
@@ -326,8 +351,11 @@ async function armarHojaResumenAnual(workbook, datos) {
   ws.getCell('A1').value = `Informe Anual Enero–${datos.mesLabel}`
   ws.getCell('A1').font = { bold: true, size: 12, color: { argb: GRIS_TEXTO } }
 
+  const extra = tiposConColumnaExtra(datos.resumenAnual.totalAcumulado)
+  anchoColumnasExtra(ws, extra, 4)
+
   const header = ws.getRow(2)
-  header.values = ['Mes', 'Hormigón (m³)', 'Asfalto (tn)']
+  header.values = ['Mes', 'Hormigón (m³)', 'Asfalto (tn)', ...headersExtra(extra)]
   header.eachCell((cell) => estiloHeaderTabla(cell))
 
   // Orden 2026-09-07 (pedido de Federico): más reciente arriba, enero al
@@ -339,15 +367,23 @@ async function armarHojaResumenAnual(workbook, datos) {
   let fila = 3
   ;[...datos.resumenAnual.filas].reverse().forEach((f) => {
     const row = ws.getRow(fila)
-    row.values = [f.mes, M3(f.hormigonM3), TN(f.asfaltoTn)]
+    row.values = [f.mes, M3(f.hormigonM3), TN(f.asfaltoTn), ...celdasExtra(extra, f)]
     row.getCell(1).font = { color: { argb: GRIS_SUAVE }, size: 10 }
     row.getCell(2).font = { color: { argb: GRIS_TEXTO }, size: 10 }
     row.getCell(3).font = { color: { argb: GRIS_TEXTO }, size: 10 }
+    extra.forEach((_, i) => {
+      row.getCell(4 + i).font = { color: { argb: GRIS_TEXTO }, size: 10 }
+    })
     fila++
   })
 
   const total = ws.getRow(fila)
-  total.values = ['TOTAL ACUMULADO', M3(datos.resumenAnual.totalAcumulado.hormigonM3), TN(datos.resumenAnual.totalAcumulado.asfaltoTn)]
+  total.values = [
+    'TOTAL ACUMULADO',
+    M3(datos.resumenAnual.totalAcumulado.hormigonM3),
+    TN(datos.resumenAnual.totalAcumulado.asfaltoTn),
+    ...celdasExtra(extra, datos.resumenAnual.totalAcumulado),
+  ]
   total.eachCell((cell) => estiloHeaderTabla(cell))
 
   // Gráfico de barras (2026-09-07, pedido de Federico) — 2 filas de aire
@@ -645,14 +681,17 @@ export async function construirWorkbookInformeMensual(datos, logoBuffer) {
     wsVentas.getCell('A2').value = `${nDespachos} despacho${nDespachos === 1 ? '' : 's'} — ${nClientes} cliente${nClientes === 1 ? '' : 's'}`
     wsVentas.getCell('A2').font = { italic: true, size: 10, color: { argb: GRIS_SUAVE } }
 
+    const extra = tiposConColumnaExtra(datos.despachosPorObra.subtotalExterno)
+    anchoColumnasExtra(wsVentas, extra, 6)
+
     const header = wsVentas.getRow(3)
-    header.values = ['N°', 'Cliente', 'Despachos', 'Hormigón (m³)', 'Asfalto (tn)']
+    header.values = ['N°', 'Cliente', 'Despachos', 'Hormigón (m³)', 'Asfalto (tn)', ...headersExtra(extra)]
     header.eachCell((cell) => estiloHeaderTabla(cell))
 
     let fila = 4
     datos.despachosPorObra.externos.forEach((r, i) => {
       const row = wsVentas.getRow(fila)
-      row.values = [i + 1, r.nombre, r.cantidadDespachos, M3(r.hormigonM3), TN(r.asfaltoTn)]
+      row.values = [i + 1, r.nombre, r.cantidadDespachos, M3(r.hormigonM3), TN(r.asfaltoTn), ...celdasExtra(extra, r)]
       row.eachCell((cell) => estiloCuerpo(cell))
       fila++
     })
@@ -663,6 +702,7 @@ export async function construirWorkbookInformeMensual(datos, logoBuffer) {
       datos.despachosPorObra.subtotalExterno.despachos,
       M3(datos.despachosPorObra.subtotalExterno.hormigonM3),
       TN(datos.despachosPorObra.subtotalExterno.asfaltoTn),
+      ...celdasExtra(extra, datos.despachosPorObra.subtotalExterno),
     ]
     total.eachCell((cell) => estiloSubtotal(cell))
 
