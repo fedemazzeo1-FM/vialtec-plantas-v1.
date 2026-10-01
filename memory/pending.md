@@ -6,9 +6,12 @@
 medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
 deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
 
-**2026-10-01: tercer tipo de producto `mezcla_cemento` — código COMMITEADO, NO
-deployado; migración 49 APLICADA.** Ver §10. Pendiente de OK de Federico:
-(1) reclasificar el pedido despachado del 27/05 a mezcla_cemento, (2) deploy.
+**2026-10-01: tercer tipo de producto `mezcla_cemento` — EN PRODUCCIÓN**
+(migración 49 + deploy `dpl_Bqg18iWQKVGTqq21mLYnC11TpecY`). Ver §10.
+Pendiente: (1) `git push origin main` (lo corre Federico; el push desde la
+sesión fue bloqueado), (2) comparar el informe mensual de septiembre "antes"
+(lo exportó Federico, falta que diga dónde está) contra el "después"
+(`~/Downloads/Informe Plantas prod. SEPTIEMBRE 2026 (13).xlsx`).
 
 **2026-10-01: Fórmulas — insumo con desplegable del catálogo de materiales**
 (`4887717`, deployado `dpl_6RoVbmMsR4s4JWfXdDbMtA62oTmJ`; el deploy incluyó
@@ -450,7 +453,18 @@ carga, sin báscula) pero se mide en tn. Detalle de la regla en
   total. Mezcla cemento solo aparece (sección, KPI, columna de Excel) cuando
   hay algo. Las comparaciones que quedan contra 'asfalto'/'hormigon' son de
   `tipo_vale`/tipo de puerta de Báscula (otro concepto).
-- **Datos, sin tocar todavía**: fórmula `MEZCLA CEMENTO 80/20`
+- **Datos APLICADOS (2026-10-01, OK de Federico)**: fórmula MEZCLA CEMENTO
+  80/20 y pedido `072cd55b-…` (27/05) pasaron a `mezcla_cemento`, con fila
+  `corregido` en `plantas_pedidos_historial` (tipo anterior/nuevo en
+  `datos_legados`). Mayo quedó hormigón 392,2 m³ (26), mezcla cemento 6 tn
+  (1), asfalto 2.596,68 tn sin cambio. El solicitado del 02/10 lo canceló
+  Federico. Verificado en vivo tras el deploy: Despachos, Home, Pedidos, Plan
+  semanal y Fórmulas coinciden con la base, sin errores de consola.
+- **Observación sin tocar**: el KPI "Asfalto (período)" de Pedidos suma
+  también los pedidos cancelados (1.578,6 vs 1.562,6 de Plan semanal esta
+  semana, diferencia = el cancelado de 16). Comportamiento previo a este
+  cambio; decidir con Federico si se excluyen.
+- Estado previo de los datos (referencia): fórmula `MEZCLA CEMENTO 80/20`
   (`c850efee-…`, hoy tipo asfalto, 800 kg Cemento CPC 40 + 200 kg Arena
   Silicia por tn) pasa a mezcla_cemento. Pedido despachado 27/05
   (`072cd55b-…`, Predio Vialtec, 3 pedidas / 6 reales, remito 12447, guardado
