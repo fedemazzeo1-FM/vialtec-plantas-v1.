@@ -28,7 +28,8 @@ export async function getFormula(id) {
 }
 
 /**
- * @param {{ nombre: string, tipo: 'asfalto'|'hormigon', unidad: 'tn'|'m3', activo: boolean, insumos: Array }} formula
+ * @param {{ nombre: string, tipo: string, unidad: 'tn'|'m3', activo: boolean, insumos: Array }} formula
+ *   `tipo` y `unidad` según src/config/tipos-producto.js.
  */
 export async function crearFormula(formula) {
   const { data, error } = await supabase.from(TABLA).insert(formula).select().single()

@@ -17,6 +17,12 @@ import {
   setFormulaActiva,
 } from '@/modules/maestros/services/formulas.service'
 import { materialesService } from '@/modules/maestros/services/maestros.service'
+import {
+  LISTA_TIPOS_PRODUCTO,
+  TIPO_PRODUCTO_INICIAL,
+  nombreTipoProducto,
+  unidadTipoProducto,
+} from '@/config/tipos-producto'
 
 const UNIDADES_INSUMO = ['%', 'kg', 'tn', 'L']
 
@@ -51,8 +57,8 @@ const editandoId = ref(null)
 function formularioVacio() {
   return {
     nombre: '',
-    tipo: 'asfalto',
-    unidad: 'tn',
+    tipo: TIPO_PRODUCTO_INICIAL,
+    unidad: unidadTipoProducto(TIPO_PRODUCTO_INICIAL),
     activo: true,
     insumos: [],
   }
@@ -60,12 +66,12 @@ function formularioVacio() {
 
 const formData = reactive(formularioVacio())
 
-// La unidad de producción se deriva del tipo (tn para asfalto, m3 para
-// hormigón) — ver memory/business-rules.md. No es un campo libre.
+// La unidad de producción se deriva del tipo (config/tipos-producto.js:
+// asfalto tn, hormigón m3, mezcla cemento tn). No es un campo libre.
 watch(
   () => formData.tipo,
   (tipo) => {
-    formData.unidad = tipo === 'hormigon' ? 'm3' : 'tn'
+    formData.unidad = unidadTipoProducto(tipo)
   }
 )
 
@@ -200,7 +206,7 @@ cargarFormulas()
         <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
         <VTable v-else :columns="columnas" :rows="formulas">
           <template #cell-tipo="{ row }">
-            {{ row.tipo === 'hormigon' ? 'Hormigón' : 'Asfalto' }}
+            {{ nombreTipoProducto(row.tipo) }}
           </template>
           <template #cell-activo="{ row }">
             <VBadge :variant="row.activo ? 'success' : 'default'">
@@ -242,8 +248,7 @@ cargarFormulas()
               v-model="formData.tipo"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
             >
-              <option value="asfalto">Asfalto</option>
-              <option value="hormigon">Hormigón</option>
+              <option v-for="t in LISTA_TIPOS_PRODUCTO" :key="t.id" :value="t.id">{{ t.nombre }}</option>
             </select>
           </label>
 
