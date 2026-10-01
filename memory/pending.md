@@ -1,10 +1,31 @@
 # pending.md — Pendientes vigentes
 
-## ▶ RETOMAR AQUÍ (actualizado 2026-09-30, tarde)
+## ▶ RETOMAR AQUÍ (actualizado 2026-10-01, cierre de sesión)
 
-**EN CURSO: optimización de rendimiento — FASE 1 aprobada por Federico, a
-medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
-deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
+Estado al cerrar: árbol limpio, producción al día con el último commit de
+código (`6bc49fa`, deploy `dpl_7faWdK4My1udebzp6zmWHVn1bs4V`).
+
+**Abierto, en orden:**
+1. **Push a GitHub**: ~24 commits locales sin subir. Lo corre Federico
+   (`git push origin main`); desde la sesión de Claude el push fue bloqueado
+   dos veces por el clasificador de permisos, no reintentar.
+2. **Excel de septiembre "antes" vs "después"** (mezcla cemento): Federico
+   exportó el "antes" pero no está en `~/Downloads` de esta máquina; falta que
+   diga dónde quedó. "Después": `~/Downloads/Informe Plantas prod. SEPTIEMBRE
+   2026 (13).xlsx`. Diferencias esperadas: solo hoja "Resumen anual" (columna
+   Mezcla cemento con 6,00 en mayo; hormigón de mayo 398,2 → 392,2).
+3. **Imágenes para email**: Federico tiene que probar "Copiar imagen" y
+   "Descargar PDF" (no probados), y decidir si mezcla cemento se queda en la
+   tabla anual y el gráfico (hoy aparece por las 6 tn de mayo).
+4. **Consumo de insumos**: Federico compara los valores nuevos de septiembre
+   contra sus ajustes manuales. Quedó el criterio A (fórmula × cantidad);
+   alternativa B = lo realmente descontado de stock, si lo pide.
+5. **Fórmula "HORMIGON  H-13"**: 6 insumos fuera del catálogo, no descuenta
+   stock (ver nota de Fórmulas abajo).
+6. **KPI "Asfalto (período)" de Pedidos** suma pedidos cancelados (ver §10).
+7. **Optimización de rendimiento — FASE 1 a medio hacer** (§9). Hecho y ya en
+   producción: desempate por `id` (`fd79bea`). Siguiente paso: ítems 1+6
+   (columnas explícitas en Despachos).
 
 **2026-10-01: informe mensual — EN PRODUCCIÓN** (deploy
 `dpl_7faWdK4My1udebzp6zmWHVn1bs4V`). Verificado en vivo: el Excel de
@@ -18,13 +39,14 @@ Detalle de los dos cambios:
   Antes sumaba movimientos `egreso_despacho` por fecha del movimiento: los
   despachos del 30/09 cerrados el 01/10 (~849 tn de insumos) caían en octubre,
   no contaba `recalculo_despacho`, y los pedidos del legado sin movimiento no
-  aportaban. Sep/2026 arena 0/6: 2.318 tn (antes) vs 2.767 tn (esperado tras
-  el fix; verificar exportando después del deploy).
+  aportaban. Sep/2026 arena 0/6: 2.318 tn (antes) vs 2.766,58 tn (verificado
+  en el Excel exportado tras el deploy).
 - `6bc49fa` Botón "Imágenes para email" en Despachos → Resumen por obra:
   `ReporteEjecutivoMensual.vue` + `useReporteEjecutivo.js` +
   `src/services/imagen-reporte.js` (html2canvas escala 3, copiar al
   portapapeles, PNG, PDF). Probado en local con datos reales de septiembre en
-  una página temporal (ya borrada); falta probarlo dentro de la app con sesión.
+  una página temporal (ya borrada) y dentro de la app tras el deploy (modal
+  con las 3 piezas).
   Lección: el reset de Tailwind `img{display:block}` corre el texto hacia
   abajo en html2canvas; `imagen-reporte.js` lo neutraliza durante la captura
   (`pdf-imprimible.js` no lo hace).
@@ -53,13 +75,6 @@ existen en el catálogo (AD PLAS, Arena 0-6, Arena silicea, Piedra 6-20,
 Piedra 10-30, Cemento CP 40) — no descuenta stock hasta que se corrija
 (editándola desde la UI o con UPDATE, previa confirmación de Federico).
 
-Estado de git/deploy al cerrar la sesión del 2026-09-30 (desactualizado por
-lo de arriba: `fd79bea` ya está en producción):
-- En producción (último deploy): todo hasta `7ebd81c` (contraste casi
-  original + cache immutable de `/assets` en `vercel.json`).
-- Commiteado, NO deployado: `fd79bea` (desempate por id).
-- Sin push a GitHub: 5 commits (`dfe2e12`..`fbd76c6`). Pedir OK antes de
-  `git push origin main`.
 - Contraste UI: Federico pidió bajarlo dos veces; valores finales casi
   iguales al original (border `#E6E9EE`, fondo `#FAFBFC`, shadow-sm por
   default). No volver a reforzarlo sin que lo pida.
