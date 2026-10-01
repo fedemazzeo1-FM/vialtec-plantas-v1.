@@ -6,6 +6,14 @@
 medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
 deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
 
+**2026-10-01: leyenda de vales del remito por tramos — EN PRODUCCIÓN**
+(deploy `dpl_X2F6VyX5bbvhbTvny1EizeYc81vF`). `leyendaValesRemito()` en
+`bascula.service.js`: "correlativos" solo si no hay saltos; con saltos, tramos
+("N° 00010165 al 00010167, 00010182 al 00010183, 00010188 (6 pesadas)");
+"entre N° X y N° Y (no correlativas)" solo si pasa de 300 caracteres (con
+datos reales el máximo son 4 tramos). Verificado en vivo con los remitos de
+los vales 10188 y 10189 del 30/09.
+
 **2026-10-01: tercer tipo de producto `mezcla_cemento` — EN PRODUCCIÓN**
 (migración 49 + deploy `dpl_Bqg18iWQKVGTqq21mLYnC11TpecY`). Ver §10.
 Pendiente: (1) `git push origin main` (lo corre Federico; el push desde la
