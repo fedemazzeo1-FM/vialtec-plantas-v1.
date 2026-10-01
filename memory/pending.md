@@ -6,6 +6,23 @@
 medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
 deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
 
+**2026-10-01: informe mensual — COMMITEADO, SIN DEPLOY (falta OK de Federico)**
+- `4837c83` Consumo de insumos = fórmula × cantidad despachada de los pedidos
+  del mes (`fetchConsumoInsumosDelMes`, usa la fórmula vigente al exportar).
+  Antes sumaba movimientos `egreso_despacho` por fecha del movimiento: los
+  despachos del 30/09 cerrados el 01/10 (~849 tn de insumos) caían en octubre,
+  no contaba `recalculo_despacho`, y los pedidos del legado sin movimiento no
+  aportaban. Sep/2026 arena 0/6: 2.318 tn (antes) vs 2.767 tn (esperado tras
+  el fix; verificar exportando después del deploy).
+- `6bc49fa` Botón "Imágenes para email" en Despachos → Resumen por obra:
+  `ReporteEjecutivoMensual.vue` + `useReporteEjecutivo.js` +
+  `src/services/imagen-reporte.js` (html2canvas escala 3, copiar al
+  portapapeles, PNG, PDF). Probado en local con datos reales de septiembre en
+  una página temporal (ya borrada); falta probarlo dentro de la app con sesión.
+  Lección: el reset de Tailwind `img{display:block}` corre el texto hacia
+  abajo en html2canvas; `imagen-reporte.js` lo neutraliza durante la captura
+  (`pdf-imprimible.js` no lo hace).
+
 **2026-10-01: leyenda de vales del remito por tramos — EN PRODUCCIÓN**
 (deploy `dpl_X2F6VyX5bbvhbTvny1EizeYc81vF`). `leyendaValesRemito()` en
 `bascula.service.js`: "correlativos" solo si no hay saltos; con saltos, tramos
