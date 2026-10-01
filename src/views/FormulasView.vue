@@ -16,6 +16,7 @@ import {
   actualizarFormula,
   setFormulaActiva,
 } from '@/modules/maestros/services/formulas.service'
+import { materialesService } from '@/modules/maestros/services/maestros.service'
 
 const UNIDADES_INSUMO = ['%', 'kg', 'tn', 'L']
 
@@ -35,6 +36,11 @@ const columnasInsumos = [
 ]
 
 const formulas = ref([])
+// Catálogo de materiales (Maestros → Materiales, el mismo de Stock). El insumo
+// de una fórmula tiene que ser uno de estos: el descuento de stock busca el
+// material por nombre (plantas_buscar_material_id), así que un nombre que no
+// esté en el catálogo no descuenta de ningún lado.
+const materiales = ref([])
 const cargando = ref(false)
 const error = ref(null)
 
@@ -67,12 +73,35 @@ async function cargarFormulas() {
   cargando.value = true
   error.value = null
   try {
-    formulas.value = await fetchFormulas()
+    const [listaFormulas, listaMateriales] = await Promise.all([
+      fetchFormulas(),
+      materialesService.fetch({ soloActivos: true }),
+    ])
+    formulas.value = listaFormulas
+    materiales.value = listaMateriales
   } catch (e) {
     error.value = e.message
   } finally {
     cargando.value = false
   }
+}
+
+// Mismo criterio de comparación que plantas_buscar_material_id (sin
+// distinguir mayúsculas ni espacios al borde).
+function buscarMaterial(nombre) {
+  const clave = (nombre || '').trim().toLowerCase()
+  if (!clave) return null
+  return materiales.value.find((m) => m.nombre.trim().toLowerCase() === clave) ?? null
+}
+
+function insumoInvalido(insumo) {
+  return Boolean((insumo.material || '').trim()) && !buscarMaterial(insumo.material)
+}
+
+// Al salir del campo, deja el nombre tal cual figura en el catálogo.
+function normalizarMaterial(insumo) {
+  const material = buscarMaterial(insumo.material)
+  if (material) insumo.material = material.nombre
 }
 
 function nuevoInsumo() {
@@ -88,12 +117,14 @@ function quitarInsumo(id) {
 }
 
 function abrirNueva() {
+  error.value = null
   editandoId.value = null
   Object.assign(formData, formularioVacio())
   modalAbierto.value = true
 }
 
 function abrirEdicion(formula) {
+  error.value = null
   editandoId.value = formula.id
   Object.assign(formData, {
     nombre: formula.nombre,
@@ -112,7 +143,16 @@ async function guardar() {
     return
   }
 
-  const insumosValidos = formData.insumos.filter((i) => i.material.trim())
+  const insumosValidos = formData.insumos.filter((i) => (i.material || '').trim())
+
+  const fueraDeCatalogo = insumosValidos.filter(insumoInvalido)
+  if (fueraDeCatalogo.length) {
+    error.value = `Estos insumos no existen en el catálogo de materiales: ${fueraDeCatalogo
+      .map((i) => i.material.trim())
+      .join(', ')}. Elegí uno de la lista (o dalo de alta en Maestros → Materiales).`
+    return
+  }
+  insumosValidos.forEach(normalizarMaterial)
 
   guardando.value = true
   error.value = null
@@ -234,9 +274,14 @@ cargarFormulas()
               <input
                 v-model="row.material"
                 type="text"
-                class="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                placeholder="Material"
+                list="materiales-formula"
+                autocomplete="off"
+                class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
+                :class="insumoInvalido(row) ? 'border-danger focus:border-danger' : 'border-border focus:border-vialtec'"
+                placeholder="Elegir material…"
+                @change="normalizarMaterial(row)"
               />
+              <p v-if="insumoInvalido(row)" class="mt-1 text-xs text-danger">No está en el catálogo de materiales.</p>
             </template>
             <template #cell-cantidad="{ row }">
               <input
@@ -259,10 +304,18 @@ cargarFormulas()
             </template>
           </VTable>
 
+          <datalist id="materiales-formula">
+            <option v-for="m in materiales" :key="m.id" :value="m.nombre" />
+          </datalist>
+
           <p v-if="!formData.insumos.length" class="mt-2 text-sm text-text-soft">
             Sin insumos cargados todavía.
           </p>
         </div>
+
+        <p v-if="error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
+          {{ error }}
+        </p>
 
         <div class="flex justify-end gap-2 pt-2">
           <VButton type="button" variant="secondary" @click="modalAbierto = false">Cancelar</VButton>
