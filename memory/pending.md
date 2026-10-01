@@ -6,6 +6,10 @@
 medio hacer.** Ver §9. Hecho: desempate por `id` (commit `fd79bea`, NO
 deployado). Siguiente paso: ítems 1+6 (columnas explícitas en Despachos).
 
+**2026-10-01: tercer tipo de producto `mezcla_cemento` — código COMMITEADO, NO
+deployado; migración 49 APLICADA.** Ver §10. Pendiente de OK de Federico:
+(1) reclasificar el pedido despachado del 27/05 a mezcla_cemento, (2) deploy.
+
 **2026-10-01: Fórmulas — insumo con desplegable del catálogo de materiales**
 (`4887717`, deployado `dpl_6RoVbmMsR4s4JWfXdDbMtA62oTmJ`; el deploy incluyó
 también `fd79bea`). El insumo ya no es texto libre: `datalist` sobre
@@ -425,3 +429,39 @@ cache de catálogos, limpieza de índices/políticas duplicadas.
 - `revoke ... from public` NO alcanza en Supabase: `anon` y `authenticated` tienen
   grants propios sobre las funciones nuevas (origen del hallazgo crítico de la 43).
   Toda función SECURITY DEFINER interna debe revocarse también a esos dos roles.
+
+## 10. Tercer tipo de producto: mezcla cemento (2026-10-01)
+
+Pedido de Federico: la mezcla cemento no es asfalto ni hormigón; tipo propio,
+siempre independiente en totales y reportes. Sale como el hormigón (remito por
+carga, sin báscula) pero se mide en tn. Detalle de la regla en
+`business-rules.md` §"Tipos de producto".
+
+- **Migración 49 APLICADA** (dry-run revertido antes,
+  `supabase/scripts/dry_run_migracion_49.sql`, 7 chequeos OK): CHECK de
+  `plantas_formulas.tipo`/`plantas_pedidos.tipo` + `registrar_carga_hormigon`
+  acepta `mezcla_cemento` (roles: admin, plantista, plantista_hormigon) y ya
+  no es ejecutable por `anon`. `finalizar_despacho` no se tocó: ya escribía
+  ' tn' para todo lo que no es hormigón.
+- **Frontend (commits `97a1484`..`4b9690d`, sin deploy)**:
+  `src/config/tipos-producto.js` es el único lugar que nombra los tipos
+  (circuito báscula/mixer, unidad, total, color). Pedidos, Plan semanal, Home,
+  Despachos, Simulador, WhatsApp y los 2 Excel preguntan por circuito/unidad/
+  total. Mezcla cemento solo aparece (sección, KPI, columna de Excel) cuando
+  hay algo. Las comparaciones que quedan contra 'asfalto'/'hormigon' son de
+  `tipo_vale`/tipo de puerta de Báscula (otro concepto).
+- **Datos, sin tocar todavía**: fórmula `MEZCLA CEMENTO 80/20`
+  (`c850efee-…`, hoy tipo asfalto, 800 kg Cemento CPC 40 + 200 kg Arena
+  Silicia por tn) pasa a mezcla_cemento. Pedido despachado 27/05
+  (`072cd55b-…`, Predio Vialtec, 3 pedidas / 6 reales, remito 12447, guardado
+  como hormigón, sin movimientos de stock): reclasificar con auditoría, con OK
+  de Federico. Mayo/2026 pasa de hormigón 398,2 m³ a 392,2 m³ + mezcla
+  cemento 6 tn. Pedido solicitado 02/10 (`eba49b46-…`, 16, tipo asfalto): lo
+  cancela y recarga Federico, no tocar. Histórico ene–abr: no tocar.
+- **Verificación hecha**: build limpio en cada commit; 20 chequeos de la
+  config con Node (la suma nueva da igual que la lógica vieja sobre los 2
+  tipos existentes). **Falta**: ver las pantallas en vivo y comparar el Excel
+  del informe mensual de septiembre antes/después (requiere deploy).
+- `plantas_v_despachos_camion` (vista, sin uso en la UI) sigue etiquetando las
+  cargas de mixer como hormigón; revisar si algún día se vuelve a usar.
+

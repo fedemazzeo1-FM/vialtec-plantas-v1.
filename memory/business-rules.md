@@ -4,6 +4,23 @@ Fuente: relevamiento del sistema legado (`Logica sis. plantas v1.rtf` /
 `Logica sist plantas v2.rtf` en la raíz del proyecto). Estas reglas son las que el
 sistema nuevo debe preservar al migrar.
 
+## Tipos de producto (Federico, 2026-10-01)
+
+Tres tipos, siempre independientes entre sí en totales y reportes (nunca se
+suman, aunque compartan unidad):
+
+| Tipo | Cómo sale | Unidad |
+|---|---|---|
+| `asfalto` | Báscula, un vale por camión | tn |
+| `hormigon` | Mixer, N° de remito por carga, sin báscula | m³ |
+| `mezcla_cemento` | Igual que hormigón (remito por carga, sin báscula) | tn |
+
+La definición vive en `src/config/tipos-producto.js` (circuito, unidad, total).
+El código no compara contra el nombre del tipo: pregunta por circuito, unidad
+o total. Gemelas SQL: CHECK de `plantas_formulas`/`plantas_pedidos` y
+`registrar_carga_hormigon` (migración 49). El tipo del pedido se copia de la
+fórmula al crearlo.
+
 ## Flujo de pedidos
 
 ```
