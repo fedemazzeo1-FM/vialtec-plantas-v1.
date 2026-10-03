@@ -43,6 +43,16 @@ código (`6bc49fa`, deploy `dpl_7faWdK4My1udebzp6zmWHVn1bs4V`).
    producción: desempate por `id` (`fd79bea`). Siguiente paso: ítems 1+6
    (columnas explícitas en Despachos).
 
+**2026-10-02: acumulado anual mobile + fecha en selector de Báscula — EN
+PRODUCCIÓN** (deploy `dpl_YpYgcNTjZ57xAkwiyGdWcPqFHMeT`, commits `b289581`,
+`8620bad`). Tarjeta "Acumulado 2026" (asfalto total + Ammann 140 / Marini 180,
+hormigón) arriba de Pedidos, solo mobile y solo admin/gerencia
+(`ResumenAnualMobile.vue` + `useResumenAnualMobile.js`); en mobile no hay Home
+y esos roles aterrizan en Pedidos. Restricción de UI, no de datos. Atada a 2026
+(constantes de Ammann/pre-mayo en `dashboard.service.js`): revisar en ene/2027.
+Selector de Vale Asfalto: "OBRA — 19.98 tn (confirmado - 02/10/2026)"
+(`etiquetaPedidoPesada`). Sin probar en vivo con sesión.
+
 **2026-10-01: informe mensual — EN PRODUCCIÓN** (deploy
 `dpl_7faWdK4My1udebzp6zmWHVn1bs4V`). Verificado en vivo: el Excel de
 septiembre da Arena 0/6 2.766,58 / Piedra 6/20 2.590,65 / total 5.729,68 tn
