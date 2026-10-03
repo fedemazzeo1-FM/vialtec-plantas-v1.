@@ -30,8 +30,8 @@ código (`6bc49fa`, deploy `dpl_7faWdK4My1udebzp6zmWHVn1bs4V`).
    `supabase/scripts/dry_run_migracion_50.sql` (8 chequeos OK). Sin probar en
    la UI con sesión (Báscula/Fórmulas/Stock/Analítica con los nombres nuevos).
    El vale GAS-OIL del 01/10 no movió stock porque estaba en 0 (piso); ahora
-   GAS-OIL no controla stock. Nombre "HORMIGON  H-13" (doble espacio) sin tocar.
-5b. **2026-10-02 (commits `2f1faf2`, `e2161f2`, sin deploy)**: el Excel marca
+   GAS-OIL no controla stock. Nombre corregido a "HORMIGON H-13" (UPDATE directo, OK de Federico, 2026-10-02).
+5b. **2026-10-02 (commits `2f1faf2`, `e2161f2`, EN PRODUCCIÓN, deploy `dpl_5cj7n8HU27U7Pbhburk4Det9L7q1`)**: el Excel marca
    insumos fuera del catálogo en "Consumo de insumos"; botón "Copiar las 3
    juntas" en el modal de imágenes para email (HTML con PNG embebidos — sin
    probar pegando en Gmail/Outlook). Auditoría sep/2026: informe = SQL exacto;
