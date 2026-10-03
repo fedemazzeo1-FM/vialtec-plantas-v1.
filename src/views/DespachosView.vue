@@ -726,7 +726,10 @@ async function descargarPdfVale() {
           <p class="text-sm text-text-mid">
             {{ reporte.puedeCopiar ? 'Copiá cada imagen y pegala directo en el cuerpo del mail.' : 'Descargá las imágenes y adjuntalas o insertalas en el mail.' }}
           </p>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
+            <VButton v-if="reporte.puedeCopiar" size="sm" @click="reporte.copiarTodas()">
+              {{ reporte.copiadasTodas ? '✓ Copiadas las 3' : 'Copiar las 3 juntas' }}
+            </VButton>
             <VButton size="sm" variant="secondary" @click="reporte.descargarTodas()">⬇ Descargar las 3 (PNG)</VButton>
             <VButton size="sm" variant="secondary" :disabled="reporte.generandoPdf" @click="reporte.descargarPdf()">
               {{ reporte.generandoPdf ? 'Generando…' : '⬇ Descargar PDF' }}

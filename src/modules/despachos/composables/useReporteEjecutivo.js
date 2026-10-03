@@ -1,8 +1,8 @@
 // Composable de "Imágenes para email" (Despachos → Resumen por obra,
 // 2026-10-01, pedido de Federico): genera las 3 piezas del reporte ejecutivo
 // del mes (ReporteEjecutivoMensual.vue) como PNG de alta resolución, listas
-// para copiar al portapapeles y pegar en el cuerpo del mail, descargar una
-// por una o juntas en un PDF.
+// para copiar al portapapeles (de a una o las 3 juntas) y pegar en el cuerpo
+// del mail, descargar una por una o juntas en un PDF.
 //
 // La vista monta ReporteEjecutivoMensual fuera de pantalla mientras `datos`
 // tiene valor y le pasa el elemento por `registrarContenedor`; acá se
@@ -33,6 +33,7 @@ export function useReporteEjecutivo() {
     datos: null, // props de ReporteEjecutivoMensual mientras está montado
     piezas: [], // [{ id, titulo, blob, ancho, alto, url, copiada }]
     puedeCopiar: false,
+    copiadasTodas: false,
     generandoPdf: false,
 
     registrarContenedor(el) {
@@ -69,6 +70,7 @@ export function useReporteEjecutivo() {
           piezas.push({ id, titulo: TITULOS[id] ?? id, blob, ancho, alto, url: URL.createObjectURL(blob), copiada: false })
         }
         estado.piezas = piezas
+        estado.copiadasTodas = false
         estado.abierto = true
       } catch (e) {
         estado.error = e.message
@@ -89,8 +91,22 @@ export function useReporteEjecutivo() {
         estado.piezas.forEach((p) => {
           p.copiada = p.id === pieza.id
         })
+        estado.copiadasTodas = false
       } catch (e) {
         estado.error = `No se pudo copiar la imagen (${e.message}). Usá "Descargar PNG".`
+      }
+    },
+
+    async copiarTodas() {
+      estado.error = null
+      try {
+        await servicioImagen.copiarImagenesComoHtml(estado.piezas)
+        estado.piezas.forEach((p) => {
+          p.copiada = false
+        })
+        estado.copiadasTodas = true
+      } catch (e) {
+        estado.error = `No se pudieron copiar las imágenes (${e.message}). Copialas de a una o usá "Descargar".`
       }
     },
 

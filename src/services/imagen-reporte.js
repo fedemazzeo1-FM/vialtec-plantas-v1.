@@ -55,6 +55,28 @@ export async function copiarImagenAlPortapapeles(blob) {
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
 }
 
+/**
+ * Copia las imágenes juntas, una debajo de la otra, como HTML con cada PNG
+ * embebido: Gmail/Outlook las pegan de una sola vez en el cuerpo del mail (el
+ * portapapeles guarda una sola imagen suelta por vez).
+ * @param {Array<{ blob: Blob, ancho: number, titulo: string }>} imagenes
+ * @param {number} escala la misma de capturarElementoPng, para mostrarlas a su tamaño de pantalla.
+ */
+export async function copiarImagenesComoHtml(imagenes, { escala = 3 } = {}) {
+  const partes = []
+  for (const img of imagenes) {
+    const ancho = Math.round(img.ancho / escala)
+    partes.push(`<p><img src="${await blobADataUrl(img.blob)}" alt="${img.titulo}" width="${ancho}" style="max-width:100%;height:auto"></p>`)
+  }
+  const html = partes.join('')
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([imagenes.map((i) => i.titulo).join('\n')], { type: 'text/plain' }),
+    }),
+  ])
+}
+
 export function descargarBlob(blob, nombreArchivo) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
