@@ -1,9 +1,126 @@
 # pending.md — Pendientes vigentes
 
-## ▶ RETOMAR AQUÍ (actualizado 2026-10-01, cierre de sesión)
+## ▶ RETOMAR AQUÍ (actualizado 2026-10-03, cierre de sesión)
 
 Estado al cerrar: árbol limpio, producción al día con el último commit de
-código (`6bc49fa`, deploy `dpl_7faWdK4My1udebzp6zmWHVn1bs4V`).
+código (deploy `dpl_YpYgcNTjZ57xAkwiyGdWcPqFHMeT`, 2026-10-02). ~35 commits
+locales sin push (lo corre Federico: `git push origin main`).
+
+### PRÓXIMO PASO: Auditoría — etapa 1 (migración 51), falta el OK de Federico
+
+`supabase/migrations/51_funciones_escritura_sin_anon.sql` (commit `3610181`):
+revoke EXECUTE a public/anon de las 13 RPC de escritura (crear_pedido,
+actualizar_pedido, confirmar_pedido, cancelar_pedido, postergar_pedido,
+archivar_pedido, corregir_despacho, registrar_carga_asfalto,
+registrar_pesada_bascula, registrar_movimiento_manual,
+registrar_relevamiento_stock, generar_remito_manual, admin_upsert_usuario_rol).
+`authenticated` tiene grant propio en las 13 (verificado en proacl), no hay
+sobrecargas. Dry-run ya corrido contra producción y revertido
+(`supabase/scripts/dry_run_migracion_51.sql`): 4 chequeos OK (permisos; anon →
+42501; admin logueado ejecuta; anon sigue leyendo con RLS sin error).
+Verificado después que no persistió (las 13 siguen con anon). Federico pidió
+NO aplicarla todavía: volver a correr el dry-run, mostrarle el resultado y
+aplicar recién con su OK. Fuera de alcance a propósito: helpers de RLS
+(plantas_rol_actual, plantas_tiene_permiso, plantas_puede_ver_*) y
+`rls_auto_enable` (event trigger de todo el proyecto, afecta a flota). No
+tocar default privileges del schema public (compartido con flota).
+
+### Módulo de Auditoría — plan aprobado (2026-10-03)
+
+Base: spec de auditoría de flota §6 (tabla propia, mejoras de 6.2, checklist
+6.3). Objetivo de Federico: que lo vea solo él (admin) y saber quién hizo cada
+acción. Tablas `flota_*`: solo lectura.
+
+**Decisiones de Federico:**
+1. Lectura solo admin, FIJA en la base (policy por rol admin, no por la matriz
+   de permisos editable). Hoy hay 1 admin activo.
+2. Triggers: verificar que ninguna de las 17 RPC escriba en tablas que van a
+   tener trigger; si alguna lo hace, que el mismo cambio no se registre dos
+   veces. Caso ya conocido: `plantas_trg_material_renombrado` (migración 50)
+   reescribe `plantas_formulas` al renombrar un material → el trigger de
+   fórmulas no debe duplicar el registro del renombre.
+3. Número correlativo de pedido (P-0001): traer la PROPUESTA antes de la
+   etapa 5 (cambio aparte). Numeración segura ante concurrencia (secuencia),
+   asignada a los pedidos existentes por orden de creación, visible en
+   pantallas, WhatsApp y remitos. La auditoría tiene que buscar por ese número.
+4. Los historiales existentes (`plantas_pedidos_historial`, 679 filas;
+   `plantas_vales_historial`, 8) NO se copian. La auditoría arranca vacía y
+   los historiales se mantienen.
+5. Pantalla con exportar a Excel del listado filtrado: todas las filas del
+   filtro (paginado de a 1000, orden fecha_hora, id), no solo la página.
+
+**Diseño (adaptación de 6.2):**
+- `plantas_auditoria`: id, fecha_hora, fecha_negocio, usuario_email,
+  usuario_id (auth.uid), usuario_nombre, usuario_rol, tipo_accion (CHECK:
+  CREAR, EDITAR, CAMBIAR_ESTADO, ANULAR, CORREGIR, REASIGNAR, ELIMINAR),
+  modulo/entidad (catálogo cerrado), entidad_ref text, entidad_label, motivo
+  (obligatorio por CHECK en ANULAR/CORREGIR/REASIGNAR/ELIMINAR),
+  valores_antes/valores_despues jsonb, dispositivo opcional (derivado del
+  user-agent de request.headers, no del cliente).
+- `plantas_auditar(...)` SECURITY DEFINER, search_path fijo, sin EXECUTE para
+  anon: la identidad sale de auth.jwt() + plantas_usuarios_roles + nombre de
+  flota_usuarios_email (lectura). Sin sesión (SQL directo) → usuario
+  'sistema (SQL)'. Nadie inserta directo en la tabla (sin grants de escritura
+  para anon/authenticated; revoke update/delete/truncate).
+- Índices: (fecha_hora desc, id desc), (entidad, entidad_ref),
+  (usuario_email, fecha_hora desc).
+- Etiqueta por función por entidad ("Vale 10188 — Pedido 30/09 — Obra —
+  189,84 tn").
+
+**Etapas (cada una: dry-run, OK de Federico, commit):**
+1. Seguridad: migración 51 (arriba). Sin cambios de frontend.
+2. Tabla + `plantas_auditar` + catálogos + índices + RLS solo admin + grants
+   mínimos.
+3. Las 17 RPC auditan adentro, en la misma transacción (si falla la auditoría
+   falla la operación). Recrearlas desde `pg_get_functiondef` de producción,
+   dry-run por grupo: pedidos/despachos, báscula, stock, remitos, usuarios.
+   Las 17: crear/actualizar/confirmar/cancelar/postergar/archivar_pedido,
+   finalizar_despacho, corregir_despacho, registrar_carga_asfalto,
+   registrar_carga_hormigon, registrar_pesada_bascula, corregir_vale_bascula,
+   anular_vale_bascula, reasignar_vale_bascula, registrar_movimiento_manual,
+   registrar_relevamiento_stock, generar_remito_manual (+
+   admin_upsert_usuario_rol).
+4. Triggers AFTER sobre lo que la app escribe directo: `plantas_formulas`
+   (cambio de `tipo` marcado aparte: define unidad y circuito; los pedidos
+   existentes conservan el tipo copiado al crearlos), maestros vía
+   `crudEntidad` (materiales, proveedores, clientes, encargados, choferes,
+   patentes), `plantas_roles`, `plantas_permisos`, `plantas_obras_locales`.
+   Aplicar la decisión 2 (sin doble registro).
+5. Pantalla `/auditoria` (solo admin, solo desktop): filtros en la URL
+   (usuario, módulo, acción, desde/hasta, N° de vale/remito/pedido),
+   paginación server-side de 50 con desempate por id, detalle antes/después,
+   exportar Excel del filtro completo. Antes: propuesta del N° de pedido
+   (decisión 3).
+6. Prueba con cada rol real en navegador limpio + revisar 401/403 en logs;
+   sumar a `procedimientos.md` que toda corrección por SQL lleva su fila de
+   auditoría.
+
+**Checklist de entidades:** pedidos/pedido (crear, editar, confirmar,
+postergar con fechas, archivar, cancelar con motivo); despachos/despacho
+(finalizar con residual, corregir), carga_asfalto, carga_hormigon;
+bascula/vale (crear con datos del ingreso, corregir, anular, reasignar),
+ingreso; stock/movimiento_manual, relevamiento (los descuentos automáticos se
+auditan en la entidad origen); remitos/remito_manual; formulas/formula (crear,
+editar insumos y dosajes, cambio de tipo, activar/desactivar);
+maestros/material (incluye renombres), cliente, proveedor, chofer, patente,
+encargado, obra_local; usuarios/usuario_rol, rol, permiso. Precios/ventas: no
+aplica (plantas no tiene columnas de precio; las ventas externas son pedidos
+tipo 'venta', auditados como pedido).
+
+**No aplica de la spec de flota:** usuarios PIN / fn_auditoria_pin /
+LOGIN_FALLIDO (plantas solo usa email de Supabase Auth); auditService.log
+desde el cliente y "falla en silencio" (acá se audita en la transacción);
+idParaAuditoria (entidad_ref text); usuario_id de dos orígenes; columna ip;
+lectura para cualquier logueado; flota_audit_log.
+
+**Estado actual relevado (2026-10-03):** sin rastro hoy: edición/archivado de
+pedidos, cargas, movimientos manuales y relevamientos (solo el movimiento),
+fórmulas, maestros, roles, permisos, obras archivadas. Las correcciones por
+SQL del 29/09 y 01/10 quedaron en el historial sin usuario (lección 5.5).
+
+---
+
+### Pendientes anteriores (2026-10-01)
 
 **Abierto, en orden:**
 1. **Push a GitHub**: ~24 commits locales sin subir. Lo corre Federico
