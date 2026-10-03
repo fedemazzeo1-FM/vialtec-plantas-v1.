@@ -43,6 +43,7 @@ const {
   materiales,
   pedidosParaPesada,
   nombreDestinoPedido,
+  etiquetaPedidoPesada,
   proximoNumeroVale,
   proximoNumeroValeArido,
   puertasAbiertas,
@@ -338,8 +339,7 @@ watch(
               >
                 <option value="" disabled>Elegir pedido…</option>
                 <option v-for="p in pedidosParaPesada" :key="p.id" :value="p.id">
-                  {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn
-                  ({{ p.estado }})
+                  {{ etiquetaPedidoPesada(p) }}
                 </option>
               </select>
               <p v-if="!pedidosParaPesada.length" class="mt-1 text-xs text-text-soft">

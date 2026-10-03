@@ -205,6 +205,16 @@ export function useBascula() {
     return 'Obra sin asignar'
   }
 
+  /**
+   * Opción del selector de pedidos de "Vale Asfalto" (2026-10-02, pedido de
+   * Federico: la fecha del pedido al lado del estado, para guiar al
+   * balancero). Ej: "AGGM CONSTRUCCIONES — 19.98 tn (confirmado - 02/10/2026)".
+   */
+  function etiquetaPedidoPesada(p) {
+    const fecha = p.fecha_programada ? p.fecha_programada.split('-').reverse().join('/') : 'sin fecha'
+    return `${nombreDestinoPedido(p)} — ${p.cantidad_solicitada} tn (${p.estado} - ${fecha})`
+  }
+
   async function cargarBase() {
     cargandoBase.value = true
     try {
@@ -979,6 +989,7 @@ export function useBascula() {
     materiales,
     pedidosParaPesada,
     nombreDestinoPedido,
+    etiquetaPedidoPesada,
     proximoNumeroVale,
     proximoNumeroValeArido,
     puertasAbiertas,
