@@ -20,6 +20,7 @@ import { usePedidos } from '@/modules/pedidos/composables/usePedidos'
 import { useDespachoAsfalto } from '@/modules/pedidos/composables/useDespachoAsfalto'
 import { useCargaHormigon } from '@/modules/pedidos/composables/useCargaHormigon'
 import PedidoCard from '@/modules/pedidos/components/PedidoCard.vue'
+import ResumenAnualMobile from '@/modules/dashboard/components/ResumenAnualMobile.vue'
 import { ESTADOS, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useAuthStore } from '@/stores/auth.store'
@@ -202,6 +203,10 @@ iniciar()
         </div>
       </div>
     </div>
+
+    <!-- Acumulado del año: solo mobile, solo admin/gerencia (2026-10-02) —
+         en mobile no hay Home y estos roles aterrizan acá. -->
+    <ResumenAnualMobile />
 
     <VSection title="Pedidos">
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
