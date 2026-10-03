@@ -105,13 +105,20 @@ export async function fetchConsumoInsumosDelMes(mes) {
     if (!formula || cantidad <= 0) continue
     for (const { material, kg } of calcularConsumoTotalKg(formula, cantidad)) {
       if (sinDescuento.includes(clave(material))) continue
-      const nombre = nombreCatalogo[clave(material)] || (material || '').trim() || 'Sin especificar'
-      porMaterial.set(nombre, (porMaterial.get(nombre) ?? 0) + kg)
+      const enCatalogo = nombreCatalogo[clave(material)]
+      const nombre = enCatalogo || (material || '').trim() || 'Sin especificar'
+      const previo = porMaterial.get(nombre) ?? { kg: 0, fueraDeCatalogo: !enCatalogo }
+      previo.kg += kg
+      porMaterial.set(nombre, previo)
     }
   }
 
+  // fueraDeCatalogo: el insumo de la fórmula no coincide con ningún material
+  // del catálogo (ej. "Arena 0-6" vs "ARENA 0/6", fórmula H-13). Sale como
+  // fila aparte y el stock no lo descuenta — el Excel lo marca para revisar
+  // la fórmula, en vez de partir el total en silencio.
   const filas = Array.from(porMaterial.entries())
-    .map(([material, kg]) => ({ material, toneladas: kg / 1000 }))
+    .map(([material, { kg, fueraDeCatalogo }]) => ({ material, toneladas: kg / 1000, fueraDeCatalogo }))
     .sort((a, b) => b.toneladas - a.toneladas)
 
   return { filas, totalTn: filas.reduce((acc, f) => acc + f.toneladas, 0) }

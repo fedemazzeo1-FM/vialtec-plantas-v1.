@@ -200,7 +200,7 @@ function armarHojaResumenMensual(workbook, datos) {
   datos.consumoInsumos.filas.forEach((f, i) => {
     const row = ws.getRow(fila)
     row.getCell(1).value = i + 1
-    row.getCell(2).value = f.material
+    row.getCell(2).value = f.fueraDeCatalogo ? `${f.material} (fuera del catálogo: revisar la fórmula)` : f.material
     row.getCell(3).value = TN(f.toneladas)
     ;[1, 2, 3].forEach((c) => estiloCuerpo(row.getCell(c)))
     fila++
