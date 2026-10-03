@@ -20,12 +20,17 @@ código (`6bc49fa`, deploy `dpl_7faWdK4My1udebzp6zmWHVn1bs4V`).
 4. **Consumo de insumos**: Federico compara los valores nuevos de septiembre
    contra sus ajustes manuales. Quedó el criterio A (fórmula × cantidad);
    alternativa B = lo realmente descontado de stock, si lo pide.
-5. **Fórmula "HORMIGON  H-13"**: 6 insumos fuera del catálogo, no descuenta
-   stock (ver nota de Fórmulas abajo). Nunca se despachó (0 pedidos), no
-   explica ningún desfasaje del informe. UPDATE propuesto (falta OK de
-   Federico + confirmar "Cemento CP 40"→CEMENTO CPC 40 y "AD PLAS"→ADD PLAS):
-   Arena 0-6→ARENA 0/6, " Piedra 6-20"→PIEDRA 6/20, " Piedra 10-30"→PIEDRA
-   10/30, Arena silicea→ARENA SILICIA.
+5. ~~Fórmula H-13 fuera de catálogo~~ — **resuelto por la migración 50
+   (APLICADA 2026-10-02, OK de Federico)**: catálogo unificado con la lista
+   oficial (ver `business-rules.md` §Catálogo de materiales). Respaldo del
+   estado previo en `plantas_respaldo_mig50` (688 filas). Verificado
+   post-aplicación: stock 6.170.964,67 kg y 1.603 movimientos sin cambio;
+   fórmulas/ingresos/vales solo con nombres del catálogo; 4 triggers + 2 FK
+   activos; helpers sin EXECUTE para anon/authenticated. Dry-run:
+   `supabase/scripts/dry_run_migracion_50.sql` (8 chequeos OK). Sin probar en
+   la UI con sesión (Báscula/Fórmulas/Stock/Analítica con los nombres nuevos).
+   El vale GAS-OIL del 01/10 no movió stock porque estaba en 0 (piso); ahora
+   GAS-OIL no controla stock. Nombre "HORMIGON  H-13" (doble espacio) sin tocar.
 5b. **2026-10-02 (commits `2f1faf2`, `e2161f2`, sin deploy)**: el Excel marca
    insumos fuera del catálogo en "Consumo de insumos"; botón "Copiar las 3
    juntas" en el modal de imágenes para email (HTML con PNG embebidos — sin

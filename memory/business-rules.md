@@ -21,6 +21,21 @@ o total. Gemelas SQL: CHECK de `plantas_formulas`/`plantas_pedidos` y
 `registrar_carga_hormigon` (migración 49). El tipo del pedido se copia de la
 fórmula al crearlo.
 
+## Catálogo de materiales — un solo nombre (Federico, 2026-10-02, migración 50)
+
+Lista oficial: `0/6`, `6/20`, `6/12`, `0/3`, `FILLER`, `ARENA` (silícea),
+`CEMENTO`, `ADITIVO`, `10/30`, `ASFALTO CA30`, `FUEL OIL`, `12/20`,
+`AM3 AUTOVIA`, más `ASFALTO AM3` (propio, NO es AM3 AUTOVIA). Sin control de
+stock (no suman ni descuentan): `AGUA`, `PURGUE`, `GAS-OIL`, `FRESADO`, `CAL`.
+
+- Fórmulas, `plantas_ingresos.material` y `plantas_vales.material` usan el
+  nombre exacto del catálogo: un trigger normaliza mayúsculas y rechaza
+  cualquier nombre que no esté (FK a `plantas_materiales.nombre`).
+- Renombrar un material en Maestros arrastra fórmulas, ingresos y vales
+  (FK ON UPDATE CASCADE + trigger sobre fórmulas). No crear variantes.
+- `controla_stock = false` lo respeta `plantas_aplicar_movimiento_stock`
+  (todos los caminos: báscula, despachos, manual, relevamiento).
+
 ## Flujo de pedidos
 
 ```
