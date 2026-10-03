@@ -21,7 +21,18 @@ código (`6bc49fa`, deploy `dpl_7faWdK4My1udebzp6zmWHVn1bs4V`).
    contra sus ajustes manuales. Quedó el criterio A (fórmula × cantidad);
    alternativa B = lo realmente descontado de stock, si lo pide.
 5. **Fórmula "HORMIGON  H-13"**: 6 insumos fuera del catálogo, no descuenta
-   stock (ver nota de Fórmulas abajo).
+   stock (ver nota de Fórmulas abajo). Nunca se despachó (0 pedidos), no
+   explica ningún desfasaje del informe. UPDATE propuesto (falta OK de
+   Federico + confirmar "Cemento CP 40"→CEMENTO CPC 40 y "AD PLAS"→ADD PLAS):
+   Arena 0-6→ARENA 0/6, " Piedra 6-20"→PIEDRA 6/20, " Piedra 10-30"→PIEDRA
+   10/30, Arena silicea→ARENA SILICIA.
+5b. **2026-10-02 (commits `2f1faf2`, `e2161f2`, sin deploy)**: el Excel marca
+   insumos fuera del catálogo en "Consumo de insumos"; botón "Copiar las 3
+   juntas" en el modal de imágenes para email (HTML con PNG embebidos — sin
+   probar pegando en Gmail/Outlook). Auditoría sep/2026: informe = SQL exacto;
+   el stock descontado quedó por debajo del teórico (CA30 −12,8 tn: 7 pedidos
+   CAC19 del 02 al 11/09 sin movimiento de CA30; 3 pedidos legado sin
+   movimiento). Causa del CA30 sin confirmar.
 6. **KPI "Asfalto (período)" de Pedidos** suma pedidos cancelados (ver §10).
 7. **Optimización de rendimiento — FASE 1 a medio hacer** (§9). Hecho y ya en
    producción: desempate por `id` (`fd79bea`). Siguiente paso: ítems 1+6
