@@ -105,51 +105,29 @@ para anon/authenticated; `plantas__auditoria_patch` borrada.
   aplicación); roles encargado/supervisor/gerencia/plantista_hormigon quedan
   para la etapa 6.
 
-### ▶▶ PARA RETOMAR (guardado 2026-10-05 17:10, por si se corta la sesión)
+### ▶▶ PARA RETOMAR (actualizado 2026-10-05 20:45)
 
-**Estado:** rama `main` (lo que se deploya esta noche). Etapas 1 a 4 de
-Auditoría APLICADAS (migraciones 51-59 y 61). La 61 (triggers) se aplicó y
-verificó hoy: 10 triggers activos; por ahora ELIMINAR en Maestros registra el
-texto fijo "Eliminado desde la pantalla (no se pide motivo)".
-
-**PASO A — hoy a partir de las 19:35 (orden de Federico, no cambiar):**
-1. Revisar en los logs de la API (`query_logs`, source `edge_logs`, rutas
-   `/rest/v1/rpc/registrar_pesada_bascula`, `corregir_vale_bascula`,
-   `anular_vale_bascula`, `reasignar_vale_bascula`, `registrar_carga_*`,
-   `finalizar_despacho`, `corregir_despacho`) que NO haya actividad de báscula
-   ni de despachos en los últimos 15 minutos. Si hay, esperar y volver a mirar.
-2. La reversión (`supabase/scripts/revertir_migraciones_60_62.sql`) YA está
-   probada (05/10, en una transacción revertida: aplicar 60 + 62, revertir, y
-   las 3 funciones vuelven al md5 actual, `corregir_vale_bascula` a 11
-   parámetros con sus permisos, 10 triggers). No hace falta repetirlo salvo
-   que producción haya cambiado.
-3. Aplicar `60_motivo_obligatorio_correcciones.sql` y
-   `62_eliminar_maestros_con_motivo.sql` (ensayos OK:
-   `dry_run_migracion_60.sql` 7 chequeos, `dry_run_migracion_62.sql` 7
-   chequeos) y, EN EL MISMO MOMENTO, `npm run build` + `npx vercel --prod`
-   desde `main` (commits `cb3bb27` correcciones y `9dc7421` Maestros; el
-   primer intento de deploy del 05/10 dio "Not authorized" y el reintento
-   pasó). **Nunca dejar la migración sin el deploy: si el deploy falla,
-   correr `revertir_migraciones_60_62.sql`.**
-4. Verificar: producción sirve el bundle de `dist/index.html`; md5 de
-   `corregir_despacho` = `64c25609bdc164a1f8bc38806a0a3fa2` y de
-   `corregir_vale_bascula` = `f1c5e2d4f2e5d7137fd06a7aa6fe7657`, una sola
-   `corregir_vale_bascula` (12 parámetros) con authenticated y sin anon;
-   `plantas_eliminar_maestro` existe sin anon. Probar en vivo que los modales
-   piden el motivo (sin guardar nada real).
-5. Después: actualizar `referencia_funciones_auditadas.sql` (2 funciones),
-   este archivo, commit y `git push origin main` (el auto-deploy por Git está
-   desactivado, ver abajo).
+**Estado:** etapas 1 a 4 de Auditoría APLICADAS, y desde hoy 20:35 también
+las migraciones 60 y 62 (motivo obligatorio en correcciones y al eliminar en
+Maestros) con su frontend EN PRODUCCIÓN (deploy
+`vialtec-plantas-v2-kk5rqt0ph`, bundle `index-sU4CBIYR.js`). Antes de aplicar
+se revisaron los logs (sin escrituras en 20 min). Verificado: md5 de
+`corregir_despacho` `64c25609…` y `corregir_vale_bascula` `f1c5e2d4…` (12
+parámetros), `plantas_eliminar_maestro` sin anon; en vivo con sesión admin,
+los modales de Maestros (eliminar), Báscula (editar vale) y Despachos
+(corregir) piden el motivo y no dejan guardar sin él. No se guardó ninguna
+corrección ni eliminación real de prueba. La reversión
+(`revertir_migraciones_60_62.sql`) quedó probada pero no hizo falta.
 
 **PASO B — etapa 5, pantalla `/auditoria`: FRENAR antes del deploy.** Está en
-la rama `auditoria-pantalla` (commit `201d15c`), NO en main: service
+la rama `auditoria-pantalla`, NO en main: service
 `src/modules/auditoria/services/auditoria.service.js`, composable
 `useAuditoria.js`, `src/views/AuditoriaView.vue`, ruta `/auditoria` (meta tab
 'usuarios' = solo admin fijo + `soloDesktop`), link "Auditoría" en la sección
-Administración de `nav.js`. Compila; NO se probó en el navegador (no se puede
-iniciar sesión en localhost desde la sesión de Claude). Federico la quiere ver
-antes: `git checkout auditoria-pantalla && npm run dev` y que entre él, o
-pedirle OK para deployarla. Al aprobar: merge a main, build, deploy.
+Administración de `nav.js`. Compila; NO se probó en el navegador desde la
+sesión de Claude (no puede iniciar sesión en localhost). Federico la abre con
+su sesión (`git checkout auditoria-pantalla && npm run dev`,
+http://localhost:5173/auditoria). Al aprobar: merge a main, build, deploy.
 
 **PASO C — etapa 6:** probar con un usuario de cada rol (7) en navegador
 limpio — las contraseñas las tiene que ingresar una persona — y revisar
