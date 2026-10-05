@@ -52,6 +52,7 @@ export const SECCION_ADMINISTRACION = {
     // tabs, el link se filtra solo y el router bloquea el acceso directo
     // por URL igual (mismo guard genérico de siempre).
     { to: '/usuarios', label: 'Administración', tab: 'usuarios', icon: 'engranaje' },
+    { to: '/auditoria', label: 'Auditoría', tab: 'usuarios', icon: 'auditoria' },
     { to: '/maestros', label: 'Maestros', tab: 'maestros', icon: 'base-datos' },
   ],
 }
@@ -79,6 +80,8 @@ export const ICONOS = {
     '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
   usuarios:
     '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="8" r="2.5"/><path d="M15.5 12.5a5 5 0 0 1 5.8 4.9"/>',
+  auditoria:
+    '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><polyline points="9 12 11.2 14.2 15 10"/>',
   engranaje:
     '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   salir: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
