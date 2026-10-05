@@ -270,7 +270,7 @@ end;
 $function$;
 
 -- ---------------------------------------------------------------------------
--- corregir_despacho — md5(prosrc) = 97902d48adcf29fb287572e652cd5465
+-- corregir_despacho — md5(prosrc) = 64c25609bdc164a1f8bc38806a0a3fa2 (desde la migración 60: motivo obligatorio)
 -- ---------------------------------------------------------------------------
 -- create or replace function corregir_despacho(...) ... as $function$
 declare
@@ -290,6 +290,9 @@ begin
   end if;
   if v_pedido.estado <> 'despachado' then
     raise exception 'Solo se puede corregir un despacho ya cerrado (estado actual: %).', v_pedido.estado;
+  end if;
+  if nullif(btrim(p_notas), '') is null then
+    raise exception 'Indicá el motivo de la corrección.';
   end if;
   if p_cantidad_despachada is not null and not (p_cantidad_despachada > 0) then
     raise exception 'La cantidad corregida debe ser mayor a 0.';
@@ -315,14 +318,16 @@ begin
   values (p_pedido_id, 'corregido', now(), auth.uid(), p_notas, v_diff);
 
   select * into v_pedido from plantas_pedidos where id = p_pedido_id;
-  perform plantas_auditar_pedido(case when nullif(btrim(p_notas), '') is null then 'EDITAR' else 'CORREGIR' end, 'despacho', p_pedido_id, p_notas, v_aud_antes);
+  if v_aud_antes is distinct from to_jsonb(v_pedido) then
+    perform plantas_auditar_pedido('CORREGIR', 'despacho', p_pedido_id, btrim(p_notas), v_aud_antes);
+  end if;
 
   return v_pedido;
 end;
 $function$;
 
 -- ---------------------------------------------------------------------------
--- corregir_vale_bascula — md5(prosrc) = 0ef930081a9f6ef24e1f16ddc6a97bb2
+-- corregir_vale_bascula — md5(prosrc) = f1c5e2d4f2e5d7137fd06a7aa6fe7657 (desde la migración 60: motivo obligatorio; 12 parámetros, se agregó p_motivo)
 -- ---------------------------------------------------------------------------
 -- create or replace function corregir_vale_bascula(...) ... as $function$
 declare
@@ -344,6 +349,10 @@ begin
   end if;
   if v_vale.anulado then
     raise exception 'Este vale está anulado — no se puede editar. Cargá un vale nuevo si corresponde.';
+  end if;
+
+  if nullif(btrim(p_motivo), '') is null then
+    raise exception 'Indicá el motivo de la corrección del vale.';
   end if;
 
   if not (p_peso_bruto > 0) then
@@ -414,7 +423,7 @@ begin
     );
   end if;
 
-  insert into plantas_vales_historial (vale_id, accion, pedido_anterior_id, pedido_nuevo_id, antes, despues, usuario_email)
+  insert into plantas_vales_historial (vale_id, accion, pedido_anterior_id, pedido_nuevo_id, antes, despues, usuario_email, motivo)
   values (
     p_vale_id, 'edicion', v_vale.pedido_id, v_vale.pedido_id, v_antes,
     jsonb_build_object(
@@ -425,10 +434,12 @@ begin
       select jsonb_build_object('proveedor', proveedor, 'numero_remito', numero_remito, 'cantidad_remito', cantidad)
       from plantas_ingresos where vale_id = p_vale_id limit 1
     ), '{}'::jsonb) else '{}'::jsonb end,
-    auth.email()
+    auth.email(), btrim(p_motivo)
   );
 
-  perform plantas_auditar_vale('EDITAR', p_vale_id, null, v_aud_antes);
+  if v_aud_antes is distinct from plantas_auditoria_snapshot_vale(p_vale_id) then
+    perform plantas_auditar_vale('CORREGIR', p_vale_id, btrim(p_motivo), v_aud_antes);
+  end if;
 
   return v_vale;
 end;
