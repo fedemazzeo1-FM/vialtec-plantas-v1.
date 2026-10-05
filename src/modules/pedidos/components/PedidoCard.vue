@@ -21,6 +21,7 @@ import VBadge from '@/components/shared/VBadge.vue'
 import VButton from '@/components/shared/VButton.vue'
 import { computed, ref } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { formatearNumeroPedido } from '@/services/formato-numeros'
 import { esCircuitoBascula, esCircuitoMixer, unidadLabelTipoProducto } from '@/config/tipos-producto'
 import {
   VARIANTE_ESTADO,
@@ -113,6 +114,7 @@ function formatearFechaHoraCreacion(iso) {
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2">
           <VBadge :variant="VARIANTE_ESTADO[pedido.estado]">{{ pedido.estado }}</VBadge>
+          <span v-if="pedido.numero" class="text-xs font-semibold text-text-soft">{{ formatearNumeroPedido(pedido.numero) }}</span>
           <h3 class="truncate text-base font-bold text-text">{{ pedido.destino }}</h3>
           <span v-if="pedido.archivado" class="text-xs text-text-soft">(archivado)</span>
         </div>

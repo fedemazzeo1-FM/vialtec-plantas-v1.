@@ -20,6 +20,7 @@
 // compartida con otro módulo.
 
 import { nombreTipoProducto, tipoProducto, unidadLabelTipoProducto } from '@/config/tipos-producto'
+import { formatearNumeroPedido } from '@/services/formato-numeros'
 
 function destinoLabel(pedido, obraNombre) {
   return pedido.tipo_pedido === 'venta' ? pedido.cliente_externo || 'cliente externo' : obraNombre || 'obra'
@@ -45,11 +46,13 @@ function fechaLabel(fechaIso) {
 }
 
 /**
- * Cuerpo común a los 3 avisos: destino + cantidad, mezcla, fecha y los datos
- * opcionales del pedido (solo si están cargados, para no mandar líneas vacías).
+ * Cuerpo común a los 3 avisos: N° de pedido, destino + cantidad, mezcla, fecha
+ * y los datos opcionales del pedido (solo si están cargados, para no mandar
+ * líneas vacías).
  */
 function lineasDetalle(pedido, { obraNombre, formulaNombre, conEncargado = false }) {
   const lineas = [
+    ...(pedido.numero ? [`Pedido ${formatearNumeroPedido(pedido.numero)}`] : []),
     `${destinoLabel(pedido, obraNombre)} — ${pedido.cantidad_solicitada} ${unidad(pedido)}`,
     `Mezcla: ${formulaNombre || '—'}`,
     `Fecha: ${fechaLabel(pedido.fecha_programada)}`,
