@@ -105,12 +105,54 @@ para anon/authenticated; `plantas__auditoria_patch` borrada.
   aplicación); roles encargado/supervisor/gerencia/plantista_hormigon quedan
   para la etapa 6.
 
-### PENDIENTE (aprobado por Federico): motivo obligatorio en correcciones
+### PRÓXIMO PASO 1 — después de las 19 h: migración 60 + deploy (motivo obligatorio)
 
-`corregir_despacho` (hoy CORREGIR con notas / EDITAR sin notas) y
-`corregir_vale_bascula` (hoy EDITAR, no recibe motivo) pasan a exigir motivo
-y registrar siempre CORREGIR. Función y pantalla juntas. Ensayo, mostrar a
-Federico, y el deploy SOLO después de las 19 h (fuera del horario de báscula).
+Aprobado por Federico: `corregir_despacho` y la edición de vales de báscula
+exigen motivo y registran siempre CORREGIR. Listo y SIN APLICAR:
+- `supabase/migrations/60_motivo_obligatorio_correcciones.sql` (commit
+  `cd4744d`): `corregir_despacho` rechaza sin notas; `corregir_vale_bascula`
+  suma `p_motivo` (drop + create, permisos sin anon), guarda el motivo también
+  en `plantas_vales_historial`; una corrección que no cambia nada no deja fila.
+- Frontend (commit `cb3bb27`, sin deploy y sin push): campo "Motivo de la
+  corrección (obligatorio)" en el modal Editar vale (sirve también para el
+  cambio de pedido) y en Corregir despacho (que ahora muestra el error dentro
+  del modal).
+- Ensayo corrido inline contra producción y revertido (2026-10-05, 7 chequeos
+  OK; no quedó guardado como script). Incluye: la llamada de la pantalla vieja
+  (sin motivo) recibe "Indicá el motivo de la corrección del vale.".
+- ORDEN: aplicar la 60 y deployar en el mismo momento, fuera del horario de
+  báscula (Federico: después de las 19 h). Con la 60 aplicada y el frontend
+  viejo, nadie puede editar vales ni corregir despachos sin notas.
+- Después: actualizar `referencia_funciones_auditadas.sql` (2 funciones).
+
+### PRÓXIMO PASO 2 — Auditoría etapa 4: ensayo OK, falta el OK de Federico
+
+`supabase/migrations/61_auditoria_triggers.sql` SIN APLICAR: trigger genérico
+`plantas_trg_auditar` (SECURITY DEFINER) en fórmulas, materiales, proveedores,
+clientes, encargados, choferes, patentes, roles, permisos y obras_locales.
+Dry-run `supabase/scripts/dry_run_migracion_61.sql` OK (21 filas). Reglas:
+- Sin doble registro: se saltea si `pg_trigger_depth() > 1` (renombre de
+  material que reescribe fórmulas = 1 sola fila). Ninguna RPC escribe en esas
+  tablas (verificado). Los permisos borrados en cascada con su rol no dejan
+  fila (ojo: el borrado en cascada NO cuenta como trigger anidado; se detecta
+  porque el rol ya no existe).
+- Solo cambia activo/habilitado = CAMBIAR_ESTADO; obra archivada/desarchivada
+  = CAMBIAR_ESTADO; cambio de `tipo` de fórmula = fila aparte "CAMBIO DE TIPO".
+- Permisos: solo celdas que cambian; al crear un rol, solo las habilitadas.
+- A confirmar con Federico: ELIMINAR exige motivo y las pantallas de Maestros
+  no lo piden → queda el texto fijo "Eliminado desde la pantalla (no se pide
+  motivo)".
+Sigue: etapa 5 (pantalla /auditoria) y 6 (prueba por rol + procedimientos.md).
+
+### Deploy automático de Vercel desde GitHub — DESACTIVADO (2026-10-05)
+
+El push del 05/10 (primero desde una sesión de Claude) disparó un deploy a
+producción por la integración de Git (`dpl_CHaippT1HcQu1CHnG6GXaZnQYdgd`,
+mismo bundle que el manual, sin efecto visible). Se agregó
+`"git": { "deploymentEnabled": false }` a `vercel.json` (commit `802b0c3`);
+el push siguiente ya no generó deploy. `npx vercel --prod` sigue funcionando
+igual. Si alguna vez reaparece un deploy tras un push, revisar eso primero.
+Primera fila real de auditoría: 05/10 16:37, balanza, EDITAR vale I-00607.
 
 ### Módulo de Auditoría — plan aprobado (2026-10-03)
 
