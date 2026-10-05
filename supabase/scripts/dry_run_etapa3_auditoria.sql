@@ -500,7 +500,7 @@ end;$a$,
 end;$b$
 );
 
-select plantas__auditoria_patch('registrar_relevamiento_stock', '73a565628aa60cea09e001a8a0369ff4', '90048e1869f14c07c9d82dff91bf0c29',
+select plantas__auditoria_patch('registrar_relevamiento_stock', '73a565628aa60cea09e001a8a0369ff4', 'a832a4464a153b77e49c34a5713d2919',
   $a$
 declare
 $a$,
@@ -513,7 +513,7 @@ $a$,
   $b$      return next v_mov;
       v_aud_items := v_aud_items || jsonb_build_object(
         'material', (select nombre from plantas_materiales where id = v_material_id),
-        'antes_kg', v_actual, 'despues_kg', v_nueva, 'ajuste_kg', v_mov.cantidad_kg);
+        'antes_kg', round(v_actual, 2), 'despues_kg', round(v_nueva, 2), 'ajuste_kg', round(v_mov.cantidad_kg, 2));
 $b$,
   $a$
   return;
