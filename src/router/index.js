@@ -80,6 +80,15 @@ const routes = [
     component: () => import('@/views/AdministracionView.vue'),
     meta: { tab: 'usuarios' },
   },
+  // Auditoría: mismo candado fijo que Administración (tab 'usuarios' = solo
+  // admin, no editable desde la matriz) y solo escritorio. La restricción
+  // real está en la base (policy de plantas_auditoria, migración 53).
+  {
+    path: '/auditoria',
+    name: 'auditoria',
+    component: () => import('@/views/AuditoriaView.vue'),
+    meta: { tab: 'usuarios', soloDesktop: true },
+  },
   // TODO: /backup — a medida que se implemente (ver memory/modules-status.md).
 ]
 
@@ -124,6 +133,11 @@ router.beforeEach(async (to, from) => {
     // Mismo fallback que arriba — nunca asumir 'dashboard' como destino
     // seguro, un rol sin permiso ahí loopearía contra este mismo chequeo.
     return { name: auth.rutaInicioSesion(esPantallaMobile()) }
+  }
+
+  // Pantallas solo de escritorio (Auditoría): en mobile, a la pantalla de inicio.
+  if (to.meta.soloDesktop && esPantallaMobile()) {
+    return { name: auth.rutaInicioSesion(true) }
   }
 
   return true
