@@ -62,8 +62,10 @@ function crudEntidad(tabla, columnaOrden = 'nombre', filtroFijo = null) {
     // histórico ya guardado. RLS ya lo permite (plantas_tiene_permiso
     // ('maestros', 'eliminar'), migración 26) — MaestrosView.vue es quien
     // decide en qué tabs mostrar el botón.
-    async eliminar(id) {
-      const { error } = await supabase.from(tabla).delete().eq('id', id)
+    // Con motivo obligatorio (migración 62): la RPC corre con los permisos
+    // del usuario (mismas policies de RLS) y deja el motivo en la auditoría.
+    async eliminar(id, motivo) {
+      const { error } = await supabase.rpc('plantas_eliminar_maestro', { p_tabla: tabla, p_id: id, p_motivo: motivo })
       if (error) throw error
     },
   }

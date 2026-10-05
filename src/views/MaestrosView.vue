@@ -334,24 +334,29 @@ async function toggleActivo(registro) {
 }
 
 // Borrado real de Camiones (2026-09-09, ver nota en ENTIDADES.vehiculosPropios
-// más arriba) — confirmación simple de un paso, sin motivo (a diferencia de
-// "Anular vale" en Báscula): Federico lo pidió explícitamente rápido, "si
-// llega a ser un error es tan simple como volver a crearlo".
+// más arriba). Desde la migración 62 (2026-10-05, pedido de Federico) pide
+// el motivo, obligatorio: queda en la auditoría junto con quién lo eliminó.
 const modalEliminarAbierto = ref(false)
 const registroEliminar = ref(null)
 const eliminando = ref(false)
+const motivoEliminar = ref('')
 
 function abrirEliminar(registro) {
   registroEliminar.value = registro
+  motivoEliminar.value = ''
   error.value = null
   modalEliminarAbierto.value = true
 }
 
 async function confirmarEliminar() {
+  if (!motivoEliminar.value.trim()) {
+    error.value = 'Indicá el motivo de la eliminación.'
+    return
+  }
   eliminando.value = true
   error.value = null
   try {
-    await maestrosService[tabActiva.value].eliminar(registroEliminar.value.id)
+    await maestrosService[tabActiva.value].eliminar(registroEliminar.value.id, motivoEliminar.value.trim())
     modalEliminarAbierto.value = false
     await cargarRegistros()
   } catch (e) {
@@ -535,6 +540,16 @@ async function confirmarEliminar() {
         <strong>{{ registroEliminar?.patente || registroEliminar?.nombre }}</strong>? Esta acción no se puede
         deshacer — si fue un error, hay que volver a crearlo a mano.
       </p>
+      <div v-if="error" class="mt-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ error }}</div>
+      <label class="mt-3 block text-sm text-text-mid">
+        Motivo (obligatorio)
+        <input
+          v-model="motivoEliminar"
+          type="text"
+          placeholder="Ej.: cargado por error, duplicado"
+          class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+        />
+      </label>
       <div class="mt-4 flex justify-end gap-2">
         <VButton variant="secondary" @click="modalEliminarAbierto = false">Cancelar</VButton>
         <VButton variant="danger" :disabled="eliminando" @click="confirmarEliminar">
