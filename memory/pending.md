@@ -118,10 +118,11 @@ texto fijo "Eliminado desde la pantalla (no se pide motivo)".
    `anular_vale_bascula`, `reasignar_vale_bascula`, `registrar_carga_*`,
    `finalizar_despacho`, `corregir_despacho`) que NO haya actividad de báscula
    ni de despachos en los últimos 15 minutos. Si hay, esperar y volver a mirar.
-2. Antes de aplicar, ensayo en una sola transacción revertida: aplicar 60 +
-   62, correr `supabase/scripts/revertir_migraciones_60_62.sql` y comprobar
-   que los md5 vuelven a los de la etapa 3 (la reversión NO está probada
-   todavía; se generó el 05/10 a las 17:10).
+2. La reversión (`supabase/scripts/revertir_migraciones_60_62.sql`) YA está
+   probada (05/10, en una transacción revertida: aplicar 60 + 62, revertir, y
+   las 3 funciones vuelven al md5 actual, `corregir_vale_bascula` a 11
+   parámetros con sus permisos, 10 triggers). No hace falta repetirlo salvo
+   que producción haya cambiado.
 3. Aplicar `60_motivo_obligatorio_correcciones.sql` y
    `62_eliminar_maestros_con_motivo.sql` (ensayos OK:
    `dry_run_migracion_60.sql` 7 chequeos, `dry_run_migracion_62.sql` 7
