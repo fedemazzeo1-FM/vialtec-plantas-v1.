@@ -25,8 +25,9 @@ import {
 } from '@/services/excel-corporativo'
 
 import { nombreTipoProducto, unidadLabelTipoProducto } from '@/config/tipos-producto'
+import { formatearNumeroPedido } from '@/services/formato-numeros'
 
-const COLUMNAS = ['Fecha', 'Obra / Cliente', 'Mezcla', 'Tipo', 'Pedido', 'Real', 'Diferencia']
+const COLUMNAS = ['N° pedido', 'Fecha', 'Obra / Cliente', 'Mezcla', 'Tipo', 'Pedido', 'Real', 'Diferencia']
 
 function formatearCantidad(valor, tipo) {
   const unidad = unidadLabelTipoProducto(tipo)
@@ -52,6 +53,7 @@ export async function exportarDespachosFiltroExcel(filas, resumenFiltros) {
   const worksheet = workbook.addWorksheet('Despachos filtrados')
 
   const filasFormateadas = filas.map((f) => [
+    formatearNumeroPedido(f.numero),
     f.fecha_programada,
     f.destino,
     f.formulaNombre,
@@ -100,6 +102,7 @@ export async function exportarDespachosFiltroExcel(filas, resumenFiltros) {
     const label = tiposPresentes.length > 1 ? `TOTAL ${etiquetaTipo(tipo).toUpperCase()}` : 'TOTAL'
     const row = worksheet.getRow(fila)
     row.values = [
+      '',
       '',
       '',
       '',

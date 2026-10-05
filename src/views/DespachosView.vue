@@ -16,7 +16,7 @@ import VKpiCard from '@/components/shared/VKpiCard.vue'
 import { useDespachos } from '@/modules/despachos/composables/useDespachos'
 import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
-import { formatearNumeroRemito } from '@/services/formato-numeros'
+import { formatearNumeroRemito, formatearNumeroPedido } from '@/services/formato-numeros'
 import { ref } from 'vue'
 import ReporteEjecutivoMensual from '@/modules/despachos/components/ReporteEjecutivoMensual.vue'
 import { useReporteEjecutivo } from '@/modules/despachos/composables/useReporteEjecutivo'
@@ -32,6 +32,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
 const mesActualLabel = MESES[new Date().getMonth()]
 
 const columnas = [
+  { key: 'numero', label: 'N°' },
   { key: 'fecha_programada', label: 'Fecha' },
   { key: 'destino', label: 'Obra' },
   { key: 'formulaNombre', label: 'Mezcla' },
@@ -409,6 +410,9 @@ async function descargarPdfVale() {
           :total="totalDespachos"
           @update:page="cambiarPagina"
         >
+          <template #cell-numero="{ row }">
+            <span class="whitespace-nowrap text-text-soft">{{ formatearNumeroPedido(row.numero) }}</span>
+          </template>
           <template #cell-fecha_programada="{ row }">
             <p>{{ row.fecha_programada }}</p>
             <!-- Solicitante junto a la fecha (2026-09-02, réplica del legado:
