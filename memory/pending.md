@@ -64,11 +64,54 @@ balancero (Supabase Auth + `plantas_usuarios_roles` rol balancero) y dar de
 baja la cuenta compartida: cerrar sus sesiones (primero la del celular) y
 desactivarla. No hacer nada hasta que Federico pase los nombres.
 
-### PRÓXIMO PASO: frontend del N° de pedido y después etapa 3 de Auditoría
+### Frontend del N° de pedido — EN PRODUCCIÓN (2026-10-05)
 
-Frontend del número (pantallas, WhatsApp, remito, Excel, buscador en Pedidos)
-en commits aparte + deploy. Después etapa 3: las 17 RPC auditan adentro
-(dry-run por grupo, OK de Federico en cada uno).
+Commits `a73e90f` (tarjeta de Pedidos + avisos de WhatsApp), `06523e4`
+(buscador por N° en los filtros de Pedidos, solo desktop: busca en todo el
+historial e ignora el resto de los filtros), `d7d48ef` (columna N° en
+Despachos + Excel del filtro), `f7e7814` (selectores de pedido de Báscula +
+línea "Pedido: P-0230" en el remito impreso). Helpers
+`formatearNumeroPedido`/`parsearNumeroPedido` en `src/services/formato-numeros.js`.
+Deploy `vialtec-plantas-v2-rom11ujvk` (el primer intento dio "Not authorized",
+el reintento pasó). Verificado en vivo con sesión admin: Pedidos muestra el
+número, el buscador encuentra P-0001, Despachos tiene la columna, el selector
+de Báscula lo muestra, sin errores de consola. Sin probar: mensaje de
+WhatsApp, remito impreso y Excel abiertos de verdad; el informe mensual NO
+lleva el número (no se tocó).
+
+### PRÓXIMO PASO: Auditoría etapa 3 — ensayo OK, falta el OK de Federico para aplicar
+
+Migraciones 54 a 59 escritas, SIN APLICAR:
+- 54 helpers (`plantas_auditoria_label_pedido`, `plantas_auditar_pedido`,
+  `plantas_auditoria_snapshot_vale`, `plantas_auditoria_label_vale`,
+  `plantas_auditar_vale`) + `plantas__auditoria_patch` (temporal, la borra la 59).
+- 55 pedidos y despachos (10 funciones), 56 báscula (4), 57 stock (2),
+  58 remitos (1), 59 usuarios (1). Aplicar en ese orden.
+- Método: no se reescriben los cuerpos; el patch toma `pg_get_functiondef` de
+  producción, verifica md5 del cuerpo esperado, inserta las llamadas en anclas
+  únicas, verifica el md5 del resultado y recrea. Los 18 cuerpos de producción
+  se compararon por md5 con el repo: 16 idénticos; `registrar_carga_asfalto`
+  (mig. 39) y `registrar_pesada_bascula` (mig. 44) iguales salvo que en
+  producción no tienen los comentarios.
+- Dry-run `supabase/scripts/dry_run_etapa3_auditoria.sql` corrido contra
+  producción y revertido (2026-10-05): las 18 auditan, 27 filas en el ensayo,
+  probado con admin, plantista y balancero; si la auditoría falla la operación
+  no se hace. Bloquea pedidos/vales/remitos manuales mientras corre y devuelve
+  las 5 secuencias a su valor (verificado después: sin cambios).
+- Decisiones tomadas sin consultar, a confirmar con Federico:
+  (a) `corregir_despacho` registra CORREGIR si trae notas y EDITAR si no (hoy
+  las notas son opcionales; 2 de 3 correcciones históricas no las tienen);
+  (b) `corregir_vale_bascula` registra EDITAR (la función no recibe motivo);
+  hacer obligatorio el motivo en cualquiera de las dos es cambio de firma/UI;
+  (c) el ingreso de áridos se audita dentro del vale (con proveedor, remito y
+  cantidad s/remito), sin fila aparte de entidad `ingreso`;
+  (d) un relevamiento genera UNA fila con la lista de ajustes;
+  (e) archivar se registra como CAMBIAR_ESTADO.
+- Pendiente menor: los kg del relevamiento salen con decimales de coma
+  flotante en el detalle (2182237.9999…); redondear si molesta.
+- Después de aplicar: generar `supabase/scripts/referencia_funciones_auditadas.sql`
+  con los cuerpos completos (mismo md5 que producción).
+Sigue: etapa 4 (triggers, ensayo y frenar), 5 (pantalla), 6 (prueba por rol).
 
 ### Módulo de Auditoría — plan aprobado (2026-10-03)
 
