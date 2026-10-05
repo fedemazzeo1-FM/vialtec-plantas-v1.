@@ -105,44 +105,86 @@ para anon/authenticated; `plantas__auditoria_patch` borrada.
   aplicación); roles encargado/supervisor/gerencia/plantista_hormigon quedan
   para la etapa 6.
 
-### PRÓXIMO PASO 1 — después de las 19 h: migración 60 + deploy (motivo obligatorio)
+### ▶▶ PARA RETOMAR (guardado 2026-10-05 17:10, por si se corta la sesión)
 
-Aprobado por Federico: `corregir_despacho` y la edición de vales de báscula
-exigen motivo y registran siempre CORREGIR. Listo y SIN APLICAR:
-- `supabase/migrations/60_motivo_obligatorio_correcciones.sql` (commit
-  `cd4744d`): `corregir_despacho` rechaza sin notas; `corregir_vale_bascula`
-  suma `p_motivo` (drop + create, permisos sin anon), guarda el motivo también
-  en `plantas_vales_historial`; una corrección que no cambia nada no deja fila.
-- Frontend (commit `cb3bb27`, sin deploy y sin push): campo "Motivo de la
-  corrección (obligatorio)" en el modal Editar vale (sirve también para el
-  cambio de pedido) y en Corregir despacho (que ahora muestra el error dentro
-  del modal).
-- Ensayo corrido inline contra producción y revertido (2026-10-05, 7 chequeos
-  OK; no quedó guardado como script). Incluye: la llamada de la pantalla vieja
-  (sin motivo) recibe "Indicá el motivo de la corrección del vale.".
-- ORDEN: aplicar la 60 y deployar en el mismo momento, fuera del horario de
-  báscula (Federico: después de las 19 h). Con la 60 aplicada y el frontend
-  viejo, nadie puede editar vales ni corregir despachos sin notas.
-- Después: actualizar `referencia_funciones_auditadas.sql` (2 funciones).
+**Estado:** rama `main` (lo que se deploya esta noche). Etapas 1 a 4 de
+Auditoría APLICADAS (migraciones 51-59 y 61). La 61 (triggers) se aplicó y
+verificó hoy: 10 triggers activos; por ahora ELIMINAR en Maestros registra el
+texto fijo "Eliminado desde la pantalla (no se pide motivo)".
 
-### PRÓXIMO PASO 2 — Auditoría etapa 4: ensayo OK, falta el OK de Federico
+**PASO A — hoy a partir de las 19:35 (orden de Federico, no cambiar):**
+1. Revisar en los logs de la API (`query_logs`, source `edge_logs`, rutas
+   `/rest/v1/rpc/registrar_pesada_bascula`, `corregir_vale_bascula`,
+   `anular_vale_bascula`, `reasignar_vale_bascula`, `registrar_carga_*`,
+   `finalizar_despacho`, `corregir_despacho`) que NO haya actividad de báscula
+   ni de despachos en los últimos 15 minutos. Si hay, esperar y volver a mirar.
+2. La reversión (`supabase/scripts/revertir_migraciones_60_62.sql`) YA está
+   probada (05/10, en una transacción revertida: aplicar 60 + 62, revertir, y
+   las 3 funciones vuelven al md5 actual, `corregir_vale_bascula` a 11
+   parámetros con sus permisos, 10 triggers). No hace falta repetirlo salvo
+   que producción haya cambiado.
+3. Aplicar `60_motivo_obligatorio_correcciones.sql` y
+   `62_eliminar_maestros_con_motivo.sql` (ensayos OK:
+   `dry_run_migracion_60.sql` 7 chequeos, `dry_run_migracion_62.sql` 7
+   chequeos) y, EN EL MISMO MOMENTO, `npm run build` + `npx vercel --prod`
+   desde `main` (commits `cb3bb27` correcciones y `9dc7421` Maestros; el
+   primer intento de deploy del 05/10 dio "Not authorized" y el reintento
+   pasó). **Nunca dejar la migración sin el deploy: si el deploy falla,
+   correr `revertir_migraciones_60_62.sql`.**
+4. Verificar: producción sirve el bundle de `dist/index.html`; md5 de
+   `corregir_despacho` = `64c25609bdc164a1f8bc38806a0a3fa2` y de
+   `corregir_vale_bascula` = `f1c5e2d4f2e5d7137fd06a7aa6fe7657`, una sola
+   `corregir_vale_bascula` (12 parámetros) con authenticated y sin anon;
+   `plantas_eliminar_maestro` existe sin anon. Probar en vivo que los modales
+   piden el motivo (sin guardar nada real).
+5. Después: actualizar `referencia_funciones_auditadas.sql` (2 funciones),
+   este archivo, commit y `git push origin main` (el auto-deploy por Git está
+   desactivado, ver abajo).
 
-`supabase/migrations/61_auditoria_triggers.sql` SIN APLICAR: trigger genérico
-`plantas_trg_auditar` (SECURITY DEFINER) en fórmulas, materiales, proveedores,
-clientes, encargados, choferes, patentes, roles, permisos y obras_locales.
-Dry-run `supabase/scripts/dry_run_migracion_61.sql` OK (21 filas). Reglas:
-- Sin doble registro: se saltea si `pg_trigger_depth() > 1` (renombre de
-  material que reescribe fórmulas = 1 sola fila). Ninguna RPC escribe en esas
-  tablas (verificado). Los permisos borrados en cascada con su rol no dejan
-  fila (ojo: el borrado en cascada NO cuenta como trigger anidado; se detecta
-  porque el rol ya no existe).
-- Solo cambia activo/habilitado = CAMBIAR_ESTADO; obra archivada/desarchivada
-  = CAMBIAR_ESTADO; cambio de `tipo` de fórmula = fila aparte "CAMBIO DE TIPO".
-- Permisos: solo celdas que cambian; al crear un rol, solo las habilitadas.
-- A confirmar con Federico: ELIMINAR exige motivo y las pantallas de Maestros
-  no lo piden → queda el texto fijo "Eliminado desde la pantalla (no se pide
-  motivo)".
-Sigue: etapa 5 (pantalla /auditoria) y 6 (prueba por rol + procedimientos.md).
+**PASO B — etapa 5, pantalla `/auditoria`: FRENAR antes del deploy.** Está en
+la rama `auditoria-pantalla` (commit `201d15c`), NO en main: service
+`src/modules/auditoria/services/auditoria.service.js`, composable
+`useAuditoria.js`, `src/views/AuditoriaView.vue`, ruta `/auditoria` (meta tab
+'usuarios' = solo admin fijo + `soloDesktop`), link "Auditoría" en la sección
+Administración de `nav.js`. Compila; NO se probó en el navegador (no se puede
+iniciar sesión en localhost desde la sesión de Claude). Federico la quiere ver
+antes: `git checkout auditoria-pantalla && npm run dev` y que entre él, o
+pedirle OK para deployarla. Al aprobar: merge a main, build, deploy.
+
+**PASO C — etapa 6:** probar con un usuario de cada rol (7) en navegador
+limpio — las contraseñas las tiene que ingresar una persona — y revisar
+401/403 en logs; agregar a `procedimientos.md` que toda corrección por SQL
+lleva su fila de auditoría y que un DELETE por SQL en tablas con trigger
+necesita `select set_config('plantas.motivo_eliminacion', '...', true)` en la
+misma transacción.
+
+**Otros pendientes de Federico:** usuarios individuales por balancero y baja
+de la cuenta `balanza` (abajo). Ensayos que consumen numeración: usar el
+patrón de `dry_run_etapa3_auditoria.sql` (lock + setval, con bloque
+`exception` que restaura también si falla).
+
+### Detalle del paso A — migraciones 60 y 62 (motivo obligatorio)
+
+- 60 (commit `cd4744d`): `corregir_despacho` rechaza sin notas;
+  `corregir_vale_bascula` suma `p_motivo` (drop + create), guarda el motivo en
+  `plantas_vales_historial`; siempre CORREGIR; sin cambios no deja fila.
+- 62 (commit `367b73b`): `plantas_eliminar_maestro(tabla, id, motivo)`
+  (SECURITY INVOKER: valen las policies de RLS) + `plantas_trg_auditar`
+  rechaza un DELETE sin motivo en las 10 tablas con trigger.
+- Con las migraciones aplicadas y el frontend viejo: no se puede editar
+  vales, corregir despachos sin notas ni eliminar en Maestros.
+
+### Auditoría etapa 4 (migración 61) — APLICADA (2026-10-05)
+
+Trigger genérico `plantas_trg_auditar` (SECURITY DEFINER) en fórmulas,
+materiales, proveedores, clientes, encargados, choferes, patentes, roles,
+permisos y obras_locales. Dry-run `dry_run_migracion_61.sql` (21 filas).
+Sin doble registro: se saltea con `pg_trigger_depth() > 1` (renombre de
+material → 1 fila); los permisos borrados en cascada con su rol no dejan fila
+(el cascade NO cuenta como trigger anidado; se detecta porque el rol ya no
+existe). Solo cambia activo/habilitado = CAMBIAR_ESTADO; obras = siempre
+CAMBIAR_ESTADO; cambio de `tipo` de fórmula = fila aparte "CAMBIO DE TIPO";
+permisos: solo celdas que cambian (al crear un rol, solo las habilitadas).
 
 ### Deploy automático de Vercel desde GitHub — DESACTIVADO (2026-10-05)
 
