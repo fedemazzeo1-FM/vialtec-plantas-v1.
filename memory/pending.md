@@ -20,9 +20,55 @@ plantas_puede_ver_*), `plantas_etiqueta_vale`, `plantas_buscar_material_id`,
 `plantas_calcular_consumo_kg` y `rls_auto_enable`. Sin probar en la app con
 sesión real de cada rol (queda para la etapa 6).
 
-### PRÓXIMO PASO: propuesta del N° de pedido (P-0001) y diseño de la etapa 2
+### Migración 52 — número correlativo de pedido — APLICADA (2026-10-05)
 
-Presentados a Federico el 2026-10-05; cada uno espera su OK antes de aplicar.
+`plantas_pedidos.numero` (integer, NOT NULL, UNIQUE, secuencia
+`plantas_pedidos_numero_seq`) + `plantas_etiqueta_pedido(n)` → 'P-0001'.
+Decisiones de Federico: una sola numeración para todos los tipos; el residual
+toma número nuevo propio; huecos aceptados (no se reutiliza). Dry-run
+(`supabase/scripts/dry_run_migracion_52.sql`, 7 chequeos OK) y aplicada con
+OK. Verificado post-aplicación: 229 pedidos P-0001..P-0229 por orden de
+creación, sin nulos ni repetidos, secuencia en 229, sin USAGE de la secuencia
+para anon/authenticated. No se recreó ninguna función (crear_pedido y el
+residual de finalizar_despacho toman el DEFAULT). Sin probar: residual real
+(el dry-run no llamó a finalizar_despacho para no consumir un N° de remito).
+
+### Auditoría — etapa 2 (migración 53) APLICADA (2026-10-05)
+
+`plantas_auditoria_entidades` (catálogo, 20 filas), `plantas_auditoria`
+(vacía) y `plantas_auditar(tipo_accion, modulo, entidad, entidad_ref,
+entidad_label, motivo, antes, despues)`. Decisiones de Federico: trigger que
+rechaza UPDATE/DELETE/TRUNCATE (también por SQL directo; para corregir una
+fila hay que desactivarlo a propósito); catálogo en tabla; CREAR/ELIMINAR
+guardan el registro completo y el resto solo lo cambiado, nunca
+`datos_legados`; un EDITAR sin cambios no genera fila (devuelve null).
+`plantas_auditar` NO tiene EXECUTE para anon ni authenticated (más estricto
+que el plan original): solo la llaman funciones SECURITY DEFINER y triggers
+SECURITY DEFINER. Lectura: policy fija rol admin en las dos tablas.
+Dry-run (`supabase/scripts/dry_run_migracion_53.sql`, 9 chequeos OK) y
+aplicada con OK; verificado post-aplicación (RLS, policies, grants, triggers,
+índices, proacl). Lectura probada con admin y plantista; los otros 5 roles
+usan la misma policy, sin ejecutar uno por uno. La tabla queda vacía hasta la
+etapa 3.
+
+### Cuenta compartida "balanza" — PENDIENTE de Federico (2026-10-05)
+
+`balanza@vialtec.com.ar` (rol balancero) se usa desde 2 dispositivos con 2
+sesiones abiertas (logs 28/09–05/10): PC Windows/Chrome por Starlink (sesión
+`9c3c70d7-…`, desde 15/09, casi toda la actividad) y celular Android/Chrome
+(sesión `675384fd-…`, desde 24/09; usado el 28/09 por red móvil y el 30/09
+21:34 desde una conexión fija en Laferrere). El 28/09 hubo 10 minutos de uso
+simultáneo. En la auditoría todo figura como "balanza" sin distinguir persona.
+**A hacer cuando Federico sepa quiénes son:** crear un usuario individual por
+balancero (Supabase Auth + `plantas_usuarios_roles` rol balancero) y dar de
+baja la cuenta compartida: cerrar sus sesiones (primero la del celular) y
+desactivarla. No hacer nada hasta que Federico pase los nombres.
+
+### PRÓXIMO PASO: frontend del N° de pedido y después etapa 3 de Auditoría
+
+Frontend del número (pantallas, WhatsApp, remito, Excel, buscador en Pedidos)
+en commits aparte + deploy. Después etapa 3: las 17 RPC auditan adentro
+(dry-run por grupo, OK de Federico en cada uno).
 
 ### Módulo de Auditoría — plan aprobado (2026-10-03)
 
@@ -68,8 +114,8 @@ acción. Tablas `flota_*`: solo lectura.
 
 **Etapas (cada una: dry-run, OK de Federico, commit):**
 1. ~~Seguridad: migración 51.~~ APLICADA 2026-10-05.
-2. Tabla + `plantas_auditar` + catálogos + índices + RLS solo admin + grants
-   mínimos.
+2. ~~Tabla + `plantas_auditar` + catálogos + índices + RLS solo admin + grants
+   mínimos.~~ APLICADA 2026-10-05 (migración 53).
 3. Las 17 RPC auditan adentro, en la misma transacción (si falla la auditoría
    falla la operación). Recrearlas desde `pg_get_functiondef` de producción,
    dry-run por grupo: pedidos/despachos, báscula, stock, remitos, usuarios.
