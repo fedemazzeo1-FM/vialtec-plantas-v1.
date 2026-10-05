@@ -21,7 +21,7 @@
 
 import { computed } from 'vue'
 import logoVialtec from '@/assets/img/logo-vialtec.png'
-import { formatearNumeroRemito } from '@/services/formato-numeros'
+import { formatearNumeroRemito, formatearNumeroPedido } from '@/services/formato-numeros'
 
 const props = defineProps({
   numeroRemito: { type: [String, Number], default: null },
@@ -38,6 +38,9 @@ const props = defineProps({
   patente: { type: String, default: '' },
   transportista: { type: String, default: '' },
   lugarEntrega: { type: String, default: '' },
+  // N° correlativo del pedido (migración 52). El remito manual no tiene
+  // pedido detrás: no lo pasa y la línea no se imprime.
+  numeroPedido: { type: Number, default: null },
 })
 
 // Filas en blanco (como el papel real): deja lugar para anotaciones a mano.
@@ -148,6 +151,7 @@ const fechaLabel = computed(() => {
           <p><span class="font-semibold text-gray-500">Patente:</span> {{ patente || '—' }}</p>
           <p><span class="font-semibold text-gray-500">Transportista:</span> {{ transportista || '—' }}</p>
           <p><span class="font-semibold text-gray-500">Lugar de entrega:</span> {{ lugarEntrega || '—' }}</p>
+          <p v-if="numeroPedido"><span class="font-semibold text-gray-500">Pedido:</span> {{ formatearNumeroPedido(numeroPedido) }}</p>
         </div>
 
         <div class="mt-auto grid grid-cols-2 gap-10 pt-6 text-sm text-gray-600">

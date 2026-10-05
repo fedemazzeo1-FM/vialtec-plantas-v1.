@@ -24,7 +24,7 @@ import {
   ENTRADA_SALIDA_VALE,
 } from '@/modules/bascula/composables/useBascula'
 import { formatearNumeroVale, formatearNumeroValeArido, formatearNumeroDeVale } from '@/modules/bascula/services/bascula.service'
-import { formatearNumeroRemito } from '@/services/formato-numeros'
+import { formatearNumeroRemito, formatearNumeroPedido } from '@/services/formato-numeros'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -626,12 +626,12 @@ watch(
                 <option v-if="!valeEditar.pedido_id" value="" disabled>Sin pedido — elegir…</option>
                 <optgroup v-if="pedidosParaReasignar.delDia.length" label="Del día de la pesada">
                   <option v-for="p in pedidosParaReasignar.delDia" :key="p.id" :value="p.id">
-                    {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn
+                    {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn
                   </option>
                 </optgroup>
                 <optgroup v-if="pedidosParaReasignar.otros.length" label="Otros días (confirmados)">
                   <option v-for="p in pedidosParaReasignar.otros" :key="p.id" :value="p.id">
-                    {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn ({{ p.fecha_programada.split('-').reverse().join('/') }})
+                    {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn ({{ p.fecha_programada.split('-').reverse().join('/') }})
                   </option>
                 </optgroup>
               </select>

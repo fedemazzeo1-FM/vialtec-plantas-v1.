@@ -39,6 +39,7 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { getPedido, obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
 import { patentesService, proveedoresService, materialesService } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
+import { formatearNumeroPedido } from '@/services/formato-numeros'
 // Excel con formato corporativo (2026-09-03, pedido de Federico: logo +
 // estilo de colores + pie institucional en todos los exports) — reemplaza
 // a src/services/excel-export.js (SheetJS, no soporta escribir estilos).
@@ -208,11 +209,13 @@ export function useBascula() {
   /**
    * Opción del selector de pedidos de "Vale Asfalto" (2026-10-02, pedido de
    * Federico: la fecha del pedido al lado del estado, para guiar al
-   * balancero). Ej: "AGGM CONSTRUCCIONES — 19.98 tn (confirmado - 02/10/2026)".
+   * balancero). Con el N° de pedido adelante (migración 52). Ej:
+   * "P-0230 · AGGM CONSTRUCCIONES — 19.98 tn (confirmado - 02/10/2026)".
    */
   function etiquetaPedidoPesada(p) {
     const fecha = p.fecha_programada ? p.fecha_programada.split('-').reverse().join('/') : 'sin fecha'
-    return `${nombreDestinoPedido(p)} — ${p.cantidad_solicitada} tn (${p.estado} - ${fecha})`
+    const numero = p.numero ? `${formatearNumeroPedido(p.numero)} · ` : ''
+    return `${numero}${nombreDestinoPedido(p)} — ${p.cantidad_solicitada} tn (${p.estado} - ${fecha})`
   }
 
   async function cargarBase() {
@@ -846,6 +849,7 @@ export function useBascula() {
       patente: valeParaImprimir.value?.patente || '',
       transportista: valeParaImprimir.value?.chofer || '',
       lugarEntrega: pedidoParaImprimir.value?.ubicacion || '',
+      numeroPedido: pedidoParaImprimir.value?.numero ?? null,
     }
   })
 
