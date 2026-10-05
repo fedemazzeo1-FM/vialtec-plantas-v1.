@@ -455,7 +455,9 @@ export function useBascula() {
     obraId: '',
     // Reasignación de pedido (solo asfalto, migración 48)
     pedidoId: '',
-    motivoReasignacion: '',
+    // Motivo de la corrección: obligatorio siempre (migración 60), sirve
+    // también para la reasignación de pedido.
+    motivo: '',
   })
   const guardandoEdicion = ref(false)
 
@@ -505,7 +507,7 @@ export function useBascula() {
     formEditar.cantidadRemito = vale.cantidad_remito_ingreso ?? null
     formEditar.obraId = vale.obra_id || ''
     formEditar.pedidoId = vale.pedido_id || ''
-    formEditar.motivoReasignacion = ''
+    formEditar.motivo = ''
     modalEditarAbierto.value = true
   }
 
@@ -521,8 +523,8 @@ export function useBascula() {
       error.value = 'La cantidad según remito (declarada por el proveedor) es obligatoria y tiene que ser mayor a 0.'
       return
     }
-    if (cambiaPedido.value && !formEditar.motivoReasignacion.trim()) {
-      error.value = 'Para cambiar el pedido del vale, indicá el motivo.'
+    if (!formEditar.motivo.trim()) {
+      error.value = 'Indicá el motivo de la corrección.'
       return
     }
     guardandoEdicion.value = true
@@ -531,7 +533,7 @@ export function useBascula() {
       // Primero la reasignación (la más restrictiva): si el servidor la
       // rechaza, no se guarda nada del resto de la edición.
       if (cambiaPedido.value) {
-        await reasignarValeBascula(valeEditar.value.id, formEditar.pedidoId, formEditar.motivoReasignacion.trim())
+        await reasignarValeBascula(valeEditar.value.id, formEditar.pedidoId, formEditar.motivo.trim())
       }
       await corregirValeBascula(valeEditar.value.id, {
         pesoBruto: formEditar.pesoBruto,
@@ -544,6 +546,7 @@ export function useBascula() {
         numeroRemito: formEditar.numeroRemito,
         cantidadRemito: formEditar.cantidadRemito,
         obraId: formEditar.obraId || null,
+        motivo: formEditar.motivo.trim(),
       })
       modalEditarAbierto.value = false
       await cargarHistorial()

@@ -391,6 +391,11 @@ export function useDespachos() {
       error.value = 'La cantidad corregida debe ser mayor a 0.'
       return
     }
+    // Motivo obligatorio (migración 60): la RPC lo exige y queda en la auditoría.
+    if (!formCorregir.notas.trim()) {
+      error.value = 'Indicá el motivo de la corrección.'
+      return
+    }
     corrigiendo.value = true
     error.value = null
     try {

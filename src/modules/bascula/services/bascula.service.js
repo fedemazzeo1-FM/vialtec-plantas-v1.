@@ -303,7 +303,8 @@ export async function registrarPesada(valeData) {
  * @param {string} valeId
  * @param {{ pesoBruto: number, tara: number, patente?: string, chofer?: string,
  *   observaciones?: string, temperatura?: number, proveedor?: string,
- *   numeroRemito?: string, cantidadRemito?: number, obraId?: number }} cambios
+ *   numeroRemito?: string, cantidadRemito?: number, obraId?: number, motivo: string }} cambios
+ *   `motivo` es obligatorio (migración 60): la RPC lo exige y queda en la auditoría.
  *   No permite cambiar tipo_vale ni material — ver header de la migración 31.
  */
 export async function corregirValeBascula(valeId, cambios) {
@@ -319,6 +320,7 @@ export async function corregirValeBascula(valeId, cambios) {
     p_numero_remito: cambios.numeroRemito || null,
     p_cantidad_remito: cambios.cantidadRemito ?? null,
     p_obra_id: cambios.obraId || null,
+    p_motivo: cambios.motivo || null,
   })
   if (error) throw error
   return data

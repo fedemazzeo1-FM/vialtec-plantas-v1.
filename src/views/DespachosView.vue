@@ -492,6 +492,7 @@ async function descargarPdfVale() {
         <p class="text-sm text-text-mid">
           <strong>{{ destinoDe(pedidoCorregir) }}</strong> — {{ pedidoCorregir.fecha_programada }}
         </p>
+        <div v-if="error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ error }}</div>
         <label class="block text-sm text-text-mid">
           Cantidad real ({{ unidadDe(pedidoCorregir.tipo) }})
           <input
@@ -510,7 +511,7 @@ async function descargarPdfVale() {
           <input v-model="formCorregir.nroValeGlobal" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
         </label>
         <label class="block text-sm text-text-mid">
-          Notas (motivo de la corrección)
+          Motivo de la corrección (obligatorio)
           <textarea v-model="formCorregir.notas" rows="2" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"></textarea>
         </label>
         <div class="flex justify-end gap-2 pt-2">

@@ -636,16 +636,6 @@ watch(
                 </optgroup>
               </select>
             </label>
-            <label v-if="cambiaPedido" class="mt-2 block text-sm text-text-mid">
-              Motivo del cambio de pedido (obligatorio)
-              <input
-                v-model="formEditar.motivoReasignacion"
-                type="text"
-                placeholder="Ej.: se pesó contra el pedido equivocado"
-                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-              />
-              <span class="mt-1 block text-xs text-text-soft">El vale conserva su número. El cambio queda registrado con tu usuario.</span>
-            </label>
           </template>
           <p v-else class="text-xs text-text-soft">
             El pedido de este vale ya no está confirmado (se despachó o se postergó): no se puede cambiar de pedido desde acá. Si estaba mal, anulá el vale y, si corresponde, corregí el despacho desde Pedidos.
@@ -718,6 +708,19 @@ watch(
         <label class="block text-sm text-text-mid">
           Observaciones
           <textarea v-model="formEditar.observaciones" rows="2" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"></textarea>
+        </label>
+
+        <!-- Motivo obligatorio para cualquier corrección del vale, incluido el
+             cambio de pedido (migración 60): queda en la auditoría. -->
+        <label class="block text-sm text-text-mid">
+          Motivo de la corrección (obligatorio)
+          <input
+            v-model="formEditar.motivo"
+            type="text"
+            placeholder="Ej.: error de tipeo en la tara, se pesó contra el pedido equivocado"
+            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+          />
+          <span class="mt-1 block text-xs text-text-soft">El vale conserva su número. La corrección queda registrada con tu usuario.</span>
         </label>
 
         <p class="text-xs text-text-soft">
