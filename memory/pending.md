@@ -1,10 +1,40 @@
 # pending.md — Pendientes vigentes
 
-## ▶ RETOMAR AQUÍ (actualizado 2026-10-03, cierre de sesión)
+## ▶ RETOMAR AQUÍ
 
-Estado al cerrar: árbol limpio, producción al día con el último commit de
-código (deploy `dpl_YpYgcNTjZ57xAkwiyGdWcPqFHMeT`, 2026-10-02). ~35 commits
-locales sin push (lo corre Federico: `git push origin main`).
+### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-05, noche)
+
+Árbol limpio, todo pusheado, producción al día con `main` (deploy
+`vialtec-plantas-v2-rntb188h2`). Auditoría: etapas 1 a 5 en producción.
+Pendiente, en este orden:
+
+1. **Bug de filtros en `/auditoria`** (reportado por Federico al revisarla en
+   producción): filtrando con una fecha vieja sigue mostrando el vale de hoy
+   (única fila real: EDITAR vale I-00607, 05/10 16:37, `fecha_negocio`
+   2026-10-05). SIN DIAGNOSTICAR. Reproducir primero y anotar qué filtro
+   exacto (Desde / Hasta / ambos) y si la URL cambia al apretar "Filtrar".
+   Dónde mirar: `useAuditoria.js` (`aplicarFiltros` → `aplicar` →
+   `router.replace` + `cargar`, y el `watch` de `route.query` que relee la
+   URL) y `queryAuditoria()` en `auditoria.service.js` (`gte`/`lte` sobre
+   `fecha_negocio`). La pantalla no se probó en el navegador desde la sesión
+   de Claude antes del deploy. Revisar también el Excel (usa el mismo filtro).
+2. **Aviso en la pantalla:** "La auditoría registra desde el 05/10/2026" (lo
+   anterior no existe: los historiales viejos no se copiaron).
+3. **Etapa 6:** prueba por rol con un USUARIO DE PRUEBA (definir con Federico
+   cómo: una cuenta de prueba a la que se le va cambiando el rol, en vez de
+   pedir las 7 contraseñas reales), en navegador limpio; confirmar que el
+   link "Auditoría" y la ruta `/auditoria` solo existen para admin; revisar
+   401/403 en logs; agregar a `procedimientos.md` que toda corrección por SQL
+   lleva su fila de auditoría y que un DELETE por SQL en tablas con trigger
+   necesita `select set_config('plantas.motivo_eliminacion', '...', true)` en
+   la misma transacción. Al terminar, borrar o desactivar el usuario de prueba.
+4. **Usuarios individuales de balanza:** crear una cuenta por balancero y dar
+   de baja la compartida `balanza@vialtec.com.ar` (cerrar sesiones, primero la
+   del celular). Espera que Federico diga quiénes son. Detalle más abajo.
+
+---
+
+## Historial de la sesión del 2026-10-05 (detalle de lo ya hecho)
 
 ### Auditoría — etapa 1 (migración 51) APLICADA en producción (2026-10-05)
 
@@ -105,35 +135,7 @@ para anon/authenticated; `plantas__auditoria_patch` borrada.
   aplicación); roles encargado/supervisor/gerencia/plantista_hormigon quedan
   para la etapa 6.
 
-### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-05, noche)
-
-Árbol limpio, todo pusheado, producción al día con `main` (deploy
-`vialtec-plantas-v2-rntb188h2`). Auditoría: etapas 1 a 5 en producción.
-Pendiente, en este orden:
-
-1. **Bug de filtros en `/auditoria`** (reportado por Federico al revisarla en
-   producción): filtrando con una fecha vieja sigue mostrando el vale de hoy
-   (única fila real: EDITAR vale I-00607, 05/10 16:37, `fecha_negocio`
-   2026-10-05). SIN DIAGNOSTICAR. Reproducir primero y anotar qué filtro
-   exacto (Desde / Hasta / ambos) y si la URL cambia al apretar "Filtrar".
-   Dónde mirar: `useAuditoria.js` (`aplicarFiltros` → `aplicar` →
-   `router.replace` + `cargar`, y el `watch` de `route.query` que relee la
-   URL) y `queryAuditoria()` en `auditoria.service.js` (`gte`/`lte` sobre
-   `fecha_negocio`). La pantalla no se probó en el navegador desde la sesión
-   de Claude antes del deploy. Revisar también el Excel (usa el mismo filtro).
-2. **Aviso en la pantalla:** "La auditoría registra desde el 05/10/2026" (lo
-   anterior no existe: los historiales viejos no se copiaron).
-3. **Etapa 6:** prueba por rol con un USUARIO DE PRUEBA (definir con Federico
-   cómo: una cuenta de prueba a la que se le va cambiando el rol, en vez de
-   pedir las 7 contraseñas reales), en navegador limpio; confirmar que el
-   link "Auditoría" y la ruta `/auditoria` solo existen para admin; revisar
-   401/403 en logs; agregar a `procedimientos.md` que toda corrección por SQL
-   lleva su fila de auditoría y que un DELETE por SQL en tablas con trigger
-   necesita `select set_config('plantas.motivo_eliminacion', '...', true)` en
-   la misma transacción. Al terminar, borrar o desactivar el usuario de prueba.
-4. **Usuarios individuales de balanza:** crear una cuenta por balancero y dar
-   de baja la compartida `balanza@vialtec.com.ar` (cerrar sesiones, primero la
-   del celular). Espera que Federico diga quiénes son. Detalle más abajo.
+### Detalle del 2026-10-05 (noche): motivo obligatorio y pantalla
 
 **Estado:** etapas 1 a 4 de Auditoría APLICADAS, y desde hoy 20:35 también
 las migraciones 60 y 62 (motivo obligatorio en correcciones y al eliminar en
