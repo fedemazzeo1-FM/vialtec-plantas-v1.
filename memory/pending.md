@@ -119,15 +119,15 @@ los modales de Maestros (eliminar), Báscula (editar vale) y Despachos
 corrección ni eliminación real de prueba. La reversión
 (`revertir_migraciones_60_62.sql`) quedó probada pero no hizo falta.
 
-**PASO B — etapa 5, pantalla `/auditoria`: FRENAR antes del deploy.** Está en
-la rama `auditoria-pantalla`, NO en main: service
-`src/modules/auditoria/services/auditoria.service.js`, composable
-`useAuditoria.js`, `src/views/AuditoriaView.vue`, ruta `/auditoria` (meta tab
-'usuarios' = solo admin fijo + `soloDesktop`), link "Auditoría" en la sección
-Administración de `nav.js`. Compila; NO se probó en el navegador desde la
-sesión de Claude (no puede iniciar sesión en localhost). Federico la abre con
-su sesión (`git checkout auditoria-pantalla && npm run dev`,
-http://localhost:5173/auditoria). Al aprobar: merge a main, build, deploy.
+**Etapa 5 — pantalla `/auditoria`: EN PRODUCCIÓN (2026-10-05 noche).**
+Federico la revisó en localhost y la aprobó; merge de `auditoria-pantalla` a
+main (`554b65b`), deploy `vialtec-plantas-v2-rntb188h2`, bundle
+`index-DQkv49EA.js` servido. Solo admin: link y ruta usan el tab 'usuarios'
+(candado fijo de `puedeVerTab`), y la base devuelve 0 filas a los otros 6
+roles (verificado simulando un usuario de cada rol: admin 1 fila/20
+entidades, el resto 0/0). NO verificado en el navegador de producción después
+del deploy (la extensión de Chrome se desconectó) ni con sesiones reales de
+otros roles: queda para la etapa 6.
 
 **PASO C — etapa 6:** probar con un usuario de cada rol (7) en navegador
 limpio — las contraseñas las tiene que ingresar una persona — y revisar
