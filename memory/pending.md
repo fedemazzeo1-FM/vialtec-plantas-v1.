@@ -6,24 +6,23 @@ Estado al cerrar: árbol limpio, producción al día con el último commit de
 código (deploy `dpl_YpYgcNTjZ57xAkwiyGdWcPqFHMeT`, 2026-10-02). ~35 commits
 locales sin push (lo corre Federico: `git push origin main`).
 
-### PRÓXIMO PASO: Auditoría — etapa 1 (migración 51), falta el OK de Federico
+### Auditoría — etapa 1 (migración 51) APLICADA en producción (2026-10-05)
 
-`supabase/migrations/51_funciones_escritura_sin_anon.sql` (commit `3610181`):
-revoke EXECUTE a public/anon de las 13 RPC de escritura (crear_pedido,
-actualizar_pedido, confirmar_pedido, cancelar_pedido, postergar_pedido,
-archivar_pedido, corregir_despacho, registrar_carga_asfalto,
-registrar_pesada_bascula, registrar_movimiento_manual,
-registrar_relevamiento_stock, generar_remito_manual, admin_upsert_usuario_rol).
-`authenticated` tiene grant propio en las 13 (verificado en proacl), no hay
-sobrecargas. Dry-run ya corrido contra producción y revertido
-(`supabase/scripts/dry_run_migracion_51.sql`): 4 chequeos OK (permisos; anon →
-42501; admin logueado ejecuta; anon sigue leyendo con RLS sin error).
-Verificado después que no persistió (las 13 siguen con anon). Federico pidió
-NO aplicarla todavía: volver a correr el dry-run, mostrarle el resultado y
-aplicar recién con su OK. Fuera de alcance a propósito: helpers de RLS
-(plantas_rol_actual, plantas_tiene_permiso, plantas_puede_ver_*) y
-`rls_auto_enable` (event trigger de todo el proyecto, afecta a flota). No
-tocar default privileges del schema public (compartido con flota).
+`supabase/migrations/51_funciones_escritura_sin_anon.sql` aplicada con OK de
+Federico (`apply_migration`). Antes: dry-run repetido (4 chequeos OK,
+revertido) y revisión de los logs de la API de 7 días (28/09 al 05/10): las
+llamadas a las 13 RPC fueron todas con rol `authenticated` desde
+`produccion.vialtec.app`, ninguna como `anon`. Verificado post-aplicación en
+`proacl`: las 13 quedaron con postgres, authenticated y service_role, sin
+anon. Sin cambios de frontend, no requiere deploy. Siguen con `anon` a
+propósito: helpers de RLS (plantas_rol_actual, plantas_tiene_permiso,
+plantas_puede_ver_*), `plantas_etiqueta_vale`, `plantas_buscar_material_id`,
+`plantas_calcular_consumo_kg` y `rls_auto_enable`. Sin probar en la app con
+sesión real de cada rol (queda para la etapa 6).
+
+### PRÓXIMO PASO: propuesta del N° de pedido (P-0001) y diseño de la etapa 2
+
+Presentados a Federico el 2026-10-05; cada uno espera su OK antes de aplicar.
 
 ### Módulo de Auditoría — plan aprobado (2026-10-03)
 
@@ -68,7 +67,7 @@ acción. Tablas `flota_*`: solo lectura.
   189,84 tn").
 
 **Etapas (cada una: dry-run, OK de Federico, commit):**
-1. Seguridad: migración 51 (arriba). Sin cambios de frontend.
+1. ~~Seguridad: migración 51.~~ APLICADA 2026-10-05.
 2. Tabla + `plantas_auditar` + catálogos + índices + RLS solo admin + grants
    mínimos.
 3. Las 17 RPC auditan adentro, en la misma transacción (si falla la auditoría
