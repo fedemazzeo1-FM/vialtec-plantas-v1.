@@ -321,7 +321,19 @@ iniciar()
            semana en curso por default (tarjeta de arriba); para filtrar por
            estado/obra/rango o ver archivados hay que ir a Desktop. -->
       <VCard v-if="!esMobile" class="mb-4">
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <label class="text-sm text-text-mid">
+            N° de pedido
+            <input
+              v-model="filtros.numero"
+              type="text"
+              inputmode="numeric"
+              placeholder="P-0230"
+              title="Busca en todo el historial, sin el resto de los filtros"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              @keyup.enter="aplicarFiltros"
+            />
+          </label>
           <label class="text-sm text-text-mid">
             Estado
             <select

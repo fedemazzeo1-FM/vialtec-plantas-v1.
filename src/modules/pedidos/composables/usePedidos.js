@@ -24,6 +24,7 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { patentesService, choferesService, clientesService } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { toastCrearPedido, toastConfirmarPedido, toastConfirmarHormigonOperador } from '@/modules/pedidos/whatsapp'
+import { parsearNumeroPedido } from '@/services/formato-numeros'
 import {
   TIPOS_PRODUCTO_EN_ORDEN_DE_LISTADO,
   esCircuitoMixer,
@@ -140,7 +141,7 @@ export function usePedidos() {
 
   const pedidos = ref([])
   const cargando = ref(false)
-  const filtros = reactive({ estado: '', obraId: '', desde: '', hasta: '', incluirArchivados: false })
+  const filtros = reactive({ estado: '', obraId: '', desde: '', hasta: '', incluirArchivados: false, numero: '' })
 
   // -------------------------------------------------------------------------
   // Vista por semana (2026-09-01, pedido de Federico): con 184 pedidos
@@ -257,13 +258,21 @@ export function usePedidos() {
       // semana/estado para acotar el volumen). Sigue respetando la regla de
       // paginación (memory/architecture.md): fetchPaginado() por debajo, no
       // un .select() sin límite.
-      pedidos.value = await fetchTodosLosPedidos({
-        estado: filtros.estado || undefined,
-        obraId: filtros.obraId || undefined,
-        desde: filtros.desde || undefined,
-        hasta: filtros.hasta || undefined,
-        incluirArchivados: filtros.incluirArchivados,
-      })
+      // Buscador por N° de pedido (migración 52): el número es único, así
+      // que busca en todo el historial (incluidos archivados) y deja de lado
+      // el resto de los filtros — si no, un pedido de otra semana "no existe".
+      const numero = parsearNumeroPedido(filtros.numero)
+      pedidos.value = await fetchTodosLosPedidos(
+        numero
+          ? { numero, incluirArchivados: true }
+          : {
+              estado: filtros.estado || undefined,
+              obraId: filtros.obraId || undefined,
+              desde: filtros.desde || undefined,
+              hasta: filtros.hasta || undefined,
+              incluirArchivados: filtros.incluirArchivados,
+            }
+      )
     } catch (e) {
       error.value = e.message
     } finally {
@@ -282,6 +291,7 @@ export function usePedidos() {
     filtros.desde = ''
     filtros.hasta = ''
     filtros.incluirArchivados = false
+    filtros.numero = ''
     vistaSemana.value = false // "Limpiar" saca también el acotado por semana, no solo estado/obra
     aplicarFiltros()
   }

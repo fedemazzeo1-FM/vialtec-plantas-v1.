@@ -62,7 +62,7 @@ export async function fetchHistorialPedido(pedidoId) {
  * Query base compartida entre fetchPedidos() (paginada) y
  * fetchTodosLosPedidos() (sin paginar, para la vista de cards agrupadas —
  * memory/conventions.md: un solo lugar para armar el filtro).
- * @param {{ estado?: string, obraId?: number, tipo?: string, desde?: string, hasta?: string, incluirArchivados?: boolean }} filtros
+ * @param {{ estado?: string, obraId?: number, tipo?: string, desde?: string, hasta?: string, incluirArchivados?: boolean, numero?: number }} filtros
  *   desde/hasta en formato 'YYYY-MM-DD', sobre fecha_programada. Por defecto
  *   excluye archivados (mismo criterio que el sistema legado: la vista
  *   normal no los muestra salvo que se active el toggle).
@@ -70,6 +70,7 @@ export async function fetchHistorialPedido(pedidoId) {
 function queryPedidos(filtros) {
   let query = supabase.from(TABLA).select('*', { count: 'exact' }).order('fecha_programada', { ascending: false }).order('id', { ascending: false })
 
+  if (filtros.numero) query = query.eq('numero', filtros.numero)
   if (filtros.estado) query = query.eq('estado', filtros.estado)
   if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
   if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
