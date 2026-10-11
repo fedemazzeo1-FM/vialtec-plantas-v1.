@@ -57,6 +57,7 @@ const TIPOS_MOVIMIENTO = [
   { value: '', label: 'Todos' },
   { value: 'ingreso_proveedor', label: 'Ingreso proveedor' },
   { value: 'ingreso_manual', label: 'Ingreso manual' },
+  { value: 'recalculo_bascula', label: 'Corrección de vale (báscula)' },
 ]
 
 // `secundaria` (2026-09-07, roadmap mobile): en la card mobile, Remito y

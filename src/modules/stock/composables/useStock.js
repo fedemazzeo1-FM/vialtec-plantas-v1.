@@ -9,7 +9,7 @@ import {
   fetchTodosLosMovimientos,
   registrarMovimientoManual,
   registrarRelevamiento,
-  TIPOS_INGRESO,
+  TIPOS_HISTORIAL_INGRESOS,
 } from '@/services/stock.service'
 import { materialesService } from '@/modules/maestros/services/maestros.service'
 import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
@@ -28,6 +28,7 @@ const ETIQUETA_TIPO_MOVIMIENTO = {
   egreso_manual: 'Egreso manual',
   ajuste: 'Ajuste (relevamiento)',
   recalculo_despacho: 'Recálculo de despacho',
+  recalculo_bascula: 'Corrección de vale (báscula)',
 }
 
 export function useStock() {
@@ -201,7 +202,7 @@ export function useStock() {
           // filtro, acotar a TIPOS_INGRESO en vez de traer todos los tipos
           // (antes mostraba también egresos por despacho/árido/manual y
           // ajustes, que tienen su propia vista en Despachos/Báscula).
-          tipo: filtrosHistorial.tipo || TIPOS_INGRESO,
+          tipo: filtrosHistorial.tipo || TIPOS_HISTORIAL_INGRESOS,
           desde: filtrosHistorial.desde || undefined,
           hasta: filtrosHistorial.hasta || undefined,
         },
@@ -343,7 +344,7 @@ export function useStock() {
         materialId: filtrosHistorial.materialId || undefined,
         // Mismo criterio que cargarMovimientos() — el Excel de esta tab
         // exporta lo mismo que se ve en pantalla, solo ingresos por defecto.
-        tipo: filtrosHistorial.tipo || TIPOS_INGRESO,
+        tipo: filtrosHistorial.tipo || TIPOS_HISTORIAL_INGRESOS,
         desde: filtrosHistorial.desde || undefined,
         hasta: filtrosHistorial.hasta || undefined,
       })

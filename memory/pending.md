@@ -2,6 +2,66 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ PRIMERO: migración 63 — ingreso de áridos (2026-10-10)
+
+**Estado (2026-10-10, 21:30):** OK de Federico a todo. Migración y frontend
+commiteados, `npm run build` limpio. Dry-run contra producción corrido y
+revertido: 11 chequeos OK (saldo total sin cambio; 9 proveedores únicos;
+cambio de material 0/6→6/20 mueve ±33.580 kg; tope rechaza 33580 tn en
+edición y por trigger; cambio de cantidad +500 kg; anular deja el vale en 0 y
+marca `plantas_ingresos.anulado`; vale del legado no mueve stock; I-614 → 0,
+I-717 → 34.900, I-718 → 35.060).
+**FALTA: aplicar la migración 63** — `apply_migration` fue bloqueado por el
+clasificador de permisos de la sesión de Claude (no reintentar por otra vía:
+la aplica Federico desde el SQL Editor de Supabase o habilita el permiso) y
+recién después `npx vercel --prod`. NO deployar el frontend antes: usa
+`p_material` y la columna `plantas_ingresos.anulado`, que no existen todavía.
+Tampoco se pudo correr el ensayo del ciclo completo (pedido → carga →
+finalizar/corregir despacho, movimiento manual, relevamiento, egreso de
+áridos): también bloqueado. Lo verificado de ese circuito es por cruce de
+datos (solo lectura), no por ejecución.
+
+**Causa raíz (paneo 08/10):** en `ingreso_arido` el material vive en
+`plantas_ingresos.material` (`plantas_vales.material` es null en todos los
+ingresos). `corregir_vale_bascula` y `anular_vale_bascula` lo buscaban en
+`plantas_vales` → el recálculo de stock salía sin hacer nada. Afectó a I-717
+(0/6, cargaron 51460 en vez de 51,46 → corregido a 34,9), I-718 (6/12, 52020
+→ 35,06) e I-614 (0/6, anulado).
+
+**OJO — el saldo ya está corregido:** el 09/10 08:49 Felix hizo un
+relevamiento (0/3 → 0; 0/6 −51.394.735 kg; 6/12 −52.020.000 kg; 6/20
++489.686 kg). NO volver a restar esos vales del saldo. Lo que sigue mal es el
+historial: los movimientos originales de 51.460.000 y 52.020.000 kg siguen
+ligados a los vales, y con la RPC arreglada una nueva edición de I-717/I-718
+restaría esa diferencia del saldo. Por eso la migración 63 registra el
+recálculo + un ajuste de compensación (saldo sin cambio).
+
+**Archivos:** `supabase/migrations/63_ingreso_aridos_material_y_stock.sql`;
+`bascula.service.js`, `useBascula.js`, `BasculaView.vue` (selector Material
+en Editar ingreso + tope 20 %); `stock.service.js`, `useStock.js`,
+`StockView.vue` (Historial de ingresos lista también `recalculo_bascula`);
+`analytics.service.js` (excluye `anulado`, un solo nombre por proveedor).
+
+**Qué hace la 63:** `p_material` en `corregir_vale_bascula` (firma de 13
+parámetros, drop + create); anular revierte stock del ingreso;
+`plantas_ingresos.anulado`; tope Cant. s/Remito ±20 % del neto (trigger en
+alta, RPC en edición; medido: solo 2 de 744 ingresos históricos quedan
+fuera); trigger que guarda el proveedor como figura en el catálogo +
+unificación de históricos ("Cerro del Aguila" → "CERRO DEL AGUILA");
+vales migrados del legado (503, sin movimiento ligado) no mueven stock al
+editarse.
+
+**Abierto con Federico:**
+- I-613 e I-729 (0/3, 65 tn, Cerro del Águila): material real. Si se cambia
+  desde la pantalla nueva, suma al material nuevo, y el relevamiento del
+  09/10 probablemente ya lo contó: definir si se corrige solo el registro.
+- 6/20: sin error encontrado en ingresos ni despachos; Felix le sumó 489,7 tn
+  en el relevamiento. Único desvío: P-0207 (H-21, 2 m³) descontó 2,2 kg en
+  vez de 1.068.
+- Otros desvíos de despachos desde 07/09: P-0190/0191/0193 sin movimiento de
+  CA30 (ya conocido, causa sin confirmar); P-0206 AM3 AUTOVIA recortado por
+  piso en 0 (963 kg).
+
 ### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-05, noche)
 
 Árbol limpio, todo pusheado, producción al día con `main` (deploy

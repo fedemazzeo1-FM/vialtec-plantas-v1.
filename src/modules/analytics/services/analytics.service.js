@@ -58,7 +58,7 @@ export async function fetchResumenGeneral({ mes } = {}) {
         .lte('fecha_programada', hastaISO.slice(0, 10))
     ),
     fetchPaginado(() =>
-      supabase.from('plantas_ingresos').select('cantidad, unidad').gte('fecha_ingreso', desdeISO).lte('fecha_ingreso', hastaISO)
+      supabase.from('plantas_ingresos').select('cantidad, unidad').eq('anulado', false).gte('fecha_ingreso', desdeISO).lte('fecha_ingreso', hastaISO)
     ),
   ])
 
@@ -94,6 +94,17 @@ function normalizarRango({ desde, hasta } = {}) {
   }
 }
 
+/**
+ * Un solo nombre por proveedor: el del catálogo (mayúsculas). La migración 63
+ * ya unifica los nombres guardados; esto evita que una variante de mayúsculas
+ * o espacios vuelva a partir a un proveedor en dos filas. Los ingresos
+ * anulados no entran en ninguna de las consultas de abajo (`anulado = false`).
+ */
+function claveProveedor(nombre) {
+  const limpio = (nombre || '').trim().replace(/\s+/g, ' ').toUpperCase()
+  return limpio || 'Sin especificar'
+}
+
 /** Mismo largo de período, inmediatamente anterior al [desde, hasta] dado. */
 function periodoAnterior(desde, hasta) {
   const duracionMs = hasta.getTime() - desde.getTime()
@@ -113,6 +124,7 @@ async function totalesPorProveedor(desde, hasta) {
     supabase
       .from('plantas_ingresos')
       .select('proveedor, cantidad, unidad')
+      .eq('anulado', false)
       .gte('fecha_ingreso', desde.toISOString())
       .lte('fecha_ingreso', hasta.toISOString())
   )
@@ -120,7 +132,8 @@ async function totalesPorProveedor(desde, hasta) {
   const totales = new Map()
   for (const fila of filas) {
     const tn = aTn(fila.cantidad, fila.unidad)
-    totales.set(fila.proveedor, (totales.get(fila.proveedor) ?? 0) + tn)
+    const proveedor = claveProveedor(fila.proveedor)
+    totales.set(proveedor, (totales.get(proveedor) ?? 0) + tn)
   }
   return totales
 }
@@ -175,13 +188,14 @@ export async function fetchAnaliticaProveedoresDetalle(rangoFechas = {}) {
     supabase
       .from('plantas_ingresos')
       .select('proveedor, material, cantidad, unidad')
+      .eq('anulado', false)
       .gte('fecha_ingreso', desde.toISOString())
       .lte('fecha_ingreso', hasta.toISOString())
   )
 
   const porProveedor = new Map()
   for (const fila of filas) {
-    const proveedor = fila.proveedor || 'Sin especificar'
+    const proveedor = claveProveedor(fila.proveedor)
     if (!porProveedor.has(proveedor)) porProveedor.set(proveedor, new Map())
     const porInsumo = porProveedor.get(proveedor)
     const material = fila.material || 'Sin especificar'

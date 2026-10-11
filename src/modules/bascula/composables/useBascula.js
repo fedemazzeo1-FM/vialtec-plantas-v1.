@@ -349,6 +349,18 @@ export function useBascula() {
     }
   }
 
+  // Tope de la cantidad según remito (migración 63, misma regla que la base):
+  // no puede diferir más de un 20 % del peso neto pesado. Corta el caso de
+  // cargar kilos en un campo de toneladas (vales I-717/I-718, 07/10/2026).
+  function mensajeCantidadRemitoFueraDeRango(cantidadRemito, pesoBruto, tara, unidad) {
+    const neto = Number(pesoBruto) - Number(tara)
+    const netoTn = unidad === 'kg' ? neto / 1000 : neto
+    const cantidad = Number(cantidadRemito)
+    if (!(netoTn > 0) || !(cantidad > 0)) return null
+    if (cantidad <= netoTn * 1.2 && cantidad >= netoTn * 0.8) return null
+    return `La cantidad según remito (${cantidad} tn) difiere más de un 20 % del peso neto pesado (${Number(netoTn.toFixed(3))} tn). Revisá que esté cargada en toneladas.`
+  }
+
   async function guardarPesada(slot) {
     const form = slot.form
     if (!(Number(form.peso_bruto) > 0) || form.tara == null || Number(form.tara) < 0) {
@@ -377,6 +389,11 @@ export function useBascula() {
       // lado del servidor, por si algún día se llama la RPC por otro lado).
       if (!(Number(form.cantidad_remito) > 0)) {
         error.value = 'La cantidad según remito (declarada por el proveedor) es obligatoria y tiene que ser mayor a 0.'
+        return
+      }
+      const fueraDeRango = mensajeCantidadRemitoFueraDeRango(form.cantidad_remito, form.peso_bruto, form.tara, form.unidad)
+      if (fueraDeRango) {
+        error.value = fueraDeRango
         return
       }
     }
@@ -449,6 +466,9 @@ export function useBascula() {
     chofer: '',
     observaciones: '',
     temperatura: null,
+    // Material del ingreso de áridos (migración 63): cambiarlo mueve el stock
+    // del material anterior al nuevo.
+    material: '',
     proveedor: '',
     numeroRemito: '',
     cantidadRemito: null,
@@ -502,6 +522,7 @@ export function useBascula() {
     formEditar.chofer = vale.chofer || ''
     formEditar.observaciones = vale.observaciones || ''
     formEditar.temperatura = vale.temperatura ?? null
+    formEditar.material = vale.material || ''
     formEditar.proveedor = vale.proveedor || ''
     formEditar.numeroRemito = vale.numero_remito_ingreso || ''
     formEditar.cantidadRemito = vale.cantidad_remito_ingreso ?? null
@@ -522,6 +543,19 @@ export function useBascula() {
     if (valeEditar.value?.tipo_vale === 'ingreso_arido' && !(Number(formEditar.cantidadRemito) > 0)) {
       error.value = 'La cantidad según remito (declarada por el proveedor) es obligatoria y tiene que ser mayor a 0.'
       return
+    }
+    if (valeEditar.value?.tipo_vale === 'ingreso_arido') {
+      if (!formEditar.material) {
+        error.value = 'Elegí el material del ingreso.'
+        return
+      }
+      const fueraDeRango = mensajeCantidadRemitoFueraDeRango(
+        formEditar.cantidadRemito, formEditar.pesoBruto, formEditar.tara, valeEditar.value.unidad
+      )
+      if (fueraDeRango) {
+        error.value = fueraDeRango
+        return
+      }
     }
     if (!formEditar.motivo.trim()) {
       error.value = 'Indicá el motivo de la corrección.'
@@ -546,6 +580,7 @@ export function useBascula() {
         numeroRemito: formEditar.numeroRemito,
         cantidadRemito: formEditar.cantidadRemito,
         obraId: formEditar.obraId || null,
+        material: valeEditar.value.tipo_vale === 'ingreso_arido' ? formEditar.material : null,
         motivo: formEditar.motivo.trim(),
       })
       modalEditarAbierto.value = false

@@ -74,6 +74,12 @@ export async function fetchStockActual() {
 // comentario 2026-09-06 en queryMovimientos() más abajo.
 export const TIPOS_INGRESO = ['ingreso_proveedor', 'ingreso_manual']
 
+// Lo que lista la tab "Historial de ingresos": los ingresos más las
+// correcciones de vales de báscula (edición, cambio de material, anulación —
+// migración 63). Sin estas últimas, un vale corregido o anulado seguía
+// figurando solo con su cantidad original.
+export const TIPOS_HISTORIAL_INGRESOS = [...TIPOS_INGRESO, 'recalculo_bascula']
+
 // Vista puente (2026-09-04, memory/pending.md): UNION de plantas_stock_movimientos
 // real + lo que el legado sigue cargando en paralelo en kv_store (todavía sin
 // fila real acá). Solo el HISTORIAL lee de acá — las RPC de escritura
