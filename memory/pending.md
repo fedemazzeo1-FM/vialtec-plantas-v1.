@@ -51,10 +51,17 @@ unificación de históricos ("Cerro del Aguila" → "CERRO DEL AGUILA");
 vales migrados del legado (503, sin movimiento ligado) no mueven stock al
 editarse.
 
+**Orden para cerrar (todo con OK de Federico del 10/10):**
+1. Aplicar la migración 63 (segundo intento de `apply_migration` también
+   bloqueado el 10/10 a la noche, con autorización explícita).
+2. `npx vercel --prod` + verificación en vivo (modal Editar con Material,
+   Historial de ingresos, Analítica de proveedores).
+3. Correr `supabase/scripts/correccion_vales_613_729_arena.sql`: I-613 e
+   I-729 eran ARENA (confirmado por Federico). Cambia el material y pasa el
+   movimiento de 0/3 a ARENA en el historial con compensación; saldos sin
+   cambio. Sin probar en dry-run.
+
 **Abierto con Federico:**
-- I-613 e I-729 (0/3, 65 tn, Cerro del Águila): material real. Si se cambia
-  desde la pantalla nueva, suma al material nuevo, y el relevamiento del
-  09/10 probablemente ya lo contó: definir si se corrige solo el registro.
 - 6/20: sin error encontrado en ingresos ni despachos; Felix le sumó 489,7 tn
   en el relevamiento. Único desvío: P-0207 (H-21, 2 m³) descontó 2,2 kg en
   vez de 1.068.
