@@ -433,7 +433,7 @@ watch(
            a la semana en curso por default (useBascula.js) — para filtrar
            por tipo/obra/patente/rango hay que ir a Desktop. -->
       <VCard v-if="!esMobile" class="mb-4">
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-6">
           <!-- Filtro en vivo (2026-09-04, pedido explícito de Federico: sin
                botón "Filtrar", se aplica solo a medida que se elige cada
                campo) — @change en vez de v-model a secas: dispara
@@ -467,6 +467,15 @@ watch(
             Patente
             <input
               v-model="filtros.patente"
+              type="text"
+              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+              @change="aplicarFiltrosHistorial"
+            />
+          </label>
+          <label class="text-sm text-text-mid">
+            N° remito
+            <input
+              v-model="filtros.remito"
               type="text"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
               @change="aplicarFiltrosHistorial"

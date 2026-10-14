@@ -640,7 +640,7 @@ export function useBascula() {
   // extra — el usuario sigue pudiendo tocar Desde/Hasta o "Limpiar"
   // libremente, los filtros siguen aplicándose en vivo (ver
   // aplicarFiltrosHistorial() más abajo y los @change en BasculaView.vue).
-  const filtros = reactive({ tipoVale: '', obraId: '', patente: '', desde: '', hasta: '' })
+  const filtros = reactive({ tipoVale: '', obraId: '', patente: '', remito: '', desde: '', hasta: '' })
 
   function aplicarFiltroSemanaActual() {
     const { lunes, domingo } = obtenerRangoSemana(new Date())
@@ -734,6 +734,7 @@ export function useBascula() {
           tipoVale: filtros.tipoVale || undefined,
           obraId: filtros.obraId || undefined,
           patente: filtros.patente || undefined,
+          remito: filtros.remito || undefined,
           desde: filtros.desde || undefined,
           hasta: filtros.hasta || undefined,
         },
@@ -760,6 +761,7 @@ export function useBascula() {
     filtros.tipoVale = ''
     filtros.obraId = ''
     filtros.patente = ''
+    filtros.remito = ''
     filtros.desde = ''
     filtros.hasta = ''
     aplicarFiltrosHistorial()
@@ -788,6 +790,7 @@ export function useBascula() {
         tipoVale: filtros.tipoVale || undefined,
         obraId: filtros.obraId || undefined,
         patente: filtros.patente || undefined,
+        remito: filtros.remito || undefined,
         desde: filtros.desde || undefined,
         hasta: filtros.hasta || undefined,
       })

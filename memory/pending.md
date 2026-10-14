@@ -2,9 +2,20 @@
 
 ## ▶ RETOMAR AQUÍ
 
-### ▶▶▶ PRIMERO: migración 63 — ingreso de áridos (2026-10-10)
+### ✅ Migración 63 — ingreso de áridos (EN PRODUCCIÓN 2026-10-14)
 
-**Estado (2026-10-10, 21:30):** OK de Federico a todo. Migración y frontend
+**Cierre (2026-10-14):** Federico corrió la 63 y
+`supabase/scripts/correccion_vales_613_729_arena.sql` desde el SQL Editor
+(I-613 e I-729 → ARENA, saldos sin cambio). Deploy `npx vercel --prod`
+(bundle `index-C5XD7Jr4.js`), con filtro nuevo "N° remito" en el historial
+de Báscula (busca en `numero_remito_ingreso`, solo ingresos). Verificado en
+la base: columna `anulado`, `corregir_vale_bascula` de 13 params, 9
+proveedores, saldo 0/3 = 0, movimientos `recalculo_bascula` de 614/717/718/
+613/729; y en el bundle servido: `p_material`, tope 20 %, filtro remito,
+"Corrección de vale (báscula)". Falta mirar las pantallas logueado (no se
+probó con clics) y el ensayo del ciclo completo de despachos (ver abajo).
+
+**Estado previo (2026-10-10, 21:30):** OK de Federico a todo. Migración y frontend
 commiteados, `npm run build` limpio. Dry-run contra producción corrido y
 revertido: 11 chequeos OK (saldo total sin cambio; 9 proveedores únicos;
 cambio de material 0/6→6/20 mueve ±33.580 kg; tope rechaza 33580 tn en

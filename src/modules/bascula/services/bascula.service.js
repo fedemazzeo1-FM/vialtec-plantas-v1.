@@ -359,7 +359,7 @@ export async function anularValeBascula(valeId, motivo) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {{ tipoVale?: string, obraId?: number, patente?: string, desde?: string, hasta?: string }} filtros
+ * @param {{ tipoVale?: string, obraId?: number, patente?: string, remito?: string, desde?: string, hasta?: string }} filtros
  * @param {{ pagina?: number, tamanoPagina?: number }} opciones
  * @returns {Promise<{ filas: any[], total: number, pagina: number, tamanoPagina: number }>}
  *   Lee de VISTA_BASCULA_VIVA (2026-09-04), no de plantas_vales directo —
@@ -385,6 +385,8 @@ function queryHistorialVales(filtros) {
   if (filtros.tipoVale) query = query.eq('tipo_vale', filtros.tipoVale)
   if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
   if (filtros.patente) query = query.ilike('patente', `%${filtros.patente}%`)
+  // Solo los ingresos de áridos tienen N° de remito (el del proveedor).
+  if (filtros.remito) query = query.ilike('numero_remito_ingreso', `%${filtros.remito.trim()}%`)
   // Fix 2026-09-04 (memory/pending.md): `fecha_pesada` es timestamptz, no
   // date. Pasar la fecha "pelada" (`filtros.desde` tal cual, o el string
   // sliceado a 'YYYY-MM-DD' que tenía `hasta`) la castea contra medianoche
