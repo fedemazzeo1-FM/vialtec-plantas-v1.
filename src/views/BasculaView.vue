@@ -41,6 +41,8 @@ const {
   patentes,
   proveedores,
   materiales,
+  proveedoresIngreso,
+  materialesIngreso,
   pedidosParaPesada,
   nombreDestinoPedido,
   etiquetaPedidoPesada,
@@ -268,7 +270,7 @@ watch(
                   class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
                 >
                   <option value="" disabled>Elegir material…</option>
-                  <option v-for="m in materiales" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
+                  <option v-for="m in materialesIngreso" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
                 </select>
               </label>
               <label class="text-sm text-text-mid">
@@ -278,7 +280,7 @@ watch(
                   class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
                 >
                   <option value="" disabled>Elegir proveedor…</option>
-                  <option v-for="p in proveedores" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
+                  <option v-for="p in proveedoresIngreso" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
                 </select>
               </label>
               <label class="text-sm text-text-mid">

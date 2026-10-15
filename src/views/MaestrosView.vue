@@ -16,6 +16,9 @@ import { fetchTodasLasObrasConResumen } from '@/services/flota.service'
 import { fetchEstadoLocalObras, setObraArchivadaLocal } from '@/modules/maestros/services/obras-locales.service'
 import { useAuthStore } from '@/stores/auth.store'
 
+// Posición en el desplegable de Ingreso de áridos de Báscula (migración 64).
+const CAMPO_ORDEN_BASCULA = 'Orden en Báscula (1 = primero; vacío = alfabético)'
+
 // Config declarativa por catálogo: columnas de tabla, campos de formulario y
 // registro vacío. Evita repetir la vista 4 veces para 4 tablas casi idénticas.
 const ENTIDADES = {
@@ -38,12 +41,14 @@ const ENTIDADES = {
     columnas: [
       { key: 'nombre', label: 'Nombre' },
       { key: 'material_principal', label: 'Material principal' },
+      { key: 'orden_bascula', label: 'Orden en Báscula' },
     ],
     campos: [
       { key: 'nombre', label: 'Nombre', type: 'text', required: true },
       { key: 'material_principal', label: 'Material principal', type: 'text' },
+      { key: 'orden_bascula', label: CAMPO_ORDEN_BASCULA, type: 'number' },
     ],
-    vacio: () => ({ nombre: '', material_principal: '', activo: true }),
+    vacio: () => ({ nombre: '', material_principal: '', orden_bascula: null, activo: true }),
   },
   // Separación Vehículos Propios/Externos (2026-09-01, pedido de Federico —
   // relevado contra el legado: 30 patentes propias / 21 externas reales,
@@ -127,6 +132,7 @@ const ENTIDADES = {
       { key: 'controla_stock', label: 'Controla stock', format: (v) => (v ? 'Sí' : 'No') },
       { key: 'stock_minimo_kg', label: 'Mín. (kg)' },
       { key: 'stock_maximo_kg', label: 'Máx. (kg)' },
+      { key: 'orden_bascula', label: 'Orden en Báscula' },
     ],
     campos: [
       { key: 'nombre', label: 'Nombre', type: 'text', required: true },
@@ -135,6 +141,7 @@ const ENTIDADES = {
       { key: 'controla_stock', label: 'Controla stock (desmarcar para Agua/Purgue)', type: 'checkbox' },
       { key: 'stock_minimo_kg', label: 'Stock mínimo de alerta (kg)', type: 'number' },
       { key: 'stock_maximo_kg', label: 'Stock máximo (kg)', type: 'number' },
+      { key: 'orden_bascula', label: CAMPO_ORDEN_BASCULA, type: 'number' },
     ],
     vacio: () => ({
       nombre: '',
@@ -143,6 +150,7 @@ const ENTIDADES = {
       controla_stock: true,
       stock_minimo_kg: null,
       stock_maximo_kg: null,
+      orden_bascula: null,
       activo: true,
     }),
   },
@@ -304,6 +312,11 @@ async function guardar() {
   if (campoRequerido) {
     error.value = `El campo "${campoRequerido.label}" es obligatorio.`
     return
+  }
+
+  // Un número borrado llega como '' (v-model.number): se guarda vacío (null).
+  for (const c of entidadActual.value.campos) {
+    if (c.type === 'number' && formData[c.key] === '') formData[c.key] = null
   }
 
   guardando.value = true

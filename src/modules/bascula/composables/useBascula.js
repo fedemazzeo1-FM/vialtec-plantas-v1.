@@ -37,7 +37,12 @@ import {
 import { fetchObras, fetchNombresPorEmail } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { getPedido, obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
-import { patentesService, proveedoresService, materialesService } from '@/modules/maestros/services/maestros.service'
+import {
+  patentesService,
+  proveedoresService,
+  materialesService,
+  ordenarDestacadosBascula,
+} from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatearCantidad, formatearCantidadHasta, formatearNumeroPedido } from '@/services/formato-numeros'
 // Excel con formato corporativo (2026-09-03, pedido de Federico: logo +
@@ -182,6 +187,11 @@ export function useBascula() {
   const proveedores = ref([])
   const materiales = ref([])
   const formulas = ref([])
+
+  // Desplegables de la puerta de Ingreso de áridos: destacados primero
+  // (orden_bascula, configurable en Maestros), después alfabético.
+  const proveedoresIngreso = computed(() => ordenarDestacadosBascula(proveedores.value))
+  const materialesIngreso = computed(() => ordenarDestacadosBascula(materiales.value))
 
   const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
   const pedidosPorId = computed(() => Object.fromEntries(pedidosParaPesada.value.map((p) => [p.id, p])))
@@ -1032,6 +1042,8 @@ export function useBascula() {
     patentes,
     proveedores,
     materiales,
+    proveedoresIngreso,
+    materialesIngreso,
     pedidosParaPesada,
     nombreDestinoPedido,
     etiquetaPedidoPesada,

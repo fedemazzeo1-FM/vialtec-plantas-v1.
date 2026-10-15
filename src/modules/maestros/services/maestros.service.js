@@ -71,6 +71,15 @@ function crudEntidad(tabla, columnaOrden = 'nombre', filtroFijo = null) {
   }
 }
 
+/**
+ * Primero los que tienen `orden_bascula` (1, 2, 3…), después el resto en el
+ * orden en que vinieron (alfabético por nombre, ver fetch()). Lo usa el
+ * Ingreso de áridos de Báscula; se configura en Maestros (migración 64).
+ */
+export function ordenarDestacadosBascula(lista) {
+  return [...lista].sort((a, b) => (a.orden_bascula ?? Infinity) - (b.orden_bascula ?? Infinity))
+}
+
 export const encargadosService = crudEntidad('plantas_encargados')
 export const proveedoresService = crudEntidad('plantas_proveedores')
 // patentesService sin filtro: usado donde hace falta el catálogo COMPLETO
