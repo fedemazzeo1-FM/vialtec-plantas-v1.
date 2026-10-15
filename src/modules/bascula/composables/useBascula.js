@@ -188,10 +188,10 @@ export function useBascula() {
   const materiales = ref([])
   const formulas = ref([])
 
-  // Desplegables de la puerta de Ingreso de áridos: destacados primero
+  // Desplegables de material y proveedor de Báscula: destacados primero
   // (orden_bascula, configurable en Maestros), después alfabético.
-  const proveedoresIngreso = computed(() => ordenarDestacadosBascula(proveedores.value))
-  const materialesIngreso = computed(() => ordenarDestacadosBascula(materiales.value))
+  const proveedoresOrdenados = computed(() => ordenarDestacadosBascula(proveedores.value))
+  const materialesOrdenados = computed(() => ordenarDestacadosBascula(materiales.value))
 
   const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
   const pedidosPorId = computed(() => Object.fromEntries(pedidosParaPesada.value.map((p) => [p.id, p])))
@@ -1042,8 +1042,8 @@ export function useBascula() {
     patentes,
     proveedores,
     materiales,
-    proveedoresIngreso,
-    materialesIngreso,
+    proveedoresOrdenados,
+    materialesOrdenados,
     pedidosParaPesada,
     nombreDestinoPedido,
     etiquetaPedidoPesada,

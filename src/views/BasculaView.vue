@@ -41,8 +41,8 @@ const {
   patentes,
   proveedores,
   materiales,
-  proveedoresIngreso,
-  materialesIngreso,
+  proveedoresOrdenados,
+  materialesOrdenados,
   pedidosParaPesada,
   nombreDestinoPedido,
   etiquetaPedidoPesada,
@@ -270,7 +270,7 @@ watch(
                   class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
                 >
                   <option value="" disabled>Elegir material…</option>
-                  <option v-for="m in materialesIngreso" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
+                  <option v-for="m in materialesOrdenados" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
                 </select>
               </label>
               <label class="text-sm text-text-mid">
@@ -280,7 +280,7 @@ watch(
                   class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
                 >
                   <option value="" disabled>Elegir proveedor…</option>
-                  <option v-for="p in proveedoresIngreso" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
+                  <option v-for="p in proveedoresOrdenados" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
                 </select>
               </label>
               <label class="text-sm text-text-mid">
@@ -318,7 +318,7 @@ watch(
                   class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
                 >
                   <option value="" disabled>Elegir material…</option>
-                  <option v-for="m in materiales" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
+                  <option v-for="m in materialesOrdenados" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
                 </select>
               </label>
               <label class="text-sm text-text-mid col-span-2">
@@ -697,7 +697,7 @@ watch(
               <select v-model="formEditar.material" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
                 <option value="" disabled>Elegir material…</option>
                 <option v-if="formEditar.material && !materiales.some((m) => m.nombre === formEditar.material)" :value="formEditar.material">{{ formEditar.material }}</option>
-                <option v-for="m in materiales" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
+                <option v-for="m in materialesOrdenados" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
               </select>
               <span v-if="formEditar.material !== (valeEditar.material || '')" class="mt-1 block text-xs text-text-soft">Al guardar, el stock sale de {{ valeEditar.material }} y pasa a {{ formEditar.material }}.</span>
             </label>
@@ -705,7 +705,7 @@ watch(
               Proveedor
               <select v-model="formEditar.proveedor" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
                 <option value="" disabled>Elegir proveedor…</option>
-                <option v-for="p in proveedores" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
+                <option v-for="p in proveedoresOrdenados" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
               </select>
             </label>
             <label class="text-sm text-text-mid">
