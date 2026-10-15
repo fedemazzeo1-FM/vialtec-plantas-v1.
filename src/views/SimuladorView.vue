@@ -10,6 +10,7 @@ import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
 import { useSimulador } from '@/modules/simulador/composables/useSimulador'
 import { nombreTipoProducto, unidadLabelTipoProducto } from '@/config/tipos-producto'
+import { formatearCantidad } from '@/services/formato-numeros'
 
 const {
   error,
@@ -94,14 +95,14 @@ iniciar()
               <span class="text-text-soft">{{ entrada.formulaNombre }}</span>
             </div>
             <div class="flex items-center gap-3">
-              <span class="text-sm font-bold text-text">{{ entrada.cantidad.toFixed(2) }} {{ unidadLabelTipoProducto(entrada.tipo) }}</span>
+              <span class="text-sm font-bold text-text">{{ formatearCantidad(entrada.cantidad, 2) }} {{ unidadLabelTipoProducto(entrada.tipo) }}</span>
               <button type="button" class="text-text-soft hover:text-danger" @click="quitarEntrada(entrada.id)">✕</button>
             </div>
           </li>
         </ul>
         <div class="mt-3 flex gap-4 border-t border-border pt-3 text-sm font-semibold">
           <p v-for="s in subtotales" :key="s.tipo.id" :class="s.clase">
-            Total {{ s.tipo.nombre.toLowerCase() }}: {{ s.total.toFixed(2) }} {{ s.tipo.unidadLabel }}
+            Total {{ s.tipo.nombre.toLowerCase() }}: {{ formatearCantidad(s.total, 2) }} {{ s.tipo.unidadLabel }}
           </p>
         </div>
       </VCard>
@@ -123,10 +124,10 @@ iniciar()
             <tbody class="divide-y divide-border">
               <tr v-for="fila in impactoStock" :key="fila.insumo">
                 <td class="py-2.5 pr-4 font-semibold text-text">{{ fila.insumo }}</td>
-                <td class="py-2.5 pr-4 text-right text-text-mid">{{ (fila.stockActualKg / 1000).toFixed(3) }} tn</td>
-                <td class="py-2.5 pr-4 text-right font-semibold text-danger">-{{ (fila.consumoTotalKg / 1000).toFixed(3) }} tn</td>
+                <td class="py-2.5 pr-4 text-right text-text-mid">{{ formatearCantidad(fila.stockActualKg / 1000, 3) }} tn</td>
+                <td class="py-2.5 pr-4 text-right font-semibold text-danger">-{{ formatearCantidad(fila.consumoTotalKg / 1000, 3) }} tn</td>
                 <td class="py-2.5 pr-4 text-right font-bold" :class="fila.stockProyectadoKg < 0 ? 'text-danger' : 'text-success'">
-                  {{ (fila.stockProyectadoKg / 1000).toFixed(3) }} tn
+                  {{ formatearCantidad(fila.stockProyectadoKg / 1000, 3) }} tn
                 </td>
                 <td class="py-2.5 text-right">
                   <span

@@ -24,3 +24,21 @@ export function parsearNumeroPedido(texto) {
   const digitos = String(texto ?? '').replace(/\D/g, '')
   return digitos ? Number(digitos) : null
 }
+
+// Cantidades (tn, m³, kg) en formato argentino: punto de miles, coma decimal,
+// siempre con `decimales` fijos ("7.383,7"). Para pantalla y para textos de
+// Excel; las celdas numéricas de Excel quedan como número con su numFmt.
+export function formatearCantidad(valor, decimales = 1) {
+  const n = Number(valor)
+  return (Number.isFinite(n) ? n : 0).toLocaleString('es-AR', {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  })
+}
+
+// Igual que formatearCantidad pero sin ceros de relleno: hasta `maxDecimales`
+// ("100", "189,84"). Para cantidades tal como se cargaron (solicitado, real).
+export function formatearCantidadHasta(valor, maxDecimales = 2) {
+  const n = Number(valor)
+  return (Number.isFinite(n) ? n : 0).toLocaleString('es-AR', { maximumFractionDigits: maxDecimales })
+}

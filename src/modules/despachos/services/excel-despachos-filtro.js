@@ -25,13 +25,12 @@ import {
 } from '@/services/excel-corporativo'
 
 import { nombreTipoProducto, unidadLabelTipoProducto } from '@/config/tipos-producto'
-import { formatearNumeroPedido } from '@/services/formato-numeros'
+import { formatearCantidad, formatearNumeroPedido } from '@/services/formato-numeros'
 
 const COLUMNAS = ['N° pedido', 'Fecha', 'Obra / Cliente', 'Mezcla', 'Tipo', 'Pedido', 'Real', 'Diferencia']
 
-function formatearCantidad(valor, tipo) {
-  const unidad = unidadLabelTipoProducto(tipo)
-  return `${Number(valor || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })} ${unidad}`
+function cantidadConUnidad(valor, tipo) {
+  return `${formatearCantidad(valor, 2)} ${unidadLabelTipoProducto(tipo)}`
 }
 
 const etiquetaTipo = nombreTipoProducto
@@ -58,9 +57,9 @@ export async function exportarDespachosFiltroExcel(filas, resumenFiltros) {
     f.destino,
     f.formulaNombre,
     etiquetaTipo(f.tipo),
-    formatearCantidad(f.cantidad_solicitada, f.tipo),
-    formatearCantidad(f.cantidad_despachada, f.tipo),
-    formatearCantidad(f.diferencia, f.tipo),
+    cantidadConUnidad(f.cantidad_solicitada, f.tipo),
+    cantidadConUnidad(f.cantidad_despachada, f.tipo),
+    cantidadConUnidad(f.diferencia, f.tipo),
   ])
 
   const anchos = calcularAnchosAutoFit([COLUMNAS, ...filasFormateadas])
@@ -107,9 +106,9 @@ export async function exportarDespachosFiltroExcel(filas, resumenFiltros) {
       '',
       '',
       label,
-      formatearCantidad(totalPedido, tipo),
-      formatearCantidad(totalReal, tipo),
-      formatearCantidad(totalPedido - totalReal, tipo),
+      cantidadConUnidad(totalPedido, tipo),
+      cantidadConUnidad(totalReal, tipo),
+      cantidadConUnidad(totalPedido - totalReal, tipo),
     ]
     row.eachCell((cell) => estiloTotalGeneral(cell))
     fila++

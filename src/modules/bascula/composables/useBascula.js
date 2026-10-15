@@ -39,7 +39,7 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { getPedido, obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
 import { patentesService, proveedoresService, materialesService } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
-import { formatearNumeroPedido } from '@/services/formato-numeros'
+import { formatearCantidad, formatearCantidadHasta, formatearNumeroPedido } from '@/services/formato-numeros'
 // Excel con formato corporativo (2026-09-03, pedido de Federico: logo +
 // estilo de colores + pie institucional en todos los exports) — reemplaza
 // a src/services/excel-export.js (SheetJS, no soporta escribir estilos).
@@ -358,7 +358,7 @@ export function useBascula() {
     const cantidad = Number(cantidadRemito)
     if (!(netoTn > 0) || !(cantidad > 0)) return null
     if (cantidad <= netoTn * 1.2 && cantidad >= netoTn * 0.8) return null
-    return `La cantidad según remito (${cantidad} tn) difiere más de un 20 % del peso neto pesado (${Number(netoTn.toFixed(3))} tn). Revisá que esté cargada en toneladas.`
+    return `La cantidad según remito (${cantidad} tn) difiere más de un 20 % del peso neto pesado (${formatearCantidadHasta(netoTn, 3)} tn). Revisá que esté cargada en toneladas.`
   }
 
   async function guardarPesada(slot) {
@@ -683,7 +683,7 @@ export function useBascula() {
       // "28/09/2026 11:45". horaLabel sigue aparte para el Excel, que ya
       // tiene su propia columna Fecha.
       fechaHoraLabel: `${new Date(v.fecha_pesada).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${new Date(v.fecha_pesada).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`,
-      diferenciaLabel: diferencia == null ? '—' : `${diferencia > 0 ? '+' : ''}${diferencia.toFixed(2)} tn`,
+      diferenciaLabel: diferencia == null ? '—' : `${diferencia > 0 ? '+' : ''}${formatearCantidad(diferencia, 2)} tn`,
       // MATERIAL/OBRA combinada (columna única en el legado): obra para
       // asfalto, material de texto libre para ingreso/egreso — ambos ya
       // vienen resueltos en `v.material` por la vista.
@@ -712,12 +712,12 @@ export function useBascula() {
       // corrida (ver plantas_v_bascula_viva) — mismo criterio y mismo
       // resultado que ya usaba obtenerAcumuladoHastaFecha() para imprimir,
       // ahora también disponible fila por fila sin una consulta extra.
-      acumuladoLabel: v.tipo_vale === 'asfalto' && v.acumulado_dia_tn != null ? `${Number(v.acumulado_dia_tn).toFixed(2)} tn` : '—',
+      acumuladoLabel: v.tipo_vale === 'asfalto' && v.acumulado_dia_tn != null ? `${formatearCantidad(v.acumulado_dia_tn, 2)} tn` : '—',
       // S/REMITO y DIF. (legado): solo tienen valor en filas de ingreso —
       // memory/relevamiento-sistema-viejo.md §2, verificado en vivo: vacías
       // en filas de asfalto/egreso. calcularDiferencia() ya devuelve null
       // para esos casos, mismo criterio acá.
-      sRemitoLabel: cantidadRemitoIngreso != null ? `${Number(cantidadRemitoIngreso).toFixed(2)} tn` : '—',
+      sRemitoLabel: cantidadRemitoIngreso != null ? `${formatearCantidad(cantidadRemitoIngreso, 2)} tn` : '—',
       tipoCorto: TIPO_CORTO_VALE[v.tipo_vale] ?? v.tipo_vale,
       entradaSalida: ENTRADA_SALIDA_VALE[v.tipo_vale] ?? '—',
     }
@@ -813,9 +813,9 @@ export function useBascula() {
             { key: 'remitoLabel', label: 'Remito' },
             { key: 'responsableLabel', label: 'Responsable' },
             { key: 'numero_vale', label: 'N° Vale', format: (_v, fila) => formatearNumeroDeVale(fila) },
-            { key: 'peso_bruto', label: 'Bruto (tn)', format: (v) => Number(v).toFixed(2) },
-            { key: 'tara', label: 'Tara (tn)', format: (v) => Number(v).toFixed(2) },
-            { key: 'peso_neto', label: 'Neto (tn)', format: (v) => Number(v).toFixed(2) },
+            { key: 'peso_bruto', label: 'Bruto (tn)', format: (v) => formatearCantidad(v, 2) },
+            { key: 'tara', label: 'Tara (tn)', format: (v) => formatearCantidad(v, 2) },
+            { key: 'peso_neto', label: 'Neto (tn)', format: (v) => formatearCantidad(v, 2) },
             { key: 'acumuladoLabel', label: 'Acum.' },
             { key: 'sRemitoLabel', label: 'S/Remito' },
             { key: 'diferenciaLabel', label: 'Dif.' },
@@ -876,7 +876,7 @@ export function useBascula() {
       // desglose de cargas individuales) — ver RemitoImprimible.vue.
       items: [
         {
-          cantidad: acumuladoParaImprimir.value != null ? `${acumuladoParaImprimir.value.toFixed(2)} tn` : '',
+          cantidad: acumuladoParaImprimir.value != null ? `${formatearCantidad(acumuladoParaImprimir.value, 2)} tn` : '',
           // "MEZCLA ASFÁLTICA" fijo, NUNCA la fórmula real (2026-09-09,
           // pedido explícito de Federico: en el remito que ve el cliente no
           // siempre conviene mostrar cuál mezcla específica se usó — el

@@ -24,7 +24,7 @@ import {
   ENTRADA_SALIDA_VALE,
 } from '@/modules/bascula/composables/useBascula'
 import { formatearNumeroVale, formatearNumeroValeArido, formatearNumeroDeVale } from '@/modules/bascula/services/bascula.service'
-import { formatearNumeroRemito, formatearNumeroPedido } from '@/services/formato-numeros'
+import { formatearNumeroRemito, formatearNumeroPedido, formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -150,8 +150,8 @@ const columnasHistorial = [
   { key: 'remitoLabel', label: 'Remito', secundaria: true },
   { key: 'responsableLabel', label: 'Responsable', secundaria: true },
   { key: 'numero_vale', label: 'N° Vale', format: (_v, fila) => formatearNumeroDeVale(fila) },
-  { key: 'peso_bruto', label: 'Bruto', format: (v) => Number(v).toFixed(2), secundaria: true },
-  { key: 'tara', label: 'Tara', format: (v) => Number(v).toFixed(2), secundaria: true },
+  { key: 'peso_bruto', label: 'Bruto', format: (v) => formatearCantidad(v, 2), secundaria: true },
+  { key: 'tara', label: 'Tara', format: (v) => formatearCantidad(v, 2), secundaria: true },
   { key: 'pesoNetoLabel', label: 'Neto' },
   { key: 'acumuladoLabel', label: 'Acum.', secundaria: true },
   { key: 'sRemitoLabel', label: 'S/Remito', secundaria: true },
@@ -635,12 +635,12 @@ watch(
                 <option v-if="!valeEditar.pedido_id" value="" disabled>Sin pedido — elegir…</option>
                 <optgroup v-if="pedidosParaReasignar.delDia.length" label="Del día de la pesada">
                   <option v-for="p in pedidosParaReasignar.delDia" :key="p.id" :value="p.id">
-                    {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn
+                    {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ formatearCantidadHasta(p.cantidad_solicitada) }} tn
                   </option>
                 </optgroup>
                 <optgroup v-if="pedidosParaReasignar.otros.length" label="Otros días (confirmados)">
                   <option v-for="p in pedidosParaReasignar.otros" :key="p.id" :value="p.id">
-                    {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ p.cantidad_solicitada }} tn ({{ p.fecha_programada.split('-').reverse().join('/') }})
+                    {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ formatearCantidadHasta(p.cantidad_solicitada) }} tn ({{ p.fecha_programada.split('-').reverse().join('/') }})
                   </option>
                 </optgroup>
               </select>

@@ -23,6 +23,7 @@ import { formatearNumeroDeVale } from '@/modules/bascula/services/bascula.servic
 // CSS/texto que se usaba antes (no había forma de bajar el archivo a disco
 // en sesiones previas, ver memory/modules-status.md).
 import logoVialtec from '@/assets/img/logo-vialtec.png'
+import { formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
 
 const props = defineProps({
   vale: { type: Object, required: true },
@@ -129,17 +130,17 @@ const copiasVale = [
           <p><span class="text-gray-500">N° Remito:</span> {{ vale.numero_remito_ingreso || '—' }}</p>
           <p>
             <span class="text-gray-500">Cantidad s/remito:</span>
-            {{ vale.cantidad_remito_ingreso != null ? Number(vale.cantidad_remito_ingreso).toFixed(2) + ' tn' : '—' }}
+            {{ vale.cantidad_remito_ingreso != null ? formatearCantidad(vale.cantidad_remito_ingreso, 2) + ' tn' : '—' }}
           </p>
         </template>
         <p><span class="text-gray-500">Bruto:</span> {{ vale.peso_bruto }} {{ vale.unidad }}</p>
         <p><span class="text-gray-500">Tara:</span> {{ vale.tara }} {{ vale.unidad }}</p>
-        <p><span class="text-gray-500">Neto:</span> {{ vale.peso_neto }} {{ vale.unidad }}</p>
+        <p><span class="text-gray-500">Neto:</span> {{ formatearCantidadHasta(vale.peso_neto) }} {{ vale.unidad }}</p>
         <p v-if="vale.temperatura != null"><span class="text-gray-500">Temp.:</span> {{ vale.temperatura }} °C</p>
       </div>
 
       <div class="mt-6 border-t border-gray-300 pt-3">
-        <p class="text-xl font-bold">Acumulado: {{ acumuladoTn != null ? acumuladoTn.toFixed(2) : '—' }} tn</p>
+        <p class="text-xl font-bold">Acumulado: {{ acumuladoTn != null ? formatearCantidad(acumuladoTn, 2) : '—' }} tn</p>
       </div>
 
       <div class="mt-auto pt-8 text-sm text-gray-500">

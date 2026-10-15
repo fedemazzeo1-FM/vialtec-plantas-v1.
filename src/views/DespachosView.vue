@@ -16,7 +16,7 @@ import VKpiCard from '@/components/shared/VKpiCard.vue'
 import { useDespachos } from '@/modules/despachos/composables/useDespachos'
 import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
-import { formatearNumeroRemito, formatearNumeroPedido } from '@/services/formato-numeros'
+import { formatearNumeroRemito, formatearNumeroPedido, formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
 import { ref } from 'vue'
 import ReporteEjecutivoMensual from '@/modules/despachos/components/ReporteEjecutivoMensual.vue'
 import { useReporteEjecutivo } from '@/modules/despachos/composables/useReporteEjecutivo'
@@ -24,7 +24,6 @@ import {
   LISTA_TIPOS_PRODUCTO,
   esCircuitoBascula,
   esCircuitoMixer,
-  tiposConTotalVisible,
   unidadLabelTipoProducto,
 } from '@/config/tipos-producto'
 
@@ -62,6 +61,7 @@ const {
   limpiarFiltros,
   cambiarPagina,
   totalesFiltro,
+  tiposTotalesFiltro,
   cargandoTotalesFiltro,
   exportandoFiltro,
   exportarFiltroExcel,
@@ -182,12 +182,12 @@ async function descargarPdfVale() {
 
       <!-- KPIs: mes en curso + acumulado histórico completo -->
       <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-        <VKpiCard :label="`Asfalto ${mesActualLabel}`" :value="kpisMes.asfaltoTn.toFixed(1)" unidad="tn" />
-        <VKpiCard :label="`Hormigón ${mesActualLabel}`" :value="kpisMes.hormigonM3.toFixed(1)" unidad="m³" />
-        <VKpiCard label="Total hormigón acumulado" :value="kpisHistorico.hormigonM3.toFixed(1)" unidad="m³" />
+        <VKpiCard :label="`Asfalto ${mesActualLabel}`" :value="formatearCantidad(kpisMes.asfaltoTn)" unidad="tn" />
+        <VKpiCard :label="`Hormigón ${mesActualLabel}`" :value="formatearCantidad(kpisMes.hormigonM3)" unidad="m³" />
+        <VKpiCard label="Total hormigón acumulado" :value="formatearCantidad(kpisHistorico.hormigonM3)" unidad="m³" />
         <template v-for="t in tiposSinKpiFijo" :key="t.id">
-          <VKpiCard v-if="kpisMes[t.total] > 0" :label="`${t.nombre} ${mesActualLabel}`" :value="kpisMes[t.total].toFixed(1)" :unidad="t.unidadLabel" />
-          <VKpiCard v-if="kpisHistorico[t.total] > 0" :label="`Total ${t.nombre.toLowerCase()} acumulado`" :value="kpisHistorico[t.total].toFixed(1)" :unidad="t.unidadLabel" />
+          <VKpiCard v-if="kpisMes[t.total] > 0" :label="`${t.nombre} ${mesActualLabel}`" :value="formatearCantidad(kpisMes[t.total])" :unidad="t.unidadLabel" />
+          <VKpiCard v-if="kpisHistorico[t.total] > 0" :label="`Total ${t.nombre.toLowerCase()} acumulado`" :value="formatearCantidad(kpisHistorico[t.total])" :unidad="t.unidadLabel" />
         </template>
       </div>
 
@@ -290,12 +290,12 @@ async function descargarPdfVale() {
           </VButton>
         </div>
         <p v-if="cargandoTotalesFiltro" class="mt-2 text-sm text-text-soft">Calculando…</p>
-        <div v-else class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div v-else class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <VKpiCard
-            v-for="t in tiposConTotalVisible(totalesFiltro)"
+            v-for="t in tiposTotalesFiltro"
             :key="t.id"
             :label="`${t.nombre} despachado`"
-            :value="totalesFiltro[t.total].toFixed(1)"
+            :value="formatearCantidad(totalesFiltro[t.total])"
             :unidad="t.unidadLabel"
           />
           <VKpiCard label="Despachos" :value="totalesFiltro.cantidadDespachos" unidad="" />
@@ -342,7 +342,7 @@ async function descargarPdfVale() {
           <VCard v-for="r in resumenObras" :key="r.obraId ?? r.nombre">
             <p class="truncate text-sm font-semibold text-text">{{ r.nombre }}</p>
             <template v-for="t in LISTA_TIPOS_PRODUCTO" :key="t.id">
-              <p v-if="r[t.total] > 0" class="mt-1 text-lg font-bold text-text">{{ r[t.total].toFixed(1) }} <span class="text-xs font-normal text-text-soft">{{ t.unidadLabel }} {{ t.nombre.toLowerCase() }}</span></p>
+              <p v-if="r[t.total] > 0" class="mt-1 text-lg font-bold text-text">{{ formatearCantidad(r[t.total]) }} <span class="text-xs font-normal text-text-soft">{{ t.unidadLabel }} {{ t.nombre.toLowerCase() }}</span></p>
             </template>
             <p class="mt-1 text-xs text-text-soft">{{ r.cantidadDespachos }} despacho{{ r.cantidadDespachos === 1 ? '' : 's' }}</p>
           </VCard>
@@ -422,14 +422,14 @@ async function descargarPdfVale() {
             <p v-if="row.encargado" class="text-xs text-text-soft">👤 {{ row.encargado }}</p>
           </template>
           <template #cell-cantidad_solicitada="{ row }">
-            {{ row.cantidad_solicitada }} {{ unidadDe(row.tipo) }}
+            {{ formatearCantidadHasta(row.cantidad_solicitada) }} {{ unidadDe(row.tipo) }}
           </template>
           <template #cell-cantidad_despachada="{ row }">
-            {{ row.cantidad_despachada }} {{ unidadDe(row.tipo) }}
+            {{ formatearCantidadHasta(row.cantidad_despachada) }} {{ unidadDe(row.tipo) }}
           </template>
           <template #cell-diferencia="{ row }">
             <span :class="row.diferencia > 0 ? 'text-warning' : 'text-text-soft'">
-              {{ row.diferencia.toFixed(2) }} {{ unidadDe(row.tipo) }}
+              {{ formatearCantidad(row.diferencia, 2) }} {{ unidadDe(row.tipo) }}
             </span>
           </template>
           <template #cell-acciones="{ row }">
@@ -471,13 +471,13 @@ async function descargarPdfVale() {
         </p>
         <ul v-if="cargasDetalle.length" class="space-y-1.5">
           <li v-for="(carga, i) in cargasDetalle" :key="carga.id" class="rounded-lg border border-border px-3 py-2 text-sm">
-            Carga {{ i + 1 }} — {{ carga.patente || 'sin patente' }} — {{ Number(carga.cantidad).toFixed(2) }} {{ unidadDe(pedidoDetalle.tipo) }}
+            Carga {{ i + 1 }} — {{ carga.patente || 'sin patente' }} — {{ formatearCantidad(carga.cantidad, 2) }} {{ unidadDe(pedidoDetalle.tipo) }}
             <span class="text-text-soft">— {{ esCircuitoMixer(pedidoDetalle.tipo) ? 'Remito' : 'Vale' }}: {{ carga.numeroRemitoOVale || '—' }}</span>
           </li>
         </ul>
         <p v-else class="text-sm text-text-soft">No hay cargas registradas para este despacho.</p>
         <div v-if="cargasDetalle.length" class="mt-3 rounded-lg bg-success-light px-3 py-2 text-sm font-semibold text-success">
-          Total despachado: {{ pedidoDetalle.cantidad_despachada }} {{ unidadDe(pedidoDetalle.tipo) }}
+          Total despachado: {{ formatearCantidadHasta(pedidoDetalle.cantidad_despachada) }} {{ unidadDe(pedidoDetalle.tipo) }}
           <span class="ml-2 font-normal text-text-mid">N° {{ esCircuitoMixer(pedidoDetalle.tipo) ? 'remito' : 'vale' }}: {{ rangoNumerosDetalle }}</span>
         </div>
       </div>
@@ -672,7 +672,7 @@ async function descargarPdfVale() {
             @click="elegirVale(v.id)"
           >
             <span>N° {{ formatearNumeroVale(v.numeroVale) }} — {{ v.patente || 'sin patente' }}</span>
-            <span class="text-text-soft">{{ v.pesoNetoTn.toFixed(2) }} tn</span>
+            <span class="text-text-soft">{{ formatearCantidad(v.pesoNetoTn, 2) }} tn</span>
           </button>
         </li>
       </ul>

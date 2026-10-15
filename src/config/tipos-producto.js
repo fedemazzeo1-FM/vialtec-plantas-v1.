@@ -7,6 +7,8 @@
 // No confundir con plantas_vales.tipo_vale (asfalto / ingreso_arido /
 // egreso_arido): ese es el tipo de VALE de Báscula, otro concepto.
 
+import { formatearCantidad } from '@/services/formato-numeros'
+
 /** Cómo sale el producto de la planta. */
 export const CIRCUITO = {
   // Se pesa en Báscula, un vale por camión.
@@ -156,7 +158,7 @@ export function etiquetasTotales(totales, { decimales = 1, soloConValor = false 
     const valor = Number(totales?.[t.total]) || 0
     return valor > 0 || (t.siempreVisible && !soloConValor)
   }).map((t) => {
-    const valor = (Number(totales?.[t.total]) || 0).toFixed(decimales)
+    const valor = formatearCantidad(totales?.[t.total], decimales)
     return `${valor} ${t.unidadLabel}${t.siempreVisible ? '' : ` ${t.nombre.toLowerCase()}`}`
   })
 }

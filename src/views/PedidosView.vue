@@ -27,6 +27,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { tiposConTotalVisible, unidadLabelTipoProducto } from '@/config/tipos-producto'
+import { formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
 
 const { esMobile } = useBreakpoint()
 const auth = useAuthStore()
@@ -225,7 +226,7 @@ iniciar()
           v-for="t in tiposConTotalPeriodo"
           :key="t.id"
           :label="`${t.nombre} (período)`"
-          :value="totalesPeriodo[t.total].toFixed(1)"
+          :value="formatearCantidad(totalesPeriodo[t.total], 1)"
           :unidad="t.unidadLabel"
         />
       </div>
@@ -690,7 +691,7 @@ iniciar()
         </div>
         <p class="text-sm text-text-mid">
           {{ despacho.pedido?.tipo_pedido === 'venta' ? despacho.pedido?.cliente_externo : obras.find((o) => o.id === despacho.pedido?.obra_id)?.nombre }}
-          — Solicitado: {{ despacho.pedido?.cantidad_solicitada }} tn · Saldo antes de este despacho: {{ despacho.saldoPendiente.toFixed(1) }} tn
+          — Solicitado: {{ formatearCantidadHasta(despacho.pedido?.cantidad_solicitada) }} tn · Saldo antes de este despacho: {{ formatearCantidad(despacho.saldoPendiente, 1) }} tn
         </p>
 
         <div class="space-y-2">
@@ -738,7 +739,7 @@ iniciar()
           <VButton type="button" variant="secondary" size="sm" @click="despacho.agregarCarga">+ Agregar carga</VButton>
         </div>
 
-        <p class="text-sm font-semibold text-text">Total: {{ despacho.totalCargas.toFixed(2) }} tn</p>
+        <p class="text-sm font-semibold text-text">Total: {{ formatearCantidad(despacho.totalCargas, 2) }} tn</p>
         <!-- N° de remito: se origina en Báscula, no acá (migración 39,
              2026-09-16) — el balancero lo asigna e imprime en la primera
              pesada del pedido, el plantista lo recibe ya en papel. Esta
@@ -756,7 +757,7 @@ iniciar()
         <!-- Cierre parcial + pedido residual (Logica sis. plantas v1.rtf §2.2) -->
         <div v-if="despacho.residualEstimado > 0" class="rounded-lg border border-warning/30 bg-warning-light/40 p-3">
           <p class="text-sm text-text-mid">
-            Con estas cargas queda un saldo de <strong>{{ despacho.residualEstimado.toFixed(2) }} tn</strong> sin despachar.
+            Con estas cargas queda un saldo de <strong>{{ formatearCantidad(despacho.residualEstimado, 2) }} tn</strong> sin despachar.
             El pedido se va a cerrar como <strong>despachado</strong> igual, con lo cargado.
           </p>
           <label class="mt-2 flex items-center gap-2 text-sm text-text-mid">
@@ -794,7 +795,7 @@ iniciar()
         </div>
         <p class="text-sm text-text-mid">
           {{ cargaHormigon.pedido?.tipo_pedido === 'venta' ? cargaHormigon.pedido?.cliente_externo : obras.find((o) => o.id === cargaHormigon.pedido?.obra_id)?.nombre }}
-          — Solicitado: {{ cargaHormigon.pedido?.cantidad_solicitada }} {{ unidadCargaMixer }} · Saldo antes de este despacho: {{ cargaHormigon.saldoPendiente.toFixed(1) }} {{ unidadCargaMixer }}
+          — Solicitado: {{ formatearCantidadHasta(cargaHormigon.pedido?.cantidad_solicitada) }} {{ unidadCargaMixer }} · Saldo antes de este despacho: {{ formatearCantidad(cargaHormigon.saldoPendiente, 1) }} {{ unidadCargaMixer }}
         </p>
 
         <div class="space-y-2">
@@ -842,11 +843,11 @@ iniciar()
           <VButton type="button" variant="secondary" size="sm" @click="cargaHormigon.agregarCarga">+ Agregar carga</VButton>
         </div>
 
-        <p class="text-sm font-semibold text-text">Total: {{ cargaHormigon.totalCargas.toFixed(2) }} {{ unidadCargaMixer }}</p>
+        <p class="text-sm font-semibold text-text">Total: {{ formatearCantidad(cargaHormigon.totalCargas, 2) }} {{ unidadCargaMixer }}</p>
 
         <div v-if="cargaHormigon.residualEstimado > 0" class="rounded-lg border border-warning/30 bg-warning-light/40 p-3">
           <p class="text-sm text-text-mid">
-            Con estas cargas queda un saldo de <strong>{{ cargaHormigon.residualEstimado.toFixed(2) }} {{ unidadCargaMixer }}</strong> sin despachar.
+            Con estas cargas queda un saldo de <strong>{{ formatearCantidad(cargaHormigon.residualEstimado, 2) }} {{ unidadCargaMixer }}</strong> sin despachar.
             El pedido se va a cerrar como <strong>despachado</strong> igual, con lo cargado.
           </p>
           <label class="mt-2 flex items-center gap-2 text-sm text-text-mid">

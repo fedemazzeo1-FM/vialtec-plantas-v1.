@@ -17,6 +17,7 @@ import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/a
 // exportación" + logo + estilo de colores + pie institucional) — reemplaza
 // a src/services/excel-export.js (SheetJS, no soporta escribir estilos).
 import { exportarPlanillaCorporativa, nombreArchivoConFecha } from '@/services/excel-corporativo'
+import { formatearCantidad as formatearDecimales } from '@/services/formato-numeros'
 
 const TAMANO_PAGINA_HISTORIAL = 30
 
@@ -322,9 +323,9 @@ export function useStock() {
           filas: materiales.value,
           columnas: [
             { key: 'nombre', label: 'Material' },
-            { key: 'cantidadKg', label: 'Cantidad (tn)', format: (v) => (v / 1000).toFixed(3) },
-            { key: 'stock_minimo_kg', label: 'Mínimo (tn)', format: (v) => (v ? (v / 1000).toFixed(1) : '') },
-            { key: 'stock_maximo_kg', label: 'Máximo (tn)', format: (v) => (v ? (v / 1000).toFixed(1) : '') },
+            { key: 'cantidadKg', label: 'Cantidad (tn)', format: (v) => formatearDecimales(v / 1000, 3) },
+            { key: 'stock_minimo_kg', label: 'Mínimo (tn)', format: (v) => (v ? formatearDecimales(v / 1000, 1) : '') },
+            { key: 'stock_maximo_kg', label: 'Máximo (tn)', format: (v) => (v ? formatearDecimales(v / 1000, 1) : '') },
             { key: 'estado', label: 'Estado', format: (v) => ({ rojo: 'Insuficiente', amarillo: 'Ajustado', verde: 'OK' })[v] ?? v },
           ],
         },
@@ -357,7 +358,7 @@ export function useStock() {
             { key: 'fecha_movimiento', label: 'Fecha', format: (v) => new Date(v).toLocaleString('es-AR') },
             { key: 'tipo', label: 'Tipo', format: (v) => etiquetaTipo(v) },
             { key: 'materialNombre', label: 'Material' },
-            { key: 'cantidad_kg', label: 'Cantidad (tn)', format: (v) => (v / 1000).toFixed(3) },
+            { key: 'cantidad_kg', label: 'Cantidad (tn)', format: (v) => formatearDecimales(v / 1000, 3) },
             { key: 'origen', label: 'Proveedor / Motivo' },
             { key: 'numero_remito', label: 'Remito' },
             { key: 'responsableNombre', label: 'Responsable' },
@@ -390,7 +391,7 @@ export function useStock() {
             { key: 'proveedor', label: 'Proveedor' },
             { key: 'material', label: 'Insumo' },
             { key: 'viajes', label: 'Viajes' },
-            { key: 'toneladas', label: 'Toneladas', format: (v) => v.toFixed(2) },
+            { key: 'toneladas', label: 'Toneladas', format: (v) => formatearDecimales(v, 2) },
           ],
         },
       ])

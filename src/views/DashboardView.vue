@@ -19,6 +19,7 @@ import { useAlertaStockSemana } from '@/modules/dashboard/composables/useAlertaS
 import { useDashboardHome } from '@/modules/dashboard/composables/useDashboardHome'
 import ComparativoMesCard from '@/modules/dashboard/components/ComparativoMesCard.vue'
 import { etiquetasTotales } from '@/config/tipos-producto'
+import { formatearCantidad } from '@/services/formato-numeros'
 
 const error = ref(null)
 
@@ -92,10 +93,10 @@ iniciarPanelControl()
             <VSemaforo :estado="a.estadoProyectado" />
             <span class="font-medium">{{ a.nombre }}</span>
             <span class="text-text-soft">
-              — actual {{ a.stockActualTn.toFixed(1) }} tn, consumo comprometido
-              {{ a.consumoSemanaTn.toFixed(1) }} tn → proyectado
+              — actual {{ formatearCantidad(a.stockActualTn, 1) }} tn, consumo comprometido
+              {{ formatearCantidad(a.consumoSemanaTn, 1) }} tn → proyectado
               <span :class="a.estadoProyectado === 'rojo' ? 'font-semibold text-danger' : 'font-semibold text-warning'">
-                {{ a.stockProyectadoTn.toFixed(1) }} tn
+                {{ formatearCantidad(a.stockProyectadoTn, 1) }} tn
               </span>
             </span>
           </li>
@@ -315,7 +316,7 @@ iniciarPanelControl()
               class="mt-1 text-lg font-bold"
               :class="{ 'text-danger': m.estado === 'rojo', 'text-warning': m.estado === 'amarillo', 'text-success': m.estado === 'verde' }"
             >
-              {{ (m.cantidadKg / 1000).toFixed(2) }} t
+              {{ formatearCantidad(m.cantidadKg / 1000, 2) }} t
             </p>
           </div>
         </div>

@@ -21,7 +21,7 @@ import VBadge from '@/components/shared/VBadge.vue'
 import VButton from '@/components/shared/VButton.vue'
 import { computed, ref } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
-import { formatearNumeroPedido } from '@/services/formato-numeros'
+import { formatearCantidadHasta, formatearNumeroPedido } from '@/services/formato-numeros'
 import { esCircuitoBascula, esCircuitoMixer, unidadLabelTipoProducto } from '@/config/tipos-producto'
 import {
   VARIANTE_ESTADO,
@@ -120,9 +120,9 @@ function formatearFechaHoraCreacion(iso) {
         </div>
         <p class="mt-1 text-sm text-text-mid">
           {{ pedido.formulaNombre }} ·
-          <span class="font-bold text-vialtec">{{ pedido.cantidad_solicitada }} {{ unidad }}</span>
+          <span class="font-bold text-vialtec">{{ formatearCantidadHasta(pedido.cantidad_solicitada) }} {{ unidad }}</span>
           <span v-if="pedido.cantidad_despachada != null" class="text-text-soft">
-            → real: {{ pedido.cantidad_despachada }} {{ unidad }}
+            → real: {{ formatearCantidadHasta(pedido.cantidad_despachada) }} {{ unidad }}
           </span>
         </p>
       </div>

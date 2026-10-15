@@ -28,6 +28,7 @@ import {
 } from '@/config/tipos-producto'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useAuthStore } from '@/stores/auth.store'
+import { formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
 
 const { esMobile } = useBreakpoint()
 const auth = useAuthStore()
@@ -237,7 +238,7 @@ cargarSemana()
               v-for="tipo in tiposConTotalVisible(totales.total)"
               :key="tipo.id"
               :label="tipo.nombre"
-              :value="totales.total[tipo.total].toFixed(1)"
+              :value="formatearCantidad(totales.total[tipo.total], 1)"
               :unidad="tipo.unidadLabel"
             />
           </div>
@@ -251,7 +252,7 @@ cargarSemana()
                 v-for="tipo in tiposConTotalVisible(t)"
                 :key="tipo.id"
                 :label="tipo.nombre"
-                :value="t[tipo.total].toFixed(1)"
+                :value="formatearCantidad(t[tipo.total], 1)"
                 :unidad="tipo.unidadLabel"
               />
             </div>
@@ -325,7 +326,7 @@ cargarSemana()
                 <p class="truncate text-sm font-bold text-text">{{ nombreDestinoPedido(p) }}</p>
                 <p class="text-xs text-text-soft">
                   {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
-                  <span class="font-semibold text-vialtec">{{ p.cantidad_solicitada }} {{ unidadLabelTipoProducto(p.tipo) }}</span>
+                  <span class="font-semibold text-vialtec">{{ formatearCantidadHasta(p.cantidad_solicitada) }} {{ unidadLabelTipoProducto(p.tipo) }}</span>
                 </p>
               </div>
               <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>
@@ -395,7 +396,7 @@ cargarSemana()
                 <p class="truncate font-semibold text-text" :title="nombreDestinoPedido(p)">{{ nombreDestinoPedido(p) }}</p>
                 <p class="truncate text-text-soft">
                   {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
-                  {{ p.cantidad_solicitada }} {{ unidadLabelTipoProducto(p.tipo) }}
+                  {{ formatearCantidadHasta(p.cantidad_solicitada) }} {{ unidadLabelTipoProducto(p.tipo) }}
                 </p>
                 <div class="mt-1.5 flex items-center justify-between gap-1">
                   <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>

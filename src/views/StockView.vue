@@ -21,6 +21,7 @@ import VButton from '@/components/shared/VButton.vue'
 import VSemaforo from '@/components/shared/VSemaforo.vue'
 import { useStock } from '@/modules/stock/composables/useStock'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { formatearCantidad as formatearDecimales } from '@/services/formato-numeros'
 
 const { esMobile } = useBreakpoint()
 
@@ -156,7 +157,7 @@ function anchoBarra(material) {
 const columnasProveedorInsumo = [
   { key: 'material', label: 'Insumo' },
   { key: 'viajes', label: 'Viajes' },
-  { key: 'toneladas', label: 'Toneladas', format: (v) => v.toFixed(2) },
+  { key: 'toneladas', label: 'Toneladas', format: (v) => formatearDecimales(v, 2) },
 ]
 </script>
 
@@ -245,7 +246,7 @@ const columnasProveedorInsumo = [
               />
             </div>
             <p v-if="material.stock_minimo_kg || material.stock_maximo_kg" class="mt-1 text-[11px] text-text-soft">
-              min {{ ((material.stock_minimo_kg || 0) / 1000).toFixed(1) }}t · máx {{ material.stock_maximo_kg ? (material.stock_maximo_kg / 1000).toFixed(1) + 't' : '—' }}
+              min {{ formatearDecimales((material.stock_minimo_kg || 0) / 1000, 1) }}t · máx {{ material.stock_maximo_kg ? formatearDecimales(material.stock_maximo_kg / 1000, 1) + 't' : '—' }}
             </p>
           </VCard>
         </div>
@@ -313,7 +314,7 @@ const columnasProveedorInsumo = [
           </template>
           <template #cell-cantidad_kg="{ row }">
             <span :class="row.cantidad_kg > 0 ? 'text-success' : 'text-danger'">
-              {{ row.cantidad_kg > 0 ? '+' : '' }}{{ (row.cantidad_kg / 1000).toFixed(3) }} t
+              {{ row.cantidad_kg > 0 ? '+' : '' }}{{ formatearDecimales(row.cantidad_kg / 1000, 3) }} t
             </span>
           </template>
         </VTable>
@@ -405,7 +406,7 @@ const columnasProveedorInsumo = [
               </div>
               <div>
                 <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Total tn</p>
-                <p class="text-xl font-extrabold text-text">{{ p.totalTn.toFixed(2) }}</p>
+                <p class="text-xl font-extrabold text-text">{{ formatearDecimales(p.totalTn, 2) }}</p>
               </div>
             </div>
             <VTable :columns="columnasProveedorInsumo" :rows="p.insumos" />
@@ -413,7 +414,7 @@ const columnasProveedorInsumo = [
                  footer de agregados, se agrega acá al pie de cada card. -->
             <div class="mt-2 flex items-center justify-between rounded-lg bg-vialtec/5 px-3 py-2 text-sm font-bold text-vialtec">
               <span>TOTAL</span>
-              <span>{{ p.viajes }} viajes · {{ p.totalTn.toFixed(2) }} tn</span>
+              <span>{{ p.viajes }} viajes · {{ formatearDecimales(p.totalTn, 2) }} tn</span>
             </div>
           </VCard>
         </div>

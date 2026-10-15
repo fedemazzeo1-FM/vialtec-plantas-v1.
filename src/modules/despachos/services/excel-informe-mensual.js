@@ -35,14 +35,15 @@ import {
   calcularAnchosAutoFit,
 } from '@/services/excel-corporativo'
 import { LISTA_TIPOS_PRODUCTO } from '@/config/tipos-producto'
+import { formatearCantidad } from '@/services/formato-numeros'
 
 // Amarillo (2026-09-17, pedido de Federico): color de pestaña/solapa de
 // "Ventas Externas" — la única hoja que lo usa, para distinguirla a simple
 // vista del resto (violeta) en la barra de hojas de Excel.
 const AMARILLO_TAB = 'FFFFEB3B'
 
-const TN = (v) => (v ? `${Number(v).toFixed(2)} tn` : '—')
-const M3 = (v) => (v ? `${Number(v).toFixed(1)} m³` : '—')
+const TN = (v) => (v ? `${formatearCantidad(v, 2)} tn` : '—')
+const M3 = (v) => (v ? `${formatearCantidad(v, 1)} m³` : '—')
 
 // Las tablas resumen tienen dos columnas fijas (Hormigón m³ / Asfalto tn). Los
 // tipos de producto sin columna fija (los que no son `siempreVisible` en
@@ -54,7 +55,7 @@ function tiposConColumnaExtra(totales) {
 }
 const headersExtra = (tipos) => tipos.map((t) => `${t.nombre} (${t.unidadLabel})`)
 const celdasExtra = (tipos, totales) =>
-  tipos.map((t) => (totales?.[t.total] ? `${Number(totales[t.total]).toFixed(2)} ${t.unidadLabel}` : '—'))
+  tipos.map((t) => (totales?.[t.total] ? `${formatearCantidad(totales[t.total], 2)} ${t.unidadLabel}` : '—'))
 /** Ancho de las columnas extra, a partir de la columna `desde` (1 = A). */
 function anchoColumnasExtra(ws, tipos, desde) {
   tipos.forEach((_, i) => {
@@ -432,6 +433,7 @@ function armarHojaProveedores(workbook, datos) {
       const row = ws.getRow(fila)
       row.values = [p.proveedor, i.material, i.viajes, Number(i.toneladas.toFixed(2))]
       row.eachCell((cell) => estiloCuerpo(cell))
+      row.getCell(4).numFmt = '#,##0.00'
       totalViajes += i.viajes
       totalTn += i.toneladas
       fila++
@@ -447,6 +449,7 @@ function armarHojaProveedores(workbook, datos) {
     const total = ws.getRow(fila)
     total.values = ['TOTAL', '', totalViajes, Number(totalTn.toFixed(2))]
     total.eachCell((cell) => estiloSubtotal(cell))
+    total.getCell(4).numFmt = '#,##0.00'
     fila++
   }
 
@@ -492,7 +495,7 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasResumen, filasPesadas
     ],
     texto: [
       i + 1, nombre, FECHA(d.fecha), d.mezcla, d.tipo,
-      (Number(d.pedido) || 0).toFixed(2), (Number(d.real) || 0).toFixed(2), d.unidad, d.estado ?? '', d.nroRemito || '', d.nroVale || '',
+      formatearCantidad(d.pedido, 2), formatearCantidad(d.real, 2), d.unidad, d.estado ?? '', d.nroRemito || '', d.nroVale || '',
     ],
   }))
 
@@ -516,7 +519,7 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasResumen, filasPesadas
 
   const filas2 = filasPesadas.map((p, i) => ({
     valores: [i + 1, p.fecha ? new Date(p.fecha) : null, p.tipo, p.nroVale || '', p.nroRemito || '', p.patente, p.chofer, Number(p.cantidad) || 0, p.unidad],
-    texto: [i + 1, FECHA_HORA(p.fecha), p.tipo, p.nroVale || '', p.nroRemito || '', p.patente, p.chofer, (Number(p.cantidad) || 0).toFixed(2), p.unidad],
+    texto: [i + 1, FECHA_HORA(p.fecha), p.tipo, p.nroVale || '', p.nroRemito || '', p.patente, p.chofer, formatearCantidad(p.cantidad, 2), p.unidad],
   }))
 
   const tiposPesadas = [...new Set(filasPesadas.map((p) => p.tipo))]

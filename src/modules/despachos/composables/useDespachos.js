@@ -33,7 +33,7 @@ import { clientesService } from '@/modules/maestros/services/maestros.service'
 // de asfalto de Despachos tienen que mostrar exactamente lo mismo que las
 // 3 cards de Home (Total año / Ammann 140 / Marini 180), mismo cálculo.
 import { fetchProduccionAnualAsfalto } from '@/modules/dashboard/services/dashboard.service'
-import { nombreTipoProducto, sumarEnTotal, totalesVacios } from '@/config/tipos-producto'
+import { LISTA_TIPOS_PRODUCTO, nombreTipoProducto, sumarEnTotal, totalesVacios } from '@/config/tipos-producto'
 import { patentesService } from '@/modules/maestros/services/maestros.service'
 // Reuso de Báscula (memory/conventions.md: no duplicar lógica compartida
 // entre módulos) — el acumulado dinámico del día y el formato de N° de vale
@@ -193,6 +193,14 @@ export function useDespachos() {
     for (const p of todosFiltrados.value) sumarEnTotal(totales, p.tipo, p.cantidad_despachada)
     return { ...totales, cantidadDespachos: todosFiltrados.value.length }
   })
+
+  // Una tarjeta por tipo (config/tipos-producto.js): con un tipo elegido en el
+  // filtro, solo ese (aunque dé 0); con "Todos", los que tengan producción.
+  const tiposTotalesFiltro = computed(() =>
+    filtros.tipo
+      ? LISTA_TIPOS_PRODUCTO.filter((t) => t.id === filtros.tipo)
+      : LISTA_TIPOS_PRODUCTO.filter((t) => totalesFiltro.value[t.total] > 0)
+  )
 
   async function cargarTotalesFiltro() {
     cargandoTotalesFiltro.value = true
@@ -686,6 +694,7 @@ export function useDespachos() {
     cambiarPagina,
     cargarDespachos,
     totalesFiltro,
+    tiposTotalesFiltro,
     cargandoTotalesFiltro,
     exportandoFiltro,
     exportarFiltroExcel,
