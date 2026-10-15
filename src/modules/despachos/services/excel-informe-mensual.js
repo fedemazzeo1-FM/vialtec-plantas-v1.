@@ -33,6 +33,7 @@ import {
   estiloCuerpo,
   agregarPieInstitucional,
   calcularAnchosAutoFit,
+  descargarWorkbook,
 } from '@/services/excel-corporativo'
 import { LISTA_TIPOS_PRODUCTO } from '@/config/tipos-producto'
 import { formatearCantidad } from '@/services/formato-numeros'
@@ -102,7 +103,6 @@ function armarHojaResumenMensual(workbook, datos) {
   const ws = workbook.addWorksheet('Resumen mensual')
   ws.columns = [{ width: 5 }, { width: 42 }, { width: 13 }, { width: 20 }, { width: 18 }]
   ws.properties.defaultRowHeight = 18
-  ws.views = [{ showGridLines: true }]
   ws.getRow(1).height = 50 // agrandada junto con el logo, ver agregarLogo()
 
   ws.mergeCells('A2:E2')
@@ -346,7 +346,6 @@ async function armarHojaResumenAnual(workbook, datos) {
   const ws = workbook.addWorksheet('Resumen anual')
   ws.columns = [{ width: 20 }, { width: 18 }, { width: 18 }]
   ws.properties.defaultRowHeight = 18
-  ws.views = [{ showGridLines: true }]
 
   ws.mergeCells('A1:C1')
   ws.getCell('A1').value = `Informe Anual Enero–${datos.mesLabel}`
@@ -415,7 +414,6 @@ function armarHojaProveedores(workbook, datos) {
   const ws = workbook.addWorksheet('Analítica de Proveedores')
   ws.columns = [{ width: 30 }, { width: 24 }, { width: 10 }, { width: 14 }]
   ws.properties.defaultRowHeight = 18
-  ws.views = [{ showGridLines: true }]
 
   ws.mergeCells('A1:D1')
   ws.getCell('A1').value = `Analítica de proveedores — ${datos.mesLabel}`
@@ -477,7 +475,6 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasResumen, filasPesadas
   const N_COLS = 11
   const letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
   ws.properties.defaultRowHeight = 18 // filas de datos (2026-09-17, pedido de Federico)
-  ws.views = [{ showGridLines: true }]
 
   const header1 = ['N°', 'Cliente', 'Fecha', 'Mezcla', 'Tipo', 'Solicitado', 'Real', 'Unidad', 'Estado', 'N° Remito', 'N° Vale']
   const header2 = ['N°', 'Fecha/Hora', 'Tipo', 'N° Vale', 'N° Remito', 'Patente', 'Chofer', 'Cantidad', 'Unidad']
@@ -673,7 +670,6 @@ export async function construirWorkbookInformeMensual(datos, logoBuffer) {
     // violeta corporativo por defecto).
     wsVentas.properties.tabColor = { argb: AMARILLO_TAB }
     wsVentas.properties.defaultRowHeight = 18
-    wsVentas.views = [{ showGridLines: true }]
     wsVentas.columns = [{ width: 5 }, { width: 40 }, { width: 12 }, { width: 20 }, { width: 18 }]
     wsVentas.mergeCells('A1:E1')
     wsVentas.getCell('A1').value = `Ventas Externas — ${datos.mesLabel}`
@@ -729,14 +725,5 @@ export async function generarInformeMensualExcel(datos) {
   const logoBuffer = await resp.arrayBuffer()
   const workbook = await construirWorkbookInformeMensual(datos, logoBuffer)
 
-  const buffer = await workbook.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `Informe Plantas prod. ${datos.mesLabel.toUpperCase()}.xlsx`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  await descargarWorkbook(workbook, `Informe Plantas prod. ${datos.mesLabel.toUpperCase()}.xlsx`)
 }

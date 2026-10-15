@@ -186,8 +186,21 @@ export function agregarPieInstitucional(worksheet, filaContenido, columnasAnchoT
   cell.alignment = { horizontal: 'center' }
 }
 
+/**
+ * Oculta las líneas de cuadrícula en todas las hojas (fondo blanco, como los
+ * Excel del sistema de flota — pedido de Federico, 2026-10-15). Conserva el
+ * resto de la vista de cada hoja (ej. encabezado congelado).
+ */
+export function ocultarCuadricula(workbook) {
+  workbook.eachSheet((worksheet) => {
+    const vistas = worksheet.views?.length ? worksheet.views : [{}]
+    worksheet.views = vistas.map((v) => ({ ...v, showGridLines: false }))
+  })
+}
+
 /** Dispara la descarga del workbook en el navegador — mismo mecanismo en todos los exports, no duplicado. */
 export async function descargarWorkbook(workbook, nombreArchivo) {
+  ocultarCuadricula(workbook)
   const buffer = await workbook.xlsx.writeBuffer()
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
