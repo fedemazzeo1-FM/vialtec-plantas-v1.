@@ -17,6 +17,7 @@ import VSemaforo from '@/components/shared/VSemaforo.vue'
 import VBarraMensual from '@/components/shared/VBarraMensual.vue'
 import { useAlertaStockSemana } from '@/modules/dashboard/composables/useAlertaStockSemana'
 import { useDashboardHome } from '@/modules/dashboard/composables/useDashboardHome'
+import ComparativoMesCard from '@/modules/dashboard/components/ComparativoMesCard.vue'
 import { etiquetasTotales } from '@/config/tipos-producto'
 
 const error = ref(null)
@@ -134,6 +135,10 @@ iniciarPanelControl()
           <p class="text-xs text-text-soft">stock insuficiente</p>
         </div>
       </div>
+
+      <!-- Comparativo del mes (2026-10-15): del 1 a ayer vs. los mismos días
+           del mes anterior, por tipo de producto. -->
+      <ComparativoMesCard />
 
       <!-- Producción de asfalto — año 2026 (2026-09-06, pedido de Federico:
            diferenciar la planta Ammann 140 —histórico ene-abr, sin sistema,

@@ -110,6 +110,14 @@ export function rangoDelMes(mes) {
 /** KPI del mes en curso — mismo criterio que fetchAcumuladoHistorico pero acotado. */
 export async function fetchTotalesMes(mes) {
   const { desde, hasta } = rangoDelMes(mes)
+  return fetchTotalesRango(desde, hasta)
+}
+
+/**
+ * Totales por tipo de lo despachado entre dos fechas ('YYYY-MM-DD', ambas
+ * inclusive) — mismo criterio que fetchTotalesMes (Home → comparativo del mes).
+ */
+export async function fetchTotalesRango(desde, hasta) {
   const filas = await fetchPaginado(() =>
     supabase
       .from(TABLA_PEDIDOS)
