@@ -54,11 +54,15 @@ function tramo({ anio, mes0, diaHasta }, conAnio) {
   return diaHasta === 1 ? `1 de ${mes}` : `1 al ${diaHasta} de ${mes}`
 }
 
-/** "Del 1 al 14 de octubre vs. 1 al 14 de septiembre" (con año solo si cambia). */
+/**
+ * "Del 1 al 14 de octubre vs. 1 al 14 de septiembre (no incluye el día de
+ * hoy)" (con año solo si cambia).
+ */
 export function subtituloComparativo({ actual, anterior }) {
   const conAnio = actual.anio !== anterior.anio
   const texto = `${tramo(actual, conAnio)} vs. ${tramo(anterior, conAnio)}`
-  return actual.diaHasta === 1 ? `El ${texto.replace(' vs. ', ' vs. el ')}` : `Del ${texto}`
+  const tramos = actual.diaHasta === 1 ? `El ${texto.replace(' vs. ', ' vs. el ')}` : `Del ${texto}`
+  return `${tramos} (no incluye el día de hoy)`
 }
 
 const formatear = (n) => n.toLocaleString('es-AR', { maximumFractionDigits: 1 })
