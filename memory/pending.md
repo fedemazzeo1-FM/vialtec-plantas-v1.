@@ -2,6 +2,35 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ✅ 2026-10-15 — Excel sin cuadrícula + orden destacado en Báscula (EN PRODUCCIÓN)
+
+**Excel sin cuadrícula** (commit `c7e3929`, deploy
+`dpl_HR9CGuS8uxuTXVCo67G4rXfhvXEQ`): `ocultarCuadricula()` en
+`excel-corporativo.js`, aplicada dentro de `descargarWorkbook()` (único punto
+de descarga; el informe mensual pasó a usarlo). Conserva el encabezado
+congelado; ningún otro cambio de formato. Alcanza a: Báscula (historial),
+Stock (actual, historial de ingresos, analítica de proveedores), Despachos
+(Excel del filtro, informe mensual — todas las hojas) y Auditoría. Probado
+generando un archivo con exceljs; **falta abrir en Excel uno bajado de
+producción**.
+
+**Orden destacado en Báscula** (migración 64 APLICADA con OK de Federico;
+commits `d32b2e0` + `afeb2a0`; deploy final `dpl_3sdCrDXCNBBuLzxPmZv7P3JTEkvD`):
+- `orden_bascula` (smallint, opcional, > 0) en `plantas_proveedores` y
+  `plantas_materiales`; vacío = después, alfabético. Editable en Maestros →
+  Proveedores / Materiales ("Orden en Báscula").
+- Iniciales: CANTERA POMPEYA S.A = 1, CERRO DEL AGUILA = 2 (ambos ya existían
+  en el maestro); 6/20 = 1, 0/6 = 2, 10/30 = 3. Quedaron 5 filas EDITAR de
+  "sistema (SQL)" en la auditoría.
+- Aplica a TODOS los desplegables de material/proveedor de Báscula (ingreso,
+  salida de áridos, modal Editar vale) — Federico pidió "todo con el mismo
+  orden" después del primer deploy. Helper `ordenarDestacadosBascula()` en
+  `maestros.service.js`. Fórmulas/Stock/Maestros siguen alfabéticos.
+- Colateral: en Maestros un campo numérico vaciado se guarda null (antes la
+  base rechazaba ''), afecta también mín./máx. de stock.
+- Verificado en la base (columnas, CHECK, valores, auditoría) y en el bundle
+  servido. **Falta mirarlo logueado con clics** (Báscula y Maestros).
+
 ### ✅ Migración 63 — ingreso de áridos (EN PRODUCCIÓN 2026-10-14)
 
 **Cierre (2026-10-14):** Federico corrió la 63 y
