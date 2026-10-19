@@ -1,5 +1,5 @@
 // Composable de Auditoría (etapa 5): filtros en la URL, listado paginado,
-// detalle antes/después y Excel del filtro completo. La vista
+// detalle (legible + datos técnicos) y Excel del filtro completo. La vista
 // (AuditoriaView.vue) es template puro.
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -11,8 +11,10 @@ import {
   fetchEntidadesAuditoria,
   normalizarBusquedaAuditoria,
 } from '@/modules/auditoria/services/auditoria.service'
+import { fraseAuditoria } from '@/modules/auditoria/services/auditoria-presentacion'
 import { fetchUsuarios } from '@/modules/usuarios/services/usuarios.service'
-import { fetchNombresPorEmail } from '@/services/flota.service'
+import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
+import { fetchNombresPorEmail, fetchObras } from '@/services/flota.service'
 
 const CLAVES_FILTRO = ['usuario', 'modulo', 'accion', 'desde', 'hasta', 'q']
 const USUARIO_SISTEMA = 'sistema (SQL)'
@@ -90,6 +92,14 @@ export function useAuditoria() {
   const entidades = ref([])
   const usuarios = ref([])
 
+  // Para el detalle legible (auditoria-presentacion.js): nombre actual de
+  // cada usuario (si se cargó después de la acción, se muestra igual) y los
+  // nombres de fórmulas y obras que los registros guardan como id. Sin
+  // catálogos el detalle muestra "no disponible", no bloquea la pantalla.
+  const nombresPorEmail = ref({})
+  const catalogos = ref({})
+  const contextoDetalle = computed(() => ({ nombres: nombresPorEmail.value, catalogos: catalogos.value }))
+
   // Estado del formulario: se inicializa desde la URL y recién se aplica
   // (y vuelve a la URL) con "Filtrar", igual que el resto de las pantallas.
   const filtros = reactive({ usuario: '', modulo: '', accion: '', desde: '', hasta: '', q: '' })
@@ -156,6 +166,7 @@ export function useAuditoria() {
       } catch (e) {
         nombres = {} // sin nombres se muestra el email, no es bloqueante
       }
+      nombresPorEmail.value = nombres
       usuarios.value = [
         ...emails
           .map((email) => ({ email, label: nombres[email] || email }))
@@ -202,7 +213,6 @@ export function useAuditoria() {
   // Detalle
   const modalDetalleAbierto = ref(false)
   const registroDetalle = ref(null)
-  const filasDetalle = computed(() => filasDetalleAuditoria(registroDetalle.value))
 
   function abrirDetalle(registro) {
     registroDetalle.value = registro
@@ -244,6 +254,7 @@ export function useAuditoria() {
             { key: 'entidad', label: 'Qué', format: (v) => etiquetaEntidad.value[v] ?? v },
             { key: 'entidad_ref', label: 'Referencia' },
             { key: 'entidad_label', label: 'Detalle' },
+            { key: 'id', label: 'Resumen', format: (_, fila) => fraseAuditoria(fila, contextoDetalle.value) },
             { key: 'motivo', label: 'Motivo' },
             { key: 'valores_antes', label: 'Antes', format: (v) => resumenValores(v) },
             { key: 'valores_despues', label: 'Después', format: (v) => resumenValores(v) },
@@ -259,9 +270,16 @@ export function useAuditoria() {
     }
   }
 
+  async function cargarCatalogos() {
+    const [formulas, obras] = await Promise.allSettled([fetchFormulas(), fetchObras({ soloActivas: false })])
+    const mapa = (resultado) =>
+      resultado.status === 'fulfilled' ? new Map(resultado.value.map((x) => [String(x.id), x.nombre])) : undefined
+    catalogos.value = { formulas: mapa(formulas), obras: mapa(obras) }
+  }
+
   async function iniciar() {
     leerDeLaUrl()
-    await Promise.all([cargarBase(), cargar()])
+    await Promise.all([cargarBase(), cargarCatalogos(), cargar()])
   }
 
   return {
@@ -280,8 +298,8 @@ export function useAuditoria() {
     cambiarPagina,
     modalDetalleAbierto,
     registroDetalle,
-    filasDetalle,
     abrirDetalle,
+    contextoDetalle,
     exportando,
     exportarExcel,
     iniciar,

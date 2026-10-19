@@ -3,13 +3,14 @@
 // cada acción. Solo lectura, solo admin (la base lo hace cumplir con una
 // policy fija; el router y el menú solo evitan mostrar una pantalla vacía) y
 // solo escritorio. Filtros en la URL, 50 por página, detalle antes/después y
-// Excel de todo el filtro. Template puro: la lógica vive en useAuditoria.js.
+// Excel de todo el filtro. Detalle legible en AuditoriaDetalle.vue. Template puro: la lógica vive en useAuditoria.js.
 import VSection from '@/components/shared/VSection.vue'
 import VCard from '@/components/shared/VCard.vue'
 import VTable from '@/components/shared/VTable.vue'
 import VModal from '@/components/shared/VModal.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VButton from '@/components/shared/VButton.vue'
+import AuditoriaDetalle from '@/modules/auditoria/components/AuditoriaDetalle.vue'
 import { ACCIONES_AUDITORIA } from '@/modules/auditoria/services/auditoria.service'
 import {
   useAuditoria,
@@ -44,8 +45,8 @@ const {
   cambiarPagina,
   modalDetalleAbierto,
   registroDetalle,
-  filasDetalle,
   abrirDetalle,
+  contextoDetalle,
   exportando,
   exportarExcel,
   iniciar,
@@ -151,58 +152,13 @@ const claseCampo =
     </VSection>
 
     <VModal :open="modalDetalleAbierto" title="Detalle del registro" size="xl" @update:open="modalDetalleAbierto = $event">
-      <div v-if="registroDetalle" class="space-y-4 text-sm">
-        <div class="grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-3">
-          <div>
-            <p class="text-xs text-text-soft">Fecha y hora</p>
-            <p class="font-semibold text-text">{{ formatearFechaHoraAuditoria(registroDetalle.fecha_hora) }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-text-soft">Usuario</p>
-            <p class="font-semibold text-text">{{ registroDetalle.usuario_nombre }}</p>
-            <p class="text-xs text-text-soft">
-              {{ registroDetalle.usuario_email }}<span v-if="registroDetalle.usuario_rol"> · {{ registroDetalle.usuario_rol }}</span>
-            </p>
-          </div>
-          <div>
-            <p class="text-xs text-text-soft">Acción</p>
-            <VBadge :variant="varianteAccion(registroDetalle.tipo_accion)">{{ etiquetaAccion(registroDetalle.tipo_accion) }}</VBadge>
-          </div>
-          <div class="col-span-2">
-            <p class="text-xs text-text-soft">
-              {{ etiquetaModulo[registroDetalle.modulo] ?? registroDetalle.modulo }} ·
-              {{ etiquetaEntidad[registroDetalle.entidad] ?? registroDetalle.entidad }}
-            </p>
-            <p class="font-semibold text-text">{{ registroDetalle.entidad_label || registroDetalle.entidad_ref }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-text-soft">Dispositivo</p>
-            <p class="text-text">{{ registroDetalle.dispositivo || '—' }}</p>
-          </div>
-        </div>
-
-        <p v-if="registroDetalle.motivo" class="rounded-lg bg-panel px-3 py-2 text-text-mid">
-          <span class="font-semibold">Motivo:</span> {{ registroDetalle.motivo }}
-        </p>
-
-        <table v-if="filasDetalle.length" class="w-full text-left">
-          <thead>
-            <tr class="border-b border-border text-xs uppercase tracking-wide text-text-soft">
-              <th class="py-2 pr-3 font-semibold">Campo</th>
-              <th class="py-2 pr-3 font-semibold">Antes</th>
-              <th class="py-2 font-semibold">Después</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="f in filasDetalle" :key="f.clave" class="border-b border-border align-top last:border-0">
-              <td class="py-1.5 pr-3 text-text-mid">{{ f.campo }}</td>
-              <td class="break-all py-1.5 pr-3 text-text-soft">{{ f.antes }}</td>
-              <td class="break-all py-1.5 text-text">{{ f.despues }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="text-text-soft">Este registro no guarda valores antes/después.</p>
-
+      <div v-if="registroDetalle" class="space-y-4">
+        <AuditoriaDetalle
+          :row="registroDetalle"
+          :contexto="contextoDetalle"
+          :etiqueta-modulo="etiquetaModulo[registroDetalle.modulo] ?? ''"
+          :etiqueta-entidad="etiquetaEntidad[registroDetalle.entidad] ?? ''"
+        />
         <div class="flex justify-end">
           <VButton variant="secondary" @click="modalDetalleAbierto = false">Cerrar</VButton>
         </div>
