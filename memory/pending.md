@@ -2,6 +2,54 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-19)
+
+**Auditoría legible — commiteada y pusheada, SIN DEPLOY (Federico: no deployar el 19/10).** Detalle de
+`/auditoria` como en flota: frase "quién hizo qué sobre qué", motivo
+destacado, solo lo que cambió con nombre legible y unidad, altas con los
+datos principales, "Ver datos técnicos" plegado con lo de antes, y columna
+"Resumen" en el Excel (al lado de las actuales). Archivos:
+`auditoria/services/auditoria-presentacion.js` (funciones puras, diccionario
+por entidad), `auditoria/components/AuditoriaDetalle.vue`, `useAuditoria.js`
+(catálogos de fórmulas/obras + nombres actuales por email), `AuditoriaView.vue`.
+Barrido con sesión admin en localhost sobre las 376 filas reales: 0 errores,
+0 frases vacías, 0 `undefined`/`null`/`NaN`/uuid/"Invalid Date"/"+0 tn".
+Fórmula: sin filas reales (nadie la editó desde el 05/10; el trigger está
+activo); probada con un registro armado igual al del trigger (insumos
+agregado/quitado/cambiado + cambio de tipo). Falta:
+1. `npx vercel --prod` (con OK de Federico) y mirar el modal en producción
+   (vale corregido 269, pedido postergado 266, pedido 330 con cambio de
+   fórmula, relevamiento 140) + bajar el Excel y ver la columna Resumen.
+2. Si el nombre de quien hizo la acción se carga después en el directorio,
+   la frase ya muestra el nombre nuevo (se resuelve al mostrar, no se toca
+   la auditoría guardada).
+
+**Migración 65 (Simulador → auditoría) — NO escrita ni aplicada.** Plan
+aprobado por Federico el 19/10: el simulador hoy no escribe nada en la base
+(100 % en pantalla). Acción nueva `SIMULAR` en el CHECK de `tipo_accion` +
+entidad `simulador/simulacion` en el catálogo; RPC
+`registrar_simulacion(p_entradas jsonb)` (solo fórmula + cantidad, máx. 20
+líneas; el resultado —subtotales por tipo e insumos insuficientes— lo calcula
+la base con `plantas_calcular_consumo_kg` y el stock real; identidad por
+`plantas_auditar`; permiso del simulador; sin `anon`). Disparo: cuando el mix
+deja de cambiar (60 s sin cambios, salir de la pantalla o "Limpiar todo"),
+solo si cambió desde la última fila; en segundo plano, sin esperar ni mostrar
+error (no cambia el funcionamiento). Sumar al diccionario de
+`auditoria-presentacion.js` la frase "simuló un despacho — …". Orden:
+escribir + dry-run → mostrar resultado a Federico → aplicar con su OK →
+frontend → build → deploy.
+
+**Nombre "Diego Sanchez" para `balanza@vialtec.com.ar` — DECIDIDO (b), sin
+hacer.** Federico eligió el 19/10 guardar el nombre del lado de plantas, sin
+tocar flota: `flota_usuarios_email` no tiene fila de balanza y crearla
+habilitaría el login de esa cuenta en flota. A hacer: migración nueva con
+columna `nombre` (text, opcional) en `plantas_usuarios_roles`, cargar "Diego
+Sanchez" con su fila de auditoría (motivo: "nombre de la persona que usa la
+cuenta de báscula en plantas"; es EDITAR de `usuario_rol`, o UPDATE por SQL
+con la fila a mano), y que plantas prefiera ese nombre al de flota donde hoy
+usa `fetchNombresPorEmail` (auth.store, Báscula, Stock, Auditoría,
+Usuarios). Dry-run + OK de Federico antes de aplicar. No cambiar el rol.
+
 ### ✅ 2026-10-15 — Excel sin cuadrícula + orden destacado en Báscula (EN PRODUCCIÓN)
 
 **Excel sin cuadrícula** (commit `c7e3929`, deploy
@@ -135,9 +183,6 @@ Pendiente, en este orden:
    lleva su fila de auditoría y que un DELETE por SQL en tablas con trigger
    necesita `select set_config('plantas.motivo_eliminacion', '...', true)` en
    la misma transacción. Al terminar, borrar o desactivar el usuario de prueba.
-4. **Usuarios individuales de balanza:** crear una cuenta por balancero y dar
-   de baja la compartida `balanza@vialtec.com.ar` (cerrar sesiones, primero la
-   del celular). Espera que Federico diga quiénes son. Detalle más abajo.
 
 ---
 
@@ -187,19 +232,6 @@ aplicada con OK; verificado post-aplicación (RLS, policies, grants, triggers,
 índices, proacl). Lectura probada con admin y plantista; los otros 5 roles
 usan la misma policy, sin ejecutar uno por uno. La tabla queda vacía hasta la
 etapa 3.
-
-### Cuenta compartida "balanza" — PENDIENTE de Federico (2026-10-05)
-
-`balanza@vialtec.com.ar` (rol balancero) se usa desde 2 dispositivos con 2
-sesiones abiertas (logs 28/09–05/10): PC Windows/Chrome por Starlink (sesión
-`9c3c70d7-…`, desde 15/09, casi toda la actividad) y celular Android/Chrome
-(sesión `675384fd-…`, desde 24/09; usado el 28/09 por red móvil y el 30/09
-21:34 desde una conexión fija en Laferrere). El 28/09 hubo 10 minutos de uso
-simultáneo. En la auditoría todo figura como "balanza" sin distinguir persona.
-**A hacer cuando Federico sepa quiénes son:** crear un usuario individual por
-balancero (Supabase Auth + `plantas_usuarios_roles` rol balancero) y dar de
-baja la cuenta compartida: cerrar sus sesiones (primero la del celular) y
-desactivarla. No hacer nada hasta que Federico pase los nombres.
 
 ### Frontend del N° de pedido — EN PRODUCCIÓN (2026-10-05)
 
@@ -273,8 +305,7 @@ lleva su fila de auditoría y que un DELETE por SQL en tablas con trigger
 necesita `select set_config('plantas.motivo_eliminacion', '...', true)` en la
 misma transacción.
 
-**Otros pendientes de Federico:** usuarios individuales por balancero y baja
-de la cuenta `balanza` (abajo). Ensayos que consumen numeración: usar el
+**Otros pendientes:** ensayos que consumen numeración: usar el
 patrón de `dry_run_etapa3_auditoria.sql` (lock + setval, con bloque
 `exception` que restaura también si falla).
 
@@ -887,8 +918,8 @@ cache de catálogos, limpieza de índices/políticas duplicadas.
   se cierra del todo `kv_store` (hoy: solo lectura para `authenticated`, migración 28).
 - Catálogos: 7 clientes del legado sin migrar (la tabla ya existe); umbrales
   mín/máx de stock a transcribir a mano; patente `AD-648-EA` con columnas
-  cruzadas; 3 usuarios sin nombre en `flota_usuarios_email` (angel.moreira,
-  balanza, juan.heinrich).
+  cruzadas; 2 usuarios sin nombre en `flota_usuarios_email` (angel.moreira,
+  juan.heinrich); balanza: ver PARA RETOMAR del 19/10.
 - Decididas para después del corte: módulo Auditoría (pantalla), exports
   faltantes (Excel de Pedidos y 5 botones de Despachos). Backup: NO se desarrolla
   (backups de Supabase + export manual).
