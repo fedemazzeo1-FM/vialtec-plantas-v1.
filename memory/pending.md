@@ -4,7 +4,7 @@
 
 ### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-19)
 
-**Auditoría legible — commiteada y pusheada, SIN DEPLOY (Federico: no deployar el 19/10).** Detalle de
+**Auditoría legible — EN PRODUCCIÓN (2026-10-19, deploy `dpl_4QfDXFc78FtuRSiYpvfFxDkBHLXh`, bundle `index-DtnShsGV.js` / `AuditoriaView-DJ1NXJDb.js` verificado servido).** Commits `6d37582` + `767966b`; el push lo corre Federico (bloqueado desde la sesión). Detalle de
 `/auditoria` como en flota: frase "quién hizo qué sobre qué", motivo
 destacado, solo lo que cambió con nombre legible y unidad, altas con los
 datos principales, "Ver datos técnicos" plegado con lo de antes, y columna
@@ -17,8 +17,7 @@ Barrido con sesión admin en localhost sobre las 376 filas reales: 0 errores,
 Fórmula: sin filas reales (nadie la editó desde el 05/10; el trigger está
 activo); probada con un registro armado igual al del trigger (insumos
 agregado/quitado/cambiado + cambio de tipo). Falta:
-1. `npx vercel --prod` (con OK de Federico) y mirar el modal en producción
-   (vale corregido 269, pedido postergado 266, pedido 330 con cambio de
+1. Mirar el modal logueado en producción (vale corregido 269, pedido postergado 266, pedido 330 con cambio de
    fórmula, relevamiento 140) + bajar el Excel y ver la columna Resumen.
 2. Si el nombre de quien hizo la acción se carga después en el directorio,
    la frase ya muestra el nombre nuevo (se resuelve al mostrar, no se toca
