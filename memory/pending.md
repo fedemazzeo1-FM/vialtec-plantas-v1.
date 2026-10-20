@@ -28,12 +28,18 @@ el layout a mobile y remontaba Báscula (era el remount misterioso del 07/09
 y 14/09). El cartel solo sale con el remito (decisión de Federico).
 La migración del Simulador → auditoría pasa a ser la **67**.
 
-**En curso — formulario "Editar vale" como la puerta (aprobado por Federico):**
-un solo componente de campos para puerta y edición; patente con autocompletado
-de tara y chofer; chofer como la patente (lista con sugerencias del maestro de
-Choferes, se completa con el chofer habitual, acepta uno nuevo) en la puerta y
-en la edición; "Acumulado del día" → "Acumulado" en Auditoría. Antes del
-deploy: probar que la puerta funciona exactamente igual que hoy.
+**Formulario "Editar vale" como la puerta — EN PRODUCCIÓN (commit `3837678`,
+bundle `index-B-qTGrfD.js`).** `CamposPesada.vue` es el único componente de
+campos de la puerta y de la edición (patente con sugerencias que completa tara
+y chofer; chofer con sugerencias del maestro de Choferes, se completa con el
+chofer habitual y acepta uno nuevo); la edición muestra "Neto: a → b tn · se
+recalcula el acumulado…". Auditoría: "Acumulado del día" → "Acumulado".
+Probado contra la puerta de antes (HEAD) con los mismos datos en los 3 tipos:
+mismo formulario y neto; única diferencia visible, el chofer con sugerencias.
+Lo que se manda a `corregir_vale_bascula` es idéntico al de antes; sin motivo
+no se manda nada. Falta verlo en uso real (balanza). Ojo: 33 de 51 patentes
+tienen un chofer habitual que no está en el maestro de Choferes (se completa
+igual, pero no aparece entre las sugerencias).
 
 ### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-20)
 
