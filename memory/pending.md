@@ -2,6 +2,39 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶ EN CURSO (2026-10-20 tarde)
+
+**Migración 66 — recálculo del acumulado guardado: APLICADA 2026-10-20 ~17:00
+con OK de Federico.** Verificado sobre lo instalado: los 18 vales con guardado
+= regla = vista (10276 → 35,65); los únicos distintos son los 10 de la regla
+vieja que no se tocan; recálculo sin EXECUTE para anon/authenticated; P-0263
+sigue confirmado con pesaje abierto. `supabase/migrations/66_recalcular_acumulado_al_corregir.sql`.
+Corregir/anular/reasignar un vale de asfalto (y una pesada con fecha
+anterior) recalculan `acumulado_obra_tn` del vale y de los siguientes del
+mismo pedido (sin pedido: misma obra y día AR) con
+`plantas_recalcular_acumulados_asfalto` (interna, sin EXECUTE). Corrige 18
+vales que ya estaban mal con cualquier regla (10213, 10276; P-0213 y P-0216
+que sumaban un anulado), con control del valor actual de cada uno. NO toca
+los 10 guardados con la regla vieja de corte diario (P-0212 10144-10145,
+P-0233 10240-10247: foto impresa en su momento), ni anulados ni legado, ni
+el P-0263 (queda abierto para que Diego vea el cartel). Ensayo:
+`scripts/dry_run_migracion_66.sql` (todo OK); reversión
+`scripts/revertir_migracion_66.sql`, ensayada con
+`dry_run_revertir_migracion_66.sql` (vuelve a los md5 previos). Antes de
+aplicar: confirmar que 10276 sigue con 37,63 guardado (la migración lo
+controla sola). Ya en producción ese día: arreglo del cartel tras imprimir
+el remito (commit `7f43015`, pusheado): imprimir el remito vertical cambiaba
+el layout a mobile y remontaba Báscula (era el remount misterioso del 07/09
+y 14/09). El cartel solo sale con el remito (decisión de Federico).
+La migración del Simulador → auditoría pasa a ser la **67**.
+
+**En curso — formulario "Editar vale" como la puerta (aprobado por Federico):**
+un solo componente de campos para puerta y edición; patente con autocompletado
+de tara y chofer; chofer como la patente (lista con sugerencias del maestro de
+Choferes, se completa con el chofer habitual, acepta uno nuevo) en la puerta y
+en la edición; "Acumulado del día" → "Acumulado" en Auditoría. Antes del
+deploy: probar que la puerta funciona exactamente igual que hoy.
+
 ### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-20)
 
 **Acumulado de asfalto por pedido + "¿Se terminó el pedido?" + impresiones
@@ -71,7 +104,7 @@ agregado/quitado/cambiado + cambio de tipo). Falta:
    la frase ya muestra el nombre nuevo (se resuelve al mostrar, no se toca
    la auditoría guardada).
 
-**Migración 66 (Simulador → auditoría; era la "65") — NO escrita ni aplicada.** Plan
+**Migración 67 (Simulador → auditoría; era la "65" y después la "66") — NO escrita ni aplicada.** Plan
 aprobado por Federico el 19/10: el simulador hoy no escribe nada en la base
 (100 % en pantalla). Acción nueva `SIMULAR` en el CHECK de `tipo_accion` +
 entidad `simulador/simulacion` en el catálogo; RPC
