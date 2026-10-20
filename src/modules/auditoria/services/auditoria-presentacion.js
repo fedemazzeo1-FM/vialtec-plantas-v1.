@@ -169,7 +169,9 @@ const CAMPOS_COMUNES = {
   material: { label: 'Material' },
   temperatura: { label: 'Temperatura', tipo: 'temperatura' },
   fecha_pesada: { label: 'Fecha de la pesada', tipo: 'fecha' },
-  acumulado_obra_tn: { label: 'Acumulado del día', tipo: 'tn' },
+  // "Acumulado" a secas (2026-10-20): desde la migración 65 es por pedido,
+  // no del día (solo los vales sin pedido acumulan por obra y día).
+  acumulado_obra_tn: { label: 'Acumulado', tipo: 'tn' },
   anulado: { label: 'Anulado', tipo: 'si_no' },
   aplicado_al_vale_kg: { label: 'Stock aplicado por el vale', tipo: 'kg' },
   cantidad_tn: { label: 'Cantidad', tipo: 'tn' },

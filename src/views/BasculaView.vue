@@ -8,6 +8,7 @@
 import VCard from '@/components/shared/VCard.vue'
 import VTable from '@/components/shared/VTable.vue'
 import VModal from '@/components/shared/VModal.vue'
+import CamposPesada from '@/modules/bascula/components/CamposPesada.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
@@ -39,6 +40,7 @@ const {
   puedeAnularVales,
   obras,
   patentes,
+  choferes,
   proveedores,
   materiales,
   proveedoresOrdenados,
@@ -55,6 +57,7 @@ const {
   toggleColapso,
   cerrarSlot,
   netoSlot,
+  netoDeForm,
   alCambiarPatente,
   guardarPesada,
   filasHistorial,
@@ -101,6 +104,7 @@ const {
   pedidosParaReasignar,
   puedeReasignarPedido,
   cambiaPedido,
+  alCambiarPatenteEdicion,
   guardarEdicion,
   modalAnularAbierto,
   valeAnular,
@@ -275,166 +279,37 @@ watch(
           </div>
 
           <template v-if="!slot.colapsado">
-            <div class="grid grid-cols-2 gap-3">
-            <template v-if="slot.tipo === 'ingreso_arido'">
-              <label class="text-sm text-text-mid">
-                Material
-                <!-- 2026-09-09 (pedido de Federico): antes texto libre, ahora
-                     desplegable sobre el catálogo real de Maestros
-                     (plantas_materiales) — mismo criterio que ya se usó para
-                     Egreso de áridos el 2026-09-08 (ver comentario más abajo). -->
-                <select
-                  v-model="slot.form.material"
-                  class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                >
-                  <option value="" disabled>Elegir material…</option>
-                  <option v-for="m in materialesOrdenados" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
-                </select>
-              </label>
-              <label class="text-sm text-text-mid">
-                Proveedor
-                <select
-                  v-model="slot.form.proveedor"
-                  class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                >
-                  <option value="" disabled>Elegir proveedor…</option>
-                  <option v-for="p in proveedoresOrdenados" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
-                </select>
-              </label>
-              <label class="text-sm text-text-mid">
-                N° de remito (obligatorio)
-                <input
-                  v-model="slot.form.numero_remito"
-                  type="text"
-                  class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                />
-              </label>
-              <label class="text-sm text-text-mid col-span-2">
-                Cantidad según remito (tn) (obligatorio)
-                <input
-                  v-model.number="slot.form.cantidad_remito"
-                  type="number"
-                  step="0.01"
-                  class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none md:w-1/3"
-                />
-                <span class="ml-2 text-xs text-text-soft">
-                  Valor declarado por el proveedor — independiente del peso neto pesado. El stock se actualiza con
-                  esta cantidad, no con el peso (memory/business-rules.md).
-                </span>
-              </label>
-            </template>
-
-            <template v-if="slot.tipo === 'egreso_arido'">
-              <label class="text-sm text-text-mid">
-                Material
-                <!-- 2026-09-08 (pedido de Federico): antes texto libre, ahora
-                     desplegable sobre el catálogo real de Maestros
-                     (plantas_materiales) — mismo criterio que
-                     Proveedor/Destino acá al lado. -->
-                <select
-                  v-model="slot.form.material"
-                  class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                >
-                  <option value="" disabled>Elegir material…</option>
-                  <option v-for="m in materialesOrdenados" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
-                </select>
-              </label>
-              <label class="text-sm text-text-mid col-span-2">
-                Destino (obra)
-                <select
-                  v-model="slot.form.obra_id"
-                  class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                >
-                  <option value="" disabled>Elegir obra…</option>
-                  <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
-                </select>
-              </label>
-            </template>
-
-            <label v-if="slot.tipo === 'asfalto'" class="text-sm text-text-mid col-span-2">
-              Pedido / Obra
-              <select
-                v-model="slot.form.pedido_id"
-                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                @change="alCambiarPedido(slot)"
-              >
-                <option value="" disabled>Elegir pedido…</option>
-                <option v-for="p in pedidosAbiertosParaPesada" :key="p.id" :value="p.id">
-                  {{ etiquetaPedidoPesada(p) }}
-                </option>
-              </select>
-              <p v-if="!pedidosAbiertosParaPesada.length" class="mt-1 text-xs text-text-soft">
-                No hay pedidos de asfalto confirmados con el pesaje abierto.
-              </p>
-              <p v-if="slot.avisoPedido" class="mt-1 rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-xs text-warning">
-                {{ slot.avisoPedido }}
-              </p>
-            </label>
-
-            <label class="text-sm text-text-mid">
-              Patente
-              <input
-                v-model="slot.form.patente"
-                list="patentes-conocidas"
-                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                @change="alCambiarPatente(slot)"
-              />
-            </label>
-            <label v-if="slot.tipo === 'asfalto'" class="text-sm text-text-mid">
-              Chofer
-              <input
-                v-model="slot.form.chofer"
-                type="text"
-                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <label v-if="slot.tipo === 'asfalto'" class="text-sm text-text-mid">
-              Temperatura (°C)
-              <input
-                v-model.number="slot.form.temperatura"
-                type="number"
-                step="1"
-                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-
-            <label class="text-sm text-text-mid">
-              Peso bruto (tn)
-              <input
-                v-model.number="slot.form.peso_bruto"
-                type="number"
-                step="0.01"
-                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <label class="text-sm text-text-mid">
-              Tara (tn)
-              <input
-                v-model.number="slot.form.tara"
-                type="number"
-                step="0.01"
-                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <label class="text-sm text-text-mid">
-              Neto (calculado)
-              <input
-                :value="netoSlot(slot)"
-                type="text"
-                disabled
-                class="mt-1 w-full rounded-lg border border-border bg-panel px-3 py-2 text-sm text-text-soft"
-              />
-            </label>
-          </div>
-
-          <label class="mt-3 block text-sm text-text-mid">
-            Observaciones
-            <textarea
-              v-model="slot.form.observaciones"
-              rows="2"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            ></textarea>
-          </label>
+            <CamposPesada
+              :form="slot.form"
+              :tipo="slot.tipo"
+              :neto="netoSlot(slot)"
+              :materiales="materialesOrdenados"
+              :proveedores="proveedoresOrdenados"
+              :obras="obras"
+              @cambio-patente="alCambiarPatente(slot)"
+            >
+              <template #pedido>
+                <label v-if="slot.tipo === 'asfalto'" class="text-sm text-text-mid col-span-2">
+                  Pedido / Obra
+                  <select
+                    v-model="slot.form.pedido_id"
+                    class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+                    @change="alCambiarPedido(slot)"
+                  >
+                    <option value="" disabled>Elegir pedido…</option>
+                    <option v-for="p in pedidosAbiertosParaPesada" :key="p.id" :value="p.id">
+                      {{ etiquetaPedidoPesada(p) }}
+                    </option>
+                  </select>
+                  <p v-if="!pedidosAbiertosParaPesada.length" class="mt-1 text-xs text-text-soft">
+                    No hay pedidos de asfalto confirmados con el pesaje abierto.
+                  </p>
+                  <p v-if="slot.avisoPedido" class="mt-1 rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-xs text-warning">
+                    {{ slot.avisoPedido }}
+                  </p>
+                </label>
+              </template>
+            </CamposPesada>
 
             <div class="mt-4 flex justify-end">
               <VButton :disabled="slot.guardando" @click="guardarPesada(slot)">
@@ -447,6 +322,9 @@ watch(
 
       <datalist id="patentes-conocidas">
         <option v-for="p in patentes" :key="p.id" :value="p.patente" />
+      </datalist>
+      <datalist id="choferes-conocidos">
+        <option v-for="c in choferes" :key="c.id" :value="c.nombre" />
       </datalist>
 
       <p v-if="!slots.length" class="my-6 text-sm text-text-soft">No hay ninguna puerta abierta. Abrí una arriba.</p>
@@ -682,109 +560,49 @@ watch(
           Este vale ya salió impreso en: {{ avisoImpresionesDelVale.join('; ') }}. Después de guardar, reimprimí lo que corresponda.
         </div>
 
-        <!-- Pedido del vale de asfalto (migración 48, 2026-09-30): reasignar
-             si se pesó contra el pedido equivocado — conserva el N° de vale,
-             motivo obligatorio, queda en el historial del vale. -->
-        <div v-if="valeEditar.tipo_vale === 'asfalto'" class="rounded-lg border border-border p-3">
-          <template v-if="puedeReasignarPedido">
-            <label class="block text-sm text-text-mid">
-              Pedido
-              <select v-model="formEditar.pedidoId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
-                <option v-if="!valeEditar.pedido_id" value="" disabled>Sin pedido — elegir…</option>
-                <optgroup v-if="pedidosParaReasignar.delDia.length" label="Del día de la pesada">
-                  <option v-for="p in pedidosParaReasignar.delDia" :key="p.id" :value="p.id">
-                    {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ formatearCantidadHasta(p.cantidad_solicitada) }} tn
-                  </option>
-                </optgroup>
-                <optgroup v-if="pedidosParaReasignar.otros.length" label="Otros días (confirmados)">
-                  <option v-for="p in pedidosParaReasignar.otros" :key="p.id" :value="p.id">
-                    {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ formatearCantidadHasta(p.cantidad_solicitada) }} tn ({{ p.fecha_programada.split('-').reverse().join('/') }})
-                  </option>
-                </optgroup>
-              </select>
-            </label>
+        <!-- Mismos campos que la puerta (CamposPesada.vue, 2026-10-20): patente y
+             chofer con sugerencias, la patente completa tara y chofer. -->
+        <CamposPesada
+          :form="formEditar"
+          :tipo="valeEditar.tipo_vale"
+          :neto="netoDeForm(formEditar)"
+          :materiales="materialesOrdenados"
+          :proveedores="proveedoresOrdenados"
+          :obras="obras"
+          :material-editable="valeEditar.tipo_vale !== 'egreso_arido'"
+          :material-original="valeEditar.tipo_vale === 'ingreso_arido' ? valeEditar.material || '' : null"
+          :neto-anterior="Number(valeEditar.peso_neto)"
+          @cambio-patente="alCambiarPatenteEdicion"
+        >
+          <template #pedido>
+            <!-- Pedido del vale de asfalto (migración 48, 2026-09-30): reasignar
+                 si se pesó contra el pedido equivocado — conserva el N° de vale,
+                 motivo obligatorio, queda en el historial del vale. -->
+            <div v-if="valeEditar.tipo_vale === 'asfalto'" class="col-span-2 rounded-lg border border-border p-3">
+              <template v-if="puedeReasignarPedido">
+                <label class="block text-sm text-text-mid">
+                  Pedido
+                  <select v-model="formEditar.pedidoId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
+                    <option v-if="!valeEditar.pedido_id" value="" disabled>Sin pedido — elegir…</option>
+                    <optgroup v-if="pedidosParaReasignar.delDia.length" label="Del día de la pesada">
+                      <option v-for="p in pedidosParaReasignar.delDia" :key="p.id" :value="p.id">
+                        {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ formatearCantidadHasta(p.cantidad_solicitada) }} tn
+                      </option>
+                    </optgroup>
+                    <optgroup v-if="pedidosParaReasignar.otros.length" label="Otros días (confirmados)">
+                      <option v-for="p in pedidosParaReasignar.otros" :key="p.id" :value="p.id">
+                        {{ formatearNumeroPedido(p.numero) }} · {{ nombreDestinoPedido(p) }} — {{ formatearCantidadHasta(p.cantidad_solicitada) }} tn ({{ p.fecha_programada.split('-').reverse().join('/') }})
+                      </option>
+                    </optgroup>
+                  </select>
+                </label>
+              </template>
+              <p v-else class="text-xs text-text-soft">
+                El pedido de este vale ya no está confirmado (se despachó o se postergó): no se puede cambiar de pedido desde acá. Si estaba mal, anulá el vale y, si corresponde, corregí el despacho desde Pedidos.
+              </p>
+            </div>
           </template>
-          <p v-else class="text-xs text-text-soft">
-            El pedido de este vale ya no está confirmado (se despachó o se postergó): no se puede cambiar de pedido desde acá. Si estaba mal, anulá el vale y, si corresponde, corregí el despacho desde Pedidos.
-          </p>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <label class="text-sm text-text-mid">
-            Peso bruto (tn)
-            <input
-              v-model.number="formEditar.pesoBruto"
-              type="number"
-              step="0.01"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-          <label class="text-sm text-text-mid">
-            Tara (tn)
-            <input
-              v-model.number="formEditar.tara"
-              type="number"
-              step="0.01"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-          <label class="text-sm text-text-mid">
-            Patente
-            <input v-model="formEditar.patente" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
-          </label>
-          <label v-if="valeEditar.tipo_vale === 'asfalto'" class="text-sm text-text-mid">
-            Chofer
-            <input v-model="formEditar.chofer" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
-          </label>
-          <label v-if="valeEditar.tipo_vale === 'asfalto'" class="text-sm text-text-mid">
-            Temperatura (°C)
-            <input v-model.number="formEditar.temperatura" type="number" step="1" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
-          </label>
-          <label v-if="valeEditar.tipo_vale === 'egreso_arido'" class="text-sm text-text-mid col-span-2">
-            Destino (obra)
-            <select v-model="formEditar.obraId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
-              <option value="" disabled>Elegir obra…</option>
-              <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
-            </select>
-          </label>
-          <template v-if="valeEditar.tipo_vale === 'ingreso_arido'">
-            <label class="text-sm text-text-mid col-span-2">
-              Material
-              <select v-model="formEditar.material" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
-                <option value="" disabled>Elegir material…</option>
-                <option v-if="formEditar.material && !materiales.some((m) => m.nombre === formEditar.material)" :value="formEditar.material">{{ formEditar.material }}</option>
-                <option v-for="m in materialesOrdenados" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
-              </select>
-              <span v-if="formEditar.material !== (valeEditar.material || '')" class="mt-1 block text-xs text-text-soft">Al guardar, el stock sale de {{ valeEditar.material }} y pasa a {{ formEditar.material }}.</span>
-            </label>
-            <label class="text-sm text-text-mid">
-              Proveedor
-              <select v-model="formEditar.proveedor" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
-                <option value="" disabled>Elegir proveedor…</option>
-                <option v-for="p in proveedoresOrdenados" :key="p.id" :value="p.nombre">{{ p.nombre }}</option>
-              </select>
-            </label>
-            <label class="text-sm text-text-mid">
-              N° de remito
-              <input v-model="formEditar.numeroRemito" type="text" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
-            </label>
-            <label class="text-sm text-text-mid col-span-2">
-              Cantidad según remito (tn) (obligatorio)
-              <input
-                v-model.number="formEditar.cantidadRemito"
-                type="number"
-                step="0.01"
-                class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none md:w-1/3"
-              />
-              <span class="ml-2 text-xs text-text-soft">Valor declarado por el proveedor — independiente del peso neto pesado.</span>
-            </label>
-          </template>
-        </div>
-
-        <label class="block text-sm text-text-mid">
-          Observaciones
-          <textarea v-model="formEditar.observaciones" rows="2" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"></textarea>
-        </label>
+        </CamposPesada>
 
         <!-- Motivo obligatorio para cualquier corrección del vale, incluido el
              cambio de pedido (migración 60): queda en la auditoría. -->

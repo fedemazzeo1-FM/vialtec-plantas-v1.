@@ -43,6 +43,7 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { getPedido, obtenerRangoSemana } from '@/modules/pedidos/services/pedidos.service'
 import {
   patentesService,
+  choferesService,
   proveedoresService,
   materialesService,
   ordenarDestacadosBascula,
@@ -203,6 +204,8 @@ export function useBascula() {
   const pedidosParaPesada = ref([])
   const obras = ref([])
   const patentes = ref([])
+  // Maestro de Choferes: sugerencias del campo Chofer (puerta y edición, 2026-10-20).
+  const choferes = ref([])
   const proveedores = ref([])
   const materiales = ref([])
   const formulas = ref([])
@@ -255,10 +258,11 @@ export function useBascula() {
   async function cargarBase() {
     cargandoBase.value = true
     try {
-      const [listaPedidos, listaObras, listaPatentes, listaProveedores, listaMateriales, listaFormulas] = await Promise.all([
+      const [listaPedidos, listaObras, listaPatentes, listaChoferes, listaProveedores, listaMateriales, listaFormulas] = await Promise.all([
         fetchPedidosAsfaltoParaPesada(),
         fetchObras(),
         patentesService.fetch({ soloActivos: true }),
+        choferesService.fetch({ soloActivos: true }),
         proveedoresService.fetch({ soloActivos: true }),
         materialesService.fetch({ soloActivos: true }),
         fetchFormulas({ soloActivas: true }),
@@ -266,6 +270,7 @@ export function useBascula() {
       pedidosParaPesada.value = listaPedidos
       obras.value = listaObras
       patentes.value = listaPatentes
+      choferes.value = listaChoferes
       proveedores.value = listaProveedores
       materiales.value = listaMateriales
       formulas.value = listaFormulas
@@ -370,10 +375,15 @@ export function useBascula() {
     slots.value.splice(idx, 1)
   }
 
-  function netoSlot(slot) {
-    const bruto = Number(slot.form.peso_bruto) || 0
-    const tara = Number(slot.form.tara) || 0
+  // Mismo cálculo para la puerta y para "Editar vale" (CamposPesada.vue).
+  function netoDeForm(form) {
+    const bruto = Number(form.peso_bruto) || 0
+    const tara = Number(form.tara) || 0
     return (bruto - tara).toFixed(2)
+  }
+
+  function netoSlot(slot) {
+    return netoDeForm(slot.form)
   }
 
   // Aviso al elegir el pedido en una puerta (migración 65, caso P-0212 del
@@ -403,12 +413,18 @@ export function useBascula() {
     }
   }
 
-  function alCambiarPatente(slot) {
-    const encontrada = patentes.value.find((p) => p.patente === slot.form.patente)
+  // Al elegir una patente conocida se completan solos la tara y el chofer
+  // habitual. Lo usan la puerta y "Editar vale" (2026-10-20): misma lógica.
+  function completarDesdePatente(form, conChofer) {
+    const encontrada = patentes.value.find((p) => p.patente === form.patente)
     if (encontrada) {
-      if (encontrada.tara != null) slot.form.tara = encontrada.tara
-      if (encontrada.chofer_habitual && 'chofer' in slot.form) slot.form.chofer = encontrada.chofer_habitual
+      if (encontrada.tara != null) form.tara = encontrada.tara
+      if (encontrada.chofer_habitual && conChofer) form.chofer = encontrada.chofer_habitual
     }
+  }
+
+  function alCambiarPatente(slot) {
+    completarDesdePatente(slot.form, 'chofer' in slot.form)
   }
 
   // Tope de la cantidad según remito (migración 63, misma regla que la base):
@@ -521,8 +537,10 @@ export function useBascula() {
 
   const modalEditarAbierto = ref(false)
   const valeEditar = ref(null)
+  // Mismos nombres de campo que el formulario de la puerta (formularioVacio):
+  // los dos usan CamposPesada.vue (2026-10-20).
   const formEditar = reactive({
-    pesoBruto: null,
+    peso_bruto: null,
     tara: null,
     patente: '',
     chofer: '',
@@ -532,9 +550,9 @@ export function useBascula() {
     // del material anterior al nuevo.
     material: '',
     proveedor: '',
-    numeroRemito: '',
-    cantidadRemito: null,
-    obraId: '',
+    numero_remito: '',
+    cantidad_remito: null,
+    obra_id: '',
     // Reasignación de pedido (solo asfalto, migración 48)
     pedidoId: '',
     // Motivo de la corrección: obligatorio siempre (migración 60), sirve
@@ -610,7 +628,7 @@ export function useBascula() {
   function abrirEdicion(vale) {
     error.value = null
     valeEditar.value = vale
-    formEditar.pesoBruto = vale.peso_bruto
+    formEditar.peso_bruto = vale.peso_bruto
     formEditar.tara = vale.tara
     formEditar.patente = vale.patente || ''
     formEditar.chofer = vale.chofer || ''
@@ -618,24 +636,28 @@ export function useBascula() {
     formEditar.temperatura = vale.temperatura ?? null
     formEditar.material = vale.material || ''
     formEditar.proveedor = vale.proveedor || ''
-    formEditar.numeroRemito = vale.numero_remito_ingreso || ''
-    formEditar.cantidadRemito = vale.cantidad_remito_ingreso ?? null
-    formEditar.obraId = vale.obra_id || ''
+    formEditar.numero_remito = vale.numero_remito_ingreso || ''
+    formEditar.cantidad_remito = vale.cantidad_remito_ingreso ?? null
+    formEditar.obra_id = vale.obra_id || ''
     formEditar.pedidoId = vale.pedido_id || ''
     formEditar.motivo = ''
     modalEditarAbierto.value = true
     cargarImpresionesDelVale(vale)
   }
 
+  function alCambiarPatenteEdicion() {
+    completarDesdePatente(formEditar, valeEditar.value?.tipo_vale === 'asfalto')
+  }
+
   async function guardarEdicion() {
-    if (!(Number(formEditar.pesoBruto) > 0) || formEditar.tara == null || Number(formEditar.tara) < 0) {
+    if (!(Number(formEditar.peso_bruto) > 0) || formEditar.tara == null || Number(formEditar.tara) < 0) {
       error.value = 'Completá peso bruto y tara.'
       return
     }
     // Mismo fix 2026-09-22 que guardarPesada() — acá además cubre el caso de
     // un vale viejo (cargado antes del fix) que llegó a edición sin
     // cantidad_remito real: obliga a completarlo en vez de dejarlo pasar.
-    if (valeEditar.value?.tipo_vale === 'ingreso_arido' && !(Number(formEditar.cantidadRemito) > 0)) {
+    if (valeEditar.value?.tipo_vale === 'ingreso_arido' && !(Number(formEditar.cantidad_remito) > 0)) {
       error.value = 'La cantidad según remito (declarada por el proveedor) es obligatoria y tiene que ser mayor a 0.'
       return
     }
@@ -645,7 +667,7 @@ export function useBascula() {
         return
       }
       const fueraDeRango = mensajeCantidadRemitoFueraDeRango(
-        formEditar.cantidadRemito, formEditar.pesoBruto, formEditar.tara, valeEditar.value.unidad
+        formEditar.cantidad_remito, formEditar.peso_bruto, formEditar.tara, valeEditar.value.unidad
       )
       if (fueraDeRango) {
         error.value = fueraDeRango
@@ -665,16 +687,16 @@ export function useBascula() {
         await reasignarValeBascula(valeEditar.value.id, formEditar.pedidoId, formEditar.motivo.trim())
       }
       await corregirValeBascula(valeEditar.value.id, {
-        pesoBruto: formEditar.pesoBruto,
+        pesoBruto: formEditar.peso_bruto,
         tara: formEditar.tara,
         patente: formEditar.patente,
         chofer: formEditar.chofer,
         observaciones: formEditar.observaciones,
         temperatura: formEditar.temperatura,
         proveedor: formEditar.proveedor,
-        numeroRemito: formEditar.numeroRemito,
-        cantidadRemito: formEditar.cantidadRemito,
-        obraId: formEditar.obraId || null,
+        numeroRemito: formEditar.numero_remito,
+        cantidadRemito: formEditar.cantidad_remito,
+        obraId: formEditar.obra_id || null,
         material: valeEditar.value.tipo_vale === 'ingreso_arido' ? formEditar.material : null,
         motivo: formEditar.motivo.trim(),
       })
@@ -1222,6 +1244,7 @@ export function useBascula() {
     cargandoBase,
     obras,
     patentes,
+    choferes,
     proveedores,
     materiales,
     proveedoresOrdenados,
@@ -1238,6 +1261,7 @@ export function useBascula() {
     toggleColapso,
     cerrarSlot,
     netoSlot,
+    netoDeForm,
     alCambiarPatente,
     guardarPesada,
     filasHistorial,
@@ -1288,6 +1312,7 @@ export function useBascula() {
     pedidosParaReasignar,
     puedeReasignarPedido,
     cambiaPedido,
+    alCambiarPatenteEdicion,
     guardarEdicion,
     modalAnularAbierto,
     valeAnular,
