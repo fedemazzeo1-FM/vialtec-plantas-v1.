@@ -156,7 +156,22 @@ const slots = ref([])
  */
 export function resetPuertasBascula() {
   slots.value = []
+  preguntaCierreAbierta.value = false
+  preguntaCierre.value = null
+  mensajeCierre.value = null
 }
+
+// "¿Se terminó el pedido?" también a nivel de módulo (2026-10-20, bug real:
+// Federico imprimió el remito de P-0263 y no vio el cartel). Imprimir el
+// remito (hoja vertical, más angosta que 768px) hacía que el layout pasara a
+// mobile y volviera a desktop — eso remontaba BasculaView y se perdía el
+// cartel recién abierto. Es el remount que no se había encontrado el
+// 2026-09-07 ni el 2026-09-14 (ver useBreakpoint.js). Además de cortar esa
+// causa, el cartel guarda su propia foto de los datos (pedido, pesado,
+// vales) para sobrevivir a cualquier remount futuro, igual que las puertas.
+const preguntaCierreAbierta = ref(false)
+const preguntaCierre = ref(null)
+const mensajeCierre = ref(null)
 
 export function useBascula() {
   const error = ref(null)
@@ -1115,31 +1130,34 @@ export function useBascula() {
   // finalizando en Pedidos. "No" deja todo igual.
   // -------------------------------------------------------------------------
 
-  const preguntaCierreAbierta = ref(false)
-  const pedidoPreguntaCierre = ref(null)
+  // preguntaCierreAbierta, preguntaCierre y mensajeCierre viven a nivel de
+  // módulo (arriba de useBascula) para sobrevivir a un remount de la vista.
   const cerrandoPesaje = ref(false)
   const errorPreguntaCierre = ref(null)
-  const mensajeCierre = ref(null)
 
   const resumenPreguntaCierre = computed(() => {
-    const pedido = pedidoPreguntaCierre.value
-    if (!pedido) return null
-    const pesado = acumuladoParaImprimir.value
+    const foto = preguntaCierre.value
+    if (!foto) return null
+    const { pedido, pesadoTn, cantidadVales } = foto
     const pedidoTn = Number(pedido.cantidad_solicitada)
     return {
       numero: formatearNumeroPedido(pedido.numero),
       destino: nombreDestinoPedido(pedido),
-      pesadoTn: pesado,
+      pesadoTn,
       pedidoTn,
-      cantidadVales: rangoValesParaImprimir.value.cantidadVales,
-      alcanzado: pesado != null && pedidoTn > 0 && pesado >= pedidoTn,
+      cantidadVales,
+      alcanzado: pesadoTn != null && pedidoTn > 0 && pesadoTn >= pedidoTn,
     }
   })
 
   function abrirPreguntaCierre() {
     const pedido = pedidoParaImprimir.value
     if (!pedido || pedido.estado !== 'confirmado' || pedido.pesaje_cerrado_en) return
-    pedidoPreguntaCierre.value = pedido
+    preguntaCierre.value = {
+      pedido,
+      pesadoTn: acumuladoParaImprimir.value,
+      cantidadVales: rangoValesParaImprimir.value.cantidadVales,
+    }
     errorPreguntaCierre.value = null
     preguntaCierreAbierta.value = true
   }
@@ -1152,7 +1170,7 @@ export function useBascula() {
     cerrandoPesaje.value = true
     errorPreguntaCierre.value = null
     try {
-      const pedido = await cerrarPesajePedido(pedidoPreguntaCierre.value.id)
+      const pedido = await cerrarPesajePedido(preguntaCierre.value.pedido.id)
       pedidoParaImprimir.value = pedido
       preguntaCierreAbierta.value = false
       mensajeCierre.value = `Pesaje del pedido ${formatearNumeroPedido(pedido.numero)} cerrado: ya no admite más pesadas. El despacho se finaliza en Pedidos.`

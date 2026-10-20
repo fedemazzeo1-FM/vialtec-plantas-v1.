@@ -21,22 +21,58 @@ export function esPantallaMobile() {
   return window.matchMedia(`(max-width: ${BREAKPOINT_MOBILE_PX - 1}px)`).matches
 }
 
+// Fix 2026-10-20 (bug real: el cartel "¿Se terminó el pedido?" no aparecía
+// después de imprimir el remito de Báscula). Mientras Chrome arma la hoja de
+// impresión, el ancho que ven las media queries es el de la hoja: el remito
+// (A4 vertical) queda por debajo de 768px y la query pasaba a "mobile" y
+// volvía a "desktop" al terminar. Ese ida y vuelta cambiaba de layout en
+// App.vue y remontaba la vista entera (era el remount sin causa encontrada
+// del 2026-09-07 y 2026-09-14, ver useBascula.js). Durante la impresión se
+// ignoran los cambios, y al terminar se vuelve a leer el valor real de la
+// pantalla (con una pausa: Chrome entrega los eventos de cambio después de
+// `afterprint`).
+const PAUSA_DESPUES_DE_IMPRIMIR_MS = 1000
+let imprimiendo = false
+let temporizadorFinImpresion = null
+const alTerminarImpresion = new Set()
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeprint', () => {
+    clearTimeout(temporizadorFinImpresion)
+    imprimiendo = true
+  })
+  window.addEventListener('afterprint', () => {
+    clearTimeout(temporizadorFinImpresion)
+    temporizadorFinImpresion = setTimeout(() => {
+      imprimiendo = false
+      alTerminarImpresion.forEach((sincronizar) => sincronizar())
+    }, PAUSA_DESPUES_DE_IMPRIMIR_MS)
+  })
+}
+
 export function useBreakpoint() {
   const query = window.matchMedia(`(max-width: ${BREAKPOINT_MOBILE_PX - 1}px)`)
   const esMobile = ref(query.matches)
 
   function actualizar(e) {
+    if (imprimiendo || window.matchMedia('print').matches) return
     esMobile.value = e.matches
+  }
+
+  function sincronizar() {
+    esMobile.value = query.matches
   }
 
   // Safari <14 no soporta addEventListener acá — addListener es el fallback
   // legacy, deprecated pero inofensivo de tener como belt-and-suspenders.
   if (query.addEventListener) query.addEventListener('change', actualizar)
   else query.addListener(actualizar)
+  alTerminarImpresion.add(sincronizar)
 
   onBeforeUnmount(() => {
     if (query.removeEventListener) query.removeEventListener('change', actualizar)
     else query.removeListener(actualizar)
+    alTerminarImpresion.delete(sincronizar)
   })
 
   return { esMobile }
