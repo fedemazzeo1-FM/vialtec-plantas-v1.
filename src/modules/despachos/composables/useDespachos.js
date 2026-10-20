@@ -10,7 +10,7 @@
 // Pedidos) — memory/business-rules.md, "Fuente de verdad según el tipo de
 // transacción".
 
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref } from 'vue'
 import {
   fetchDespachos,
   fetchTodosLosDespachosFiltrados,
@@ -38,7 +38,7 @@ import { patentesService } from '@/modules/maestros/services/maestros.service'
 // Reuso de Báscula (memory/conventions.md: no duplicar lógica compartida
 // entre módulos) — el acumulado dinámico del día y el formato de N° de vale
 // son exactamente los mismos que usa ValeImprimible.vue desde BasculaView.
-import { obtenerAcumuladoHastaFecha, formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
+import { obtenerAcumuladoHastaFecha, registrarImpresion, formatearNumeroVale } from '@/modules/bascula/services/bascula.service'
 import { fetchDatosInformeMensual } from '@/modules/despachos/services/informe-mensual.service'
 import {
   generarRemitoManual,
@@ -446,7 +446,8 @@ export function useDespachos() {
   // Se activa solo cuando el modal abierto es el del remito (de despacho o
   // manual, los dos usan RemitoImprimible.vue con la clase `modo-remito` en
   // DespachosView.vue) — el de vale no toca este ref.
-  function imprimir() {
+  async function imprimir() {
+    if (modalImpresionValeAbierto.value) await prepararImpresionVale('impresora')
     let estiloTemporal = null
     if (modalRemitoAbierto.value) {
       estiloTemporal = document.createElement('style')
@@ -613,8 +614,31 @@ export function useDespachos() {
   const acumuladoParaImprimirVale = ref(null)
   const rangoValesParaImprimirVale = ref({ valeDesde: null, valeHasta: null, cantidadVales: 0 })
 
+  // Impresión auditada (migración 65, mismo criterio que Báscula): se
+  // registra antes de imprimir o bajar el PDF, y lo que sale en el papel es
+  // lo que devuelve la base. Si el registro falla, se imprime igual y se avisa.
+  const avisoImpresionVale = ref(null)
+
+  async function prepararImpresionVale(salida) {
+    avisoImpresionVale.value = null
+    if (!valeParaImprimir.value?.id) return
+    try {
+      const { acumulado } = await registrarImpresion(valeParaImprimir.value.id, { modo: 'vale', origen: 'despachos', salida })
+      acumuladoParaImprimirVale.value = acumulado.acumuladoTn
+      rangoValesParaImprimirVale.value = {
+        valeDesde: acumulado.valeDesde,
+        valeHasta: acumulado.valeHasta,
+        cantidadVales: acumulado.cantidadVales,
+      }
+      await nextTick()
+    } catch (e) {
+      avisoImpresionVale.value = `No se pudo registrar la impresión en la auditoría (${e.message}). Se imprime igual.`
+    }
+  }
+
   async function abrirVale(valeId, pedido) {
     error.value = null
+    avisoImpresionVale.value = null
     try {
       const vale = await fetchValeCompleto(valeId)
       valeParaImprimir.value = vale
@@ -743,6 +767,8 @@ export function useDespachos() {
     valeParaImprimir,
     pedidoParaImprimirVale,
     acumuladoParaImprimirVale,
+    avisoImpresionVale,
+    prepararImpresionVale,
     rangoValesParaImprimirVale,
     abrirImpresionVale,
     elegirVale,

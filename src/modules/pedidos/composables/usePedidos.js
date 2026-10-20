@@ -14,6 +14,7 @@ import {
   actualizarPedido as actualizarPedidoDirecto,
   confirmarPedido as confirmarPedidoService,
   postergarPedido as postergarPedidoService,
+  reabrirPesajePedido as reabrirPesajePedidoService,
   cancelarPedido as cancelarPedidoService,
   archivarPedido as archivarPedidoService,
   fetchHistorialPedido,
@@ -524,6 +525,38 @@ export function usePedidos() {
     }
   }
 
+  // Reabrir el pesaje cerrado en Báscula (migración 65): motivo obligatorio.
+  const modalReabrirPesajeAbierto = ref(false)
+  const pedidoReabrirPesaje = ref(null)
+  const motivoReabrirPesaje = ref('')
+  const reabriendoPesaje = ref(false)
+  const errorReabrirPesaje = ref(null)
+
+  function abrirReabrirPesaje(pedido) {
+    pedidoReabrirPesaje.value = pedido
+    motivoReabrirPesaje.value = ''
+    errorReabrirPesaje.value = null
+    modalReabrirPesajeAbierto.value = true
+  }
+
+  async function confirmarReabrirPesaje() {
+    if (!motivoReabrirPesaje.value.trim()) {
+      errorReabrirPesaje.value = 'Indicá el motivo para reabrir el pesaje.'
+      return
+    }
+    reabriendoPesaje.value = true
+    errorReabrirPesaje.value = null
+    try {
+      await reabrirPesajePedidoService(pedidoReabrirPesaje.value.id, motivoReabrirPesaje.value.trim())
+      modalReabrirPesajeAbierto.value = false
+      await cargarPedidos()
+    } catch (e) {
+      errorReabrirPesaje.value = e.message
+    } finally {
+      reabriendoPesaje.value = false
+    }
+  }
+
   const modalCancelAbierto = ref(false)
   const pedidoCancelar = ref(null)
   const motivoCancelacion = ref('')
@@ -649,6 +682,13 @@ export function usePedidos() {
     postergando,
     abrirPostergacion,
     confirmarPostergacion,
+    modalReabrirPesajeAbierto,
+    pedidoReabrirPesaje,
+    motivoReabrirPesaje,
+    reabriendoPesaje,
+    errorReabrirPesaje,
+    abrirReabrirPesaje,
+    confirmarReabrirPesaje,
     modalCancelAbierto,
     pedidoCancelar,
     motivoCancelacion,

@@ -18,7 +18,7 @@
 // automáticamente el modal de impresión (Logica sis. plantas v1.rtf §2.4,
 // paso 5: "se imprime automáticamente").
 
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref } from 'vue'
 import {
   fetchPedidosAsfaltoParaPesada,
   fetchHistorialVales,
@@ -28,6 +28,10 @@ import {
   reasignarValeBascula,
   anularValeBascula,
   obtenerAcumuladoHastaFecha,
+  registrarImpresion,
+  fetchImpresionesDelVale,
+  cerrarPesajePedido,
+  fetchResumenPesadasPedido,
   obtenerProximoNumeroVale,
   obtenerProximoNumeroValeArido,
   calcularDiferencia,
@@ -195,6 +199,11 @@ export function useBascula() {
 
   const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
   const pedidosPorId = computed(() => Object.fromEntries(pedidosParaPesada.value.map((p) => [p.id, p])))
+  // Migración 65: un pedido con el pesaje cerrado ("¿Se terminó el pedido?
+  // Sí") no admite más pesadas — no se ofrece en las puertas ni como destino
+  // de una reasignación. Sigue en pedidosParaPesada (confirmados) para poder
+  // sacarle un vale mal pesado y para resolver obra/mezcla al imprimir.
+  const pedidosAbiertosParaPesada = computed(() => pedidosParaPesada.value.filter((p) => !p.pesaje_cerrado_en))
   const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
 
   /**
@@ -324,7 +333,7 @@ export function useBascula() {
   /** "+ Abrir puerta" único (ya no 3 botones por tipo) — arranca en Vale Asfalto, cambiable con el select interno. */
   function crearSlot(tipoInicial = 'asfalto') {
     contadorSlot += 1
-    const slot = { id: contadorSlot, tipo: tipoInicial, form: formularioVacio(tipoInicial), guardando: false, colapsado: false }
+    const slot = { id: contadorSlot, tipo: tipoInicial, form: formularioVacio(tipoInicial), guardando: false, colapsado: false, avisoPedido: null }
     slots.value.push(slot)
   }
 
@@ -333,6 +342,7 @@ export function useBascula() {
     if (slot.tipo === nuevoTipo) return
     slot.tipo = nuevoTipo
     slot.form = formularioVacio(nuevoTipo)
+    slot.avisoPedido = null
   }
 
   function toggleColapso(slot) {
@@ -349,6 +359,33 @@ export function useBascula() {
     const bruto = Number(slot.form.peso_bruto) || 0
     const tara = Number(slot.form.tara) || 0
     return (bruto - tara).toFixed(2)
+  }
+
+  // Aviso al elegir el pedido en una puerta (migración 65, caso P-0212 del
+  // 24/09: un pedido que quedó abierto de un día para el otro y se pesó
+  // contra él por error). Con el acumulado por pedido, esas pesadas viejas
+  // suman en el vale y el remito. Si la última pesada del pedido fue hace
+  // más de 6 horas, se avisa (no bloquea). Los trabajos nocturnos pesan cada
+  // 15-90 minutos, así que no lo disparan.
+  const HORAS_AVISO_PEDIDO_VIEJO = 6
+
+  async function alCambiarPedido(slot) {
+    slot.avisoPedido = null
+    const pedidoId = slot.form.pedido_id
+    if (!pedidoId) return
+    try {
+      const resumen = await fetchResumenPesadasPedido(pedidoId)
+      if (slot.form.pedido_id !== pedidoId || !resumen.ultima) return
+      const horas = (Date.now() - new Date(resumen.ultima).getTime()) / 3600000
+      if (horas < HORAS_AVISO_PEDIDO_VIEJO) return
+      const cuando = new Date(resumen.ultima).toLocaleString('es-AR', {
+        timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+      })
+      const vales = resumen.cantidad === 1 ? '1 vale' : `${resumen.cantidad} vales`
+      slot.avisoPedido = `Este pedido ya tiene ${formatearCantidadHasta(resumen.tn)} tn pesadas (${vales}); la última, el ${cuando}. Esas pesadas suman en el acumulado: verificá que sea el pedido correcto.`
+    } catch {
+      // El aviso es una ayuda: si falla la consulta, se pesa igual.
+    }
   }
 
   function alCambiarPatente(slot) {
@@ -491,6 +528,38 @@ export function useBascula() {
   })
   const guardandoEdicion = ref(false)
 
+  // Impresiones en las que ya salió el vale que se edita o anula (migración
+  // 65): el papel queda desactualizado y hay que reimprimir. Solo asfalto
+  // (el vale de salida de áridos no acumula).
+  const impresionesDelValeSeleccionado = ref([])
+
+  async function cargarImpresionesDelVale(vale) {
+    impresionesDelValeSeleccionado.value = []
+    if (vale?.tipo_vale !== 'asfalto' || vale.pendiente_migracion) return
+    try {
+      impresionesDelValeSeleccionado.value = await fetchImpresionesDelVale(vale.id)
+    } catch {
+      // Solo es un aviso: si falla, se edita igual.
+    }
+  }
+
+  /** "Remito 00047 (06/10 02:20, 261,44 tn)" — una línea por impresión, sin repetir el mismo papel. */
+  const avisoImpresionesDelVale = computed(() => {
+    const vistos = new Set()
+    const lineas = []
+    for (const imp of impresionesDelValeSeleccionado.value) {
+      const papel = imp.modo === 'remito' ? `Remito ${imp.remito ? String(imp.remito).padStart(5, '0') : 'sin número'}` : `Vale ${imp.vale}`
+      if (vistos.has(papel)) continue
+      vistos.add(papel)
+      const cuando = new Date(imp.fecha_hora).toLocaleString('es-AR', {
+        timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+      })
+      const cantidad = imp.acumulado_tn != null ? `, ${formatearCantidadHasta(imp.acumulado_tn)} tn` : ''
+      lineas.push(`${papel} (${cuando}${cantidad})`)
+    }
+    return lineas
+  })
+
   /** 'YYYY-MM-DD' local de un timestamp (día operativo de la pesada). */
   function fechaLocalISO(ts) {
     const d = new Date(ts)
@@ -505,8 +574,8 @@ export function useBascula() {
     if (!vale || vale.tipo_vale !== 'asfalto') return { delDia: [], otros: [] }
     const dia = fechaLocalISO(vale.fecha_pesada)
     return {
-      delDia: pedidosParaPesada.value.filter((p) => p.fecha_programada === dia),
-      otros: pedidosParaPesada.value.filter((p) => p.fecha_programada !== dia),
+      delDia: pedidosAbiertosParaPesada.value.filter((p) => p.fecha_programada === dia),
+      otros: pedidosAbiertosParaPesada.value.filter((p) => p.fecha_programada !== dia),
     }
   })
 
@@ -540,6 +609,7 @@ export function useBascula() {
     formEditar.pedidoId = vale.pedido_id || ''
     formEditar.motivo = ''
     modalEditarAbierto.value = true
+    cargarImpresionesDelVale(vale)
   }
 
   async function guardarEdicion() {
@@ -613,6 +683,7 @@ export function useBascula() {
     valeAnular.value = vale
     motivoAnulacion.value = ''
     modalAnularAbierto.value = true
+    cargarImpresionesDelVale(vale)
   }
 
   async function confirmarAnulacion() {
@@ -915,6 +986,7 @@ export function useBascula() {
       return
     }
     valeParaImprimir.value = vale
+    avisoImpresion.value = null
     // Fix 2026-09-04 (bug real reportado por Federico: "el vale no está
     // trayendo el dato de la obra ni la mezcla"): `pedidosPorId` sale de
     // `fetchPedidosAsfaltoParaPesada()`, que desde hoy filtra solo
@@ -989,7 +1061,8 @@ export function useBascula() {
    * abierto) para que el próximo vale — o el remito de Despachos, que no
    * usa este composable — vuelva a imprimir landscape normal.
    */
-  function imprimir() {
+  async function imprimir() {
+    await prepararImpresion('impresora')
     let estiloTemporal = null
     if (modoImpresion.value === 'remito') {
       estiloTemporal = document.createElement('style')
@@ -998,6 +1071,97 @@ export function useBascula() {
     }
     window.print()
     estiloTemporal?.remove()
+    if (modoImpresion.value === 'remito') abrirPreguntaCierre()
+  }
+
+  // -------------------------------------------------------------------------
+  // Impresión auditada (migración 65): antes de imprimir o bajar el PDF se
+  // registra en la auditoría quién imprimió qué. La base devuelve lo que hay
+  // que imprimir (acumulado, vales, N° de remito) y eso es lo que sale en el
+  // papel — lo auditado y lo impreso coinciden. Si el registro falla, se
+  // imprime igual con la vista previa y se avisa (no se traba la operación).
+  // -------------------------------------------------------------------------
+
+  const avisoImpresion = ref(null)
+
+  async function prepararImpresion(salida) {
+    avisoImpresion.value = null
+    const vale = valeParaImprimir.value
+    if (!vale?.id || vale.pendiente_migracion) return
+    try {
+      const { acumulado, remito } = await registrarImpresion(vale.id, { modo: modoImpresion.value, origen: 'bascula', salida })
+      if (vale.tipo_vale === 'asfalto') {
+        acumuladoParaImprimir.value = acumulado.acumuladoTn
+        rangoValesParaImprimir.value = {
+          valeDesde: acumulado.valeDesde,
+          valeHasta: acumulado.valeHasta,
+          cantidadVales: acumulado.cantidadVales,
+          numerosVale: acumulado.numerosVale,
+        }
+        if (pedidoParaImprimir.value && remito && !pedidoParaImprimir.value.nro_remito_global) {
+          pedidoParaImprimir.value = { ...pedidoParaImprimir.value, nro_remito_global: remito }
+        }
+      }
+      await nextTick()
+    } catch (e) {
+      avisoImpresion.value = `No se pudo registrar la impresión en la auditoría (${e.message}). Se imprime igual.`
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // "¿Se terminó el pedido?" (migración 65): después de imprimir un remito de
+  // un pedido con el pesaje abierto. "Sí" cierra el pesaje: el pedido ya no
+  // admite más pesadas y sale de las puertas. El despacho se sigue
+  // finalizando en Pedidos. "No" deja todo igual.
+  // -------------------------------------------------------------------------
+
+  const preguntaCierreAbierta = ref(false)
+  const pedidoPreguntaCierre = ref(null)
+  const cerrandoPesaje = ref(false)
+  const errorPreguntaCierre = ref(null)
+  const mensajeCierre = ref(null)
+
+  const resumenPreguntaCierre = computed(() => {
+    const pedido = pedidoPreguntaCierre.value
+    if (!pedido) return null
+    const pesado = acumuladoParaImprimir.value
+    const pedidoTn = Number(pedido.cantidad_solicitada)
+    return {
+      numero: formatearNumeroPedido(pedido.numero),
+      destino: nombreDestinoPedido(pedido),
+      pesadoTn: pesado,
+      pedidoTn,
+      cantidadVales: rangoValesParaImprimir.value.cantidadVales,
+      alcanzado: pesado != null && pedidoTn > 0 && pesado >= pedidoTn,
+    }
+  })
+
+  function abrirPreguntaCierre() {
+    const pedido = pedidoParaImprimir.value
+    if (!pedido || pedido.estado !== 'confirmado' || pedido.pesaje_cerrado_en) return
+    pedidoPreguntaCierre.value = pedido
+    errorPreguntaCierre.value = null
+    preguntaCierreAbierta.value = true
+  }
+
+  function responderPedidoSigue() {
+    preguntaCierreAbierta.value = false
+  }
+
+  async function responderPedidoTerminado() {
+    cerrandoPesaje.value = true
+    errorPreguntaCierre.value = null
+    try {
+      const pedido = await cerrarPesajePedido(pedidoPreguntaCierre.value.id)
+      pedidoParaImprimir.value = pedido
+      preguntaCierreAbierta.value = false
+      mensajeCierre.value = `Pesaje del pedido ${formatearNumeroPedido(pedido.numero)} cerrado: ya no admite más pesadas. El despacho se finaliza en Pedidos.`
+      await cargarBase()
+    } catch (e) {
+      errorPreguntaCierre.value = e.message
+    } finally {
+      cerrandoPesaje.value = false
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1076,6 +1240,18 @@ export function useBascula() {
     exportarHistorialExcel,
     modalImpresionAbierto,
     modoImpresion,
+    prepararImpresion,
+    avisoImpresion,
+    preguntaCierreAbierta,
+    resumenPreguntaCierre,
+    cerrandoPesaje,
+    errorPreguntaCierre,
+    mensajeCierre,
+    responderPedidoSigue,
+    responderPedidoTerminado,
+    pedidosAbiertosParaPesada,
+    alCambiarPedido,
+    avisoImpresionesDelVale,
     valeParaImprimir,
     obraNombreParaImprimir,
     mezclaNombreParaImprimir,

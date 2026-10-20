@@ -109,6 +109,8 @@ const {
   pedidoParaImprimirVale,
   acumuladoParaImprimirVale,
   rangoValesParaImprimirVale,
+  avisoImpresionVale,
+  prepararImpresionVale,
   abrirImpresionVale,
   elegirVale,
   formatearNumeroVale,
@@ -163,6 +165,8 @@ async function descargarPdfVale() {
   error.value = null
   try {
     const { descargarPdfImprimible } = await import('@/services/pdf-imprimible')
+    // El PDF también queda en la auditoría como impresión (migración 65).
+    await prepararImpresionVale('pdf')
     const nombreArchivo = `Vale-${formatearNumeroVale(valeParaImprimir.value?.numero_vale)}`
     await descargarPdfImprimible(refImprimibleVale.value, { tipo: 'vale', nombreArchivo })
   } catch (e) {
@@ -698,6 +702,7 @@ async function descargarPdfVale() {
             :patentes="patentes"
           />
         </div>
+        <p v-if="avisoImpresionVale" class="mt-3 rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-sm text-warning">{{ avisoImpresionVale }}</p>
         <div class="mt-4 flex justify-end gap-2">
           <VButton variant="secondary" @click="modalImpresionValeAbierto = false">Cerrar</VButton>
           <VButton variant="secondary" :disabled="descargandoPdfVale" @click="descargarPdfVale">

@@ -201,6 +201,11 @@ const CAMPOS_COMUNES = {
   modulo: { label: 'Módulo' },
   accion: { label: 'Acción' },
   descripcion: { label: 'Descripción' },
+  // Cierre del pesaje en Báscula (migración 65)
+  pesaje_cerrado_en: { label: 'Pesaje cerrado', tipo: 'fecha' },
+  pesaje_cerrado_por: { label: 'Pesaje cerrado por' },
+  pesado_tn: { label: 'Pesado al cerrar', tipo: 'tn' },
+  vales_pesados: { label: 'Vales pesados', tipo: 'numero' },
 }
 
 // Nunca se muestran en el detalle legible (siguen en "Ver datos técnicos").
@@ -345,6 +350,8 @@ const ENTIDADES = {
       const sujeto = fraseSujetoPedido(row)
       const despues = row.valores_despues ?? {}
       if (row.tipo_accion === 'CAMBIAR_ESTADO') {
+        // Migración 65: "¿Se terminó el pedido?" en Báscula / reabrir desde Pedidos.
+        if ('pesaje_cerrado_en' in despues) return `${despues.pesaje_cerrado_en ? 'cerró' : 'reabrió'} el pesaje d${sujeto}`
         if ('archivado' in despues) return `${despues.archivado ? 'archivó' : 'desarchivó'} ${sujeto}`
         const verboEstado = { confirmado: 'confirmó', postergado: 'postergó', cancelado: 'canceló' }[despues.estado]
         if (verboEstado) return `${verboEstado} ${sujeto}`
@@ -486,6 +493,38 @@ const ENTIDADES = {
     principales: ['patente', 'tipo_camion', 'es_externa', 'tara', 'chofer_habitual'],
   },
 
+  // Impresión o PDF de un vale/remito (migración 65). El registro guarda lo
+  // que salió en el papel: acumulado, vales, N° de remito, vez y, si cambió,
+  // la impresión anterior.
+  impresion: {
+    frase: (row) => {
+      const d = row.valores_despues ?? {}
+      const papel = d.modo === 'remito' ? `el remito ${d.remito ? formatearNumeroRemito(d.remito) : 'sin número'}` : `el vale ${d.vale ?? row.entidad_ref ?? ''}`.trim()
+      const accion = d.salida === 'pdf' ? 'bajó en PDF' : Number(d.vez) > 1 ? 'reimprimió' : 'imprimió'
+      const pedido = d.pedido ? ` del pedido ${d.pedido}` : ''
+      const cantidad = esNumero(d.acumulado_tn) ? `${numero(d.acumulado_tn)} tn` : null
+      return `${accion} ${conDetalle(`${papel}${pedido}`, [cantidad, textoCantidadVales(d.vales)])}`
+    },
+    datosEspeciales: (registro) => {
+      const d = registro ?? {}
+      const datos = [
+        { campo: 'Documento', valor: d.modo === 'remito' ? `Remito ${d.remito ? formatearNumeroRemito(d.remito) : 'sin número'} (desde el vale ${d.vale})` : `Vale ${d.vale}` },
+      ]
+      if (d.pedido) datos.push({ campo: 'Pedido', valor: d.pedido })
+      if (esNumero(d.acumulado_tn)) datos.push({ campo: 'Cantidad impresa (acumulado)', valor: `${numero(d.acumulado_tn)} tn` })
+      if (Array.isArray(d.vales) && d.vales.length) datos.push({ campo: 'Vales incluidos', valor: textoListaVales(d.vales) })
+      datos.push({ campo: 'Desde', valor: d.origen === 'despachos' ? 'Despachos' : 'Báscula' })
+      datos.push({ campo: 'Salida', valor: d.salida === 'pdf' ? 'PDF descargado' : 'Impresora' })
+      datos.push({ campo: 'Vez', valor: Number(d.vez) > 1 ? `Reimpresión (${d.vez}.ª vez)` : 'Primera vez' })
+      if (d.anterior) {
+        const a = d.anterior
+        const partes = [esNumero(a.acumulado_tn) ? `${numero(a.acumulado_tn)} tn` : null, textoCantidadVales(a.vales), a.remito && a.remito !== d.remito ? `remito ${formatearNumeroRemito(a.remito)}` : null]
+        datos.push({ campo: 'La impresión anterior decía', valor: `${partes.filter(Boolean).join(', ')}${a.fecha_hora ? ` (${fecha(a.fecha_hora)})` : ''}` })
+      }
+      return datos
+    },
+  },
+
   usuario_rol: {
     principales: ['email', 'rol', 'activo', 'ver_todas_obras', 'ver_ventas', 'obra_ids', 'telefono'],
     frase: (row, verbo) => {
@@ -493,6 +532,25 @@ const ENTIDADES = {
       return `${verbo({ CREAR: 'dio de alta', EDITAR: 'modificó' })} al usuario ${conDetalle(email ?? row.entidad_ref ?? '', [rol])}`
     },
   },
+}
+
+/** "8 vales" */
+function textoCantidadVales(vales) {
+  if (!Array.isArray(vales) || !vales.length) return null
+  return vales.length === 1 ? '1 vale' : `${vales.length} vales`
+}
+
+/** [10220, 10221, 10222, 10225] → "10220 al 10222, 10225 (4 vales)". */
+function textoListaVales(vales) {
+  const numeros = [...new Set(vales.map(Number))].sort((a, b) => a - b)
+  const tramos = []
+  for (const n of numeros) {
+    const ultimo = tramos[tramos.length - 1]
+    if (ultimo && n === ultimo[1] + 1) ultimo[1] = n
+    else tramos.push([n, n])
+  }
+  const texto = tramos.map(([desde, hasta]) => (desde === hasta ? `${desde}` : `${desde} al ${hasta}`)).join(', ')
+  return `${texto} (${textoCantidadVales(numeros)})`
 }
 
 /** Insumos de una fórmula antes/después, comparados por material. */
@@ -525,6 +583,7 @@ const VERBOS_GENERICOS = {
   REASIGNAR: 'reasignó',
   ELIMINAR: 'eliminó',
   SIMULAR: 'simuló',
+  IMPRIMIR: 'imprimió',
 }
 
 function fraseMaestro(row, verbo) {

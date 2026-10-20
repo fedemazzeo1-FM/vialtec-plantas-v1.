@@ -190,59 +190,136 @@ export async function obtenerProximoNumeroValeArido() {
 }
 
 // ---------------------------------------------------------------------------
-// Acumulado dinámico — por pedido si existe, si no por obra
+// Acumulado dinámico — por pedido (sin corte de fecha); sin pedido, por obra y día
 // ---------------------------------------------------------------------------
 
+/** Inicio del día de Argentina (UTC−3, sin horario de verano) de un instante. */
+function inicioDiaArgentina(instante) {
+  const dia = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(instante))
+  return new Date(`${dia}T00:00:00-03:00`)
+}
+
 /**
- * Suma en tn de los vales de ASFALTO hasta `fechaCorte` (mismo día
- * calendario), agrupando por `pedidoId` cuando la pesada tiene un pedido
- * asociado, y solo cayendo a agrupar por `obraId` cuando no lo tiene — regla
- * exacta de Logica sis. plantas v1.rtf §2.4 / v2.rtf §6 ("pedidoId === este
- * vale's pedidoId (si existe) O bien obra === ... (si no hay pedidoId)").
- * Se recalcula siempre en el momento de usarla (acá y en el imprimible),
- * nunca se lee de `plantas_vales.acumulado_obra_tn` como fuente de verdad —
- * esa columna es solo una foto informativa al momento de pesar.
+ * Suma en tn de los vales de ASFALTO no anulados hasta `fechaCorte`.
+ * Migración 65 (2026-10-20, pedido de Federico: en los trabajos nocturnos el
+ * acumulado se reiniciaba a las 00:00 aunque fuera el mismo pedido):
+ *   - con pedido: TODOS los vales del pedido hasta ese momento, sin corte de
+ *     fecha (el residual de un despacho dividido es otro pedido: acumula lo
+ *     suyo aunque comparta el N° de remito);
+ *   - sin pedido (despacho de emergencia): los vales sin pedido de la misma
+ *     obra, del mismo día de Argentina.
+ * Es la misma regla que plantas_acumulado_asfalto() en la base (pesada, vista
+ * del historial e impresión). Se usa para la vista previa; lo que se imprime
+ * de verdad lo devuelve registrarImpresion(), calculado en la base.
  *
- * Devuelve también los `numero_vale` del día (el rango y, desde 2026-10-01,
- * la lista completa — ver leyendaValesRemito(): no siempre son correlativos)
- * (2026-09-01,
- * a pedido de Federico con una foto de un remito real de VialTec): el
- * "REMITO" impreso tiene que mostrar "S/VALE DE BALANZA N° <desde> AL
- * <hasta> (CORRELATIVOS)" — el respaldo de básculas de todo lo acumulado ese
- * día para ese pedido/obra, no solo el vale individual que se está mirando.
+ * Devuelve también los `numero_vale` (rango y lista completa — ver
+ * leyendaValesRemito(): no siempre son correlativos) para la línea "S/VALE DE
+ * BALANZA N° …" del remito.
  *
  * @param {{ pedidoId?: string|null, obraId?: number|null, fechaCorte: string|Date }} args
  * @returns {Promise<{ acumuladoTn: number, valeDesde: number|null, valeHasta: number|null, cantidadVales: number, numerosVale: number[] }>}
  */
 export async function obtenerAcumuladoHastaFecha({ pedidoId, obraId, fechaCorte }) {
   const corte = new Date(fechaCorte)
-  const inicioDia = new Date(corte)
-  inicioDia.setHours(0, 0, 0, 0)
 
-  let query = supabase
-    .from(TABLA_VALES)
-    .select('peso_neto, unidad, numero_vale')
-    .eq('tipo_vale', 'asfalto')
-    // Un vale anulado (migración 31 — "Eliminar" en el historial) no debe
-    // sumar al acumulado del día que se imprime en el próximo vale/remito.
-    .eq('anulado', false)
-    .gte('fecha_pesada', inicioDia.toISOString())
-    .lte('fecha_pesada', corte.toISOString())
+  const construirQuery = () => {
+    let query = supabase
+      .from(TABLA_VALES)
+      .select('peso_neto, unidad, numero_vale')
+      .eq('tipo_vale', 'asfalto')
+      .eq('anulado', false)
+      .lte('fecha_pesada', corte.toISOString())
+      .order('fecha_pesada', { ascending: true })
+      .order('id', { ascending: true })
+    if (pedidoId) return query.eq('pedido_id', pedidoId)
+    query = query.is('pedido_id', null).gte('fecha_pesada', inicioDiaArgentina(corte).toISOString())
+    return obraId ? query.eq('obra_id', obraId) : query.is('obra_id', null)
+  }
 
-  query = pedidoId ? query.eq('pedido_id', pedidoId) : query.eq('obra_id', obraId)
+  // Un pedido tiene a lo sumo decenas de vales; se pagina igual por regla.
+  const vales = await fetchPaginado(construirQuery)
+  return resumenVales(vales.map((v) => ({ tn: aTn(v.peso_neto, v.unidad), numero: v.numero_vale })))
+}
 
-  const { data, error } = await query
-  if (error) throw error
-
-  const vales = data ?? []
-  const numeros = vales.map((v) => v.numero_vale).filter((n) => n != null)
-
+function resumenVales(vales) {
+  const numeros = vales.map((v) => v.numero).filter((n) => n != null).map(Number).sort((a, b) => a - b)
   return {
-    acumuladoTn: vales.reduce((acumulado, vale) => acumulado + aTn(vale.peso_neto, vale.unidad), 0),
-    valeDesde: numeros.length ? Math.min(...numeros) : null,
-    valeHasta: numeros.length ? Math.max(...numeros) : null,
+    acumuladoTn: vales.reduce((acumulado, v) => acumulado + v.tn, 0),
+    valeDesde: numeros.length ? numeros[0] : null,
+    valeHasta: numeros.length ? numeros[numeros.length - 1] : null,
     cantidadVales: numeros.length,
     numerosVale: numeros,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Impresiones auditadas (migración 65)
+// ---------------------------------------------------------------------------
+
+/**
+ * Registra en la auditoría la impresión (o el PDF) de un vale o remito y
+ * devuelve lo que hay que imprimir, calculado en la base — así lo auditado y
+ * el papel coinciden. `vez` > 1 = reimpresión; `anterior` viene solo si
+ * cambió algo desde la impresión anterior.
+ * @param {string} valeId
+ * @param {{ modo: 'vale'|'remito', origen: 'bascula'|'despachos', salida?: 'impresora'|'pdf' }} opciones
+ * @returns {Promise<{ acumulado: { acumuladoTn: number|null, valeDesde, valeHasta, cantidadVales, numerosVale }, remito: string|null, vez: number }>}
+ */
+export async function registrarImpresion(valeId, { modo, origen, salida = 'impresora' }) {
+  const { data, error } = await supabase.rpc('registrar_impresion', {
+    p_vale_id: valeId,
+    p_modo: modo,
+    p_origen: origen,
+    p_salida: salida,
+  })
+  if (error) throw error
+  const numeros = Array.isArray(data?.vales) ? data.vales : []
+  const acumulado = resumenVales(numeros.map((n) => ({ tn: 0, numero: n })))
+  acumulado.acumuladoTn = data?.acumulado_tn != null ? Number(data.acumulado_tn) : null
+  return { acumulado, remito: data?.remito ?? null, vez: Number(data?.vez) || 1 }
+}
+
+/**
+ * Impresiones (vale o remito) en las que figura este vale — para avisar al
+ * editarlo o anularlo que el papel que salió queda desactualizado.
+ * @returns {Promise<Array<{ modo: string, vale: string, remito: string|null, acumulado_tn: number|null, fecha_hora: string, usuario: string }>>}
+ */
+export async function fetchImpresionesDelVale(valeId) {
+  const { data, error } = await supabase.rpc('impresiones_del_vale', { p_vale_id: valeId })
+  if (error) throw error
+  return Array.isArray(data) ? data : []
+}
+
+// ---------------------------------------------------------------------------
+// Cierre del pesaje de un pedido (migración 65)
+// ---------------------------------------------------------------------------
+
+/** "¿Se terminó el pedido? Sí": el pedido no admite más pesadas. No finaliza el despacho (eso sigue en Pedidos). */
+export async function cerrarPesajePedido(pedidoId) {
+  const { data, error } = await supabase.rpc('cerrar_pesaje_pedido', { p_pedido_id: pedidoId })
+  if (error) throw error
+  return data
+}
+
+/**
+ * Pesadas de un pedido (no anuladas) para el aviso de "pedido abierto desde
+ * otro día" al elegirlo en una puerta. Un pedido tiene pocas decenas de vales.
+ * @returns {Promise<{ tn: number, cantidad: number, ultima: string|null }>}
+ */
+export async function fetchResumenPesadasPedido(pedidoId) {
+  const vales = await fetchPaginado(() =>
+    supabase
+      .from(TABLA_VALES)
+      .select('peso_neto, unidad, fecha_pesada')
+      .eq('pedido_id', pedidoId)
+      .eq('tipo_vale', 'asfalto')
+      .eq('anulado', false)
+      .order('fecha_pesada', { ascending: true })
+  )
+  return {
+    tn: vales.reduce((acumulado, v) => acumulado + aTn(v.peso_neto, v.unidad), 0),
+    cantidad: vales.length,
+    ultima: vales.length ? vales[vales.length - 1].fecha_pesada : null,
   }
 }
 

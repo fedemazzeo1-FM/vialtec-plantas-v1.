@@ -53,13 +53,20 @@ const props = defineProps({
   // gestionables solo por admin/plantista (comportamiento ya esperado).
   puedeGestionarGlobal: { type: Boolean, default: false },
   usuarioActual: { type: String, default: null },
+  // Reabrir el pesaje cerrado desde Báscula (migración 65): admin/plantista,
+  // mismo criterio que reabrir_pesaje_pedido() en el servidor.
+  puedeReabrirPesaje: { type: Boolean, default: false },
 })
+
+// Pesaje cerrado en Báscula ("¿Se terminó el pedido? Sí", migración 65):
+// solo importa mientras el pedido sigue confirmado (después lo cierra el despacho).
+const pesajeCerrado = computed(() => props.pedido.estado === 'confirmado' && Boolean(props.pedido.pesaje_cerrado_en))
 
 const puedeGestionarEstePedido = computed(
   () => props.puedeGestionarGlobal || (!!props.usuarioActual && props.pedido.creado_por === props.usuarioActual)
 )
 
-const emit = defineEmits(['confirmar', 'despachar', 'registrar-carga', 'editar', 'postergar', 'cancelar', 'archivar', 'ver-historial'])
+const emit = defineEmits(['confirmar', 'despachar', 'registrar-carga', 'editar', 'postergar', 'cancelar', 'archivar', 'ver-historial', 'reabrir-pesaje'])
 
 const { esMobile } = useBreakpoint()
 
@@ -86,6 +93,7 @@ const itemsMenu = computed(() =>
       puedeGestionarEstePedido.value && { label: 'Postergar', evento: 'postergar' },
     ESTADOS_ARCHIVABLES.includes(props.pedido.estado) &&
       !props.pedido.archivado && { label: 'Archivar', evento: 'archivar' },
+    pesajeCerrado.value && props.puedeReabrirPesaje && { label: 'Reabrir pesaje', evento: 'reabrir-pesaje' },
     ESTADOS_CANCELABLES.includes(props.pedido.estado) && { label: 'Cancelar pedido', evento: 'cancelar', peligroso: true },
   ].filter(Boolean)
 )
@@ -161,6 +169,9 @@ function formatearFechaHoraCreacion(iso) {
       <button type="button" class="font-semibold text-vialtec hover:underline" @click="$emit('ver-historial', pedido)">
         Ver historial
       </button>
+      <span v-if="pesajeCerrado" class="font-semibold text-text-mid">
+        🔒 Pesaje cerrado {{ formatearFechaHoraCreacion(pedido.pesaje_cerrado_en) }} ({{ pedido.pesaje_cerrado_por }})
+      </span>
 
       <!-- Resto de acciones: botones sueltos en Desktop (2026-09-04, réplica
            del legado, agrupados en la misma fila que "Ver historial"), menú
@@ -182,6 +193,9 @@ function formatearFechaHoraCreacion(iso) {
           @click="$emit('postergar', pedido)"
         >
           Postergar
+        </VButton>
+        <VButton v-if="pesajeCerrado && puedeReabrirPesaje" variant="secondary" size="sm" @click="$emit('reabrir-pesaje', pedido)">
+          Reabrir pesaje
         </VButton>
         <VButton v-if="ESTADOS_CANCELABLES.includes(pedido.estado)" variant="danger" size="sm" @click="$emit('cancelar', pedido)">
           ✕

@@ -24,6 +24,7 @@ export const ACCIONES_AUDITORIA = [
   { id: 'REASIGNAR', label: 'Reasignación', variante: 'postergado' },
   { id: 'ANULAR', label: 'Anulación', variante: 'danger' },
   { id: 'ELIMINAR', label: 'Eliminación', variante: 'danger' },
+  { id: 'IMPRIMIR', label: 'Impresión', variante: 'default' },
 ]
 
 /**

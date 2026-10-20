@@ -27,7 +27,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { tiposConTotalVisible, unidadLabelTipoProducto } from '@/config/tipos-producto'
-import { formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
+import { formatearCantidad, formatearCantidadHasta, formatearNumeroPedido } from '@/services/formato-numeros'
 
 const { esMobile } = useBreakpoint()
 const auth = useAuthStore()
@@ -105,6 +105,13 @@ const {
   postergando,
   abrirPostergacion,
   confirmarPostergacion,
+  modalReabrirPesajeAbierto,
+  pedidoReabrirPesaje,
+  motivoReabrirPesaje,
+  reabriendoPesaje,
+  errorReabrirPesaje,
+  abrirReabrirPesaje,
+  confirmarReabrirPesaje,
   modalCancelAbierto,
   pedidoCancelar,
   motivoCancelacion,
@@ -417,6 +424,7 @@ iniciar()
               :puede-despachar-hormigon="puedeDespacharHormigon"
               :puede-gestionar-global="puedeGestionarPedidosGlobal"
               :usuario-actual="auth.user?.email"
+              :puede-reabrir-pesaje="puedeGestionarPedidosGlobal"
               @confirmar="confirmar"
               @despachar="despacho.abrir"
               @registrar-carga="cargaHormigon.abrir"
@@ -425,6 +433,7 @@ iniciar()
               @cancelar="abrirCancelacion"
               @archivar="archivar"
               @ver-historial="abrirHistorial"
+              @reabrir-pesaje="abrirReabrirPesaje"
             />
             <p v-if="!grupo.filas.length" class="rounded-xl border border-dashed border-border py-4 text-center text-sm text-text-soft">
               No hay pedidos de {{ grupo.label.toLowerCase() }} que coincidan con el filtro.
@@ -903,6 +912,30 @@ iniciar()
         <div class="flex justify-end gap-2 pt-2">
           <VButton type="button" variant="secondary" @click="modalPostergarAbierto = false">Cancelar</VButton>
           <VButton type="submit" :disabled="postergando">{{ postergando ? 'Guardando…' : 'Postergar pedido' }}</VButton>
+        </div>
+      </form>
+    </VModal>
+
+    <!-- Reabrir pesaje (migración 65): el pesaje se cerró en Báscula con
+         "¿Se terminó el pedido? Sí" y llegó otro camión. -->
+    <VModal :open="modalReabrirPesajeAbierto" title="Reabrir pesaje" @update:open="modalReabrirPesajeAbierto = $event">
+      <form class="space-y-3" @submit.prevent="confirmarReabrirPesaje">
+        <div v-if="errorReabrirPesaje" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ errorReabrirPesaje }}</div>
+        <p class="text-sm text-text-mid">
+          {{ formatearNumeroPedido(pedidoReabrirPesaje?.numero) }} · {{ pedidoReabrirPesaje?.destino }} — el pedido vuelve a aparecer en Báscula y admite más pesadas.
+        </p>
+        <label class="block text-sm text-text-mid">
+          Motivo (obligatorio)
+          <textarea
+            v-model="motivoReabrirPesaje"
+            rows="2"
+            placeholder="Ej.: llegó un camión más para la obra"
+            class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+          ></textarea>
+        </label>
+        <div class="flex justify-end gap-2 pt-2">
+          <VButton type="button" variant="secondary" @click="modalReabrirPesajeAbierto = false">Cancelar</VButton>
+          <VButton type="submit" :disabled="reabriendoPesaje">{{ reabriendoPesaje ? 'Guardando…' : 'Reabrir pesaje' }}</VButton>
         </div>
       </form>
     </VModal>

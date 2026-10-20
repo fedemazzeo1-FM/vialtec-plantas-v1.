@@ -363,6 +363,20 @@ export async function postergarPedido(id, { fechaNueva, motivo } = {}) {
   return data
 }
 
+/**
+ * Reabre el pesaje de un pedido que se cerró en Báscula ("¿Se terminó el
+ * pedido? Sí", migración 65). Solo admin/plantista, motivo obligatorio,
+ * queda en la auditoría.
+ */
+export async function reabrirPesajePedido(id, motivo) {
+  const { data, error } = await supabase.rpc('reabrir_pesaje_pedido', {
+    p_pedido_id: id,
+    p_motivo: motivo,
+  })
+  if (error) throw error
+  return data
+}
+
 // NOTA: no hay un despacharPedido(id, cantidad) genérico acá — el despacho
 // de asfalto se hace SIEMPRE vía registrarCargaAsfalto() (multi-carga, una
 // llamada atómica por camión, ver más abajo) y el de hormigón vía

@@ -81,6 +81,18 @@ const {
   abrirImpresionVale,
   abrirImpresionRemito,
   imprimir,
+  prepararImpresion,
+  avisoImpresion,
+  preguntaCierreAbierta,
+  resumenPreguntaCierre,
+  cerrandoPesaje,
+  errorPreguntaCierre,
+  mensajeCierre,
+  responderPedidoSigue,
+  responderPedidoTerminado,
+  pedidosAbiertosParaPesada,
+  alCambiarPedido,
+  avisoImpresionesDelVale,
   modalEditarAbierto,
   valeEditar,
   formEditar,
@@ -116,6 +128,8 @@ async function descargarPdf() {
     // clic acá, no cada vez que se entra a Báscula (mismo criterio que ya usa
     // el proyecto con exceljs en Stock/Despachos).
     const { descargarPdfImprimible } = await import('@/services/pdf-imprimible')
+    // El PDF también queda en la auditoría como impresión (migración 65).
+    await prepararImpresion('pdf')
     const nombreArchivo =
       modoImpresion.value === 'remito'
         ? `Remito-${formatearNumeroRemito(remitoParaImprimir.value?.numeroRemito)}`
@@ -207,6 +221,10 @@ watch(
 
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
+      </div>
+      <div v-if="mensajeCierre" class="mb-3 flex items-start justify-between gap-3 rounded-lg border border-success/20 bg-success-light px-3 py-2 text-sm text-success">
+        <span>{{ mensajeCierre }}</span>
+        <button type="button" class="text-success/70 hover:text-success" aria-label="Cerrar aviso" @click="mensajeCierre = null">✕</button>
       </div>
 
       <!-- Protagonismo del CTA en mobile (2026-09-07, pedido de Federico:
@@ -338,14 +356,18 @@ watch(
               <select
                 v-model="slot.form.pedido_id"
                 class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+                @change="alCambiarPedido(slot)"
               >
                 <option value="" disabled>Elegir pedido…</option>
-                <option v-for="p in pedidosParaPesada" :key="p.id" :value="p.id">
+                <option v-for="p in pedidosAbiertosParaPesada" :key="p.id" :value="p.id">
                   {{ etiquetaPedidoPesada(p) }}
                 </option>
               </select>
-              <p v-if="!pedidosParaPesada.length" class="mt-1 text-xs text-text-soft">
-                No hay pedidos de asfalto confirmados o despachados.
+              <p v-if="!pedidosAbiertosParaPesada.length" class="mt-1 text-xs text-text-soft">
+                No hay pedidos de asfalto confirmados con el pesaje abierto.
+              </p>
+              <p v-if="slot.avisoPedido" class="mt-1 rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-xs text-warning">
+                {{ slot.avisoPedido }}
               </p>
             </label>
 
@@ -606,12 +628,42 @@ watch(
                ValeImprimible.vue, ver comentario ahí). -->
           <RemitoImprimible v-else-if="modoImpresion === 'remito'" v-bind="remitoParaImprimir" />
         </div>
+        <p v-if="avisoImpresion" class="mt-3 rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-sm text-warning">{{ avisoImpresion }}</p>
         <div class="mt-4 flex justify-end gap-2">
           <VButton variant="secondary" @click="modalImpresionAbierto = false">Cerrar</VButton>
           <VButton variant="secondary" :disabled="descargandoPdf" @click="descargarPdf">
             {{ descargandoPdf ? 'Generando…' : 'Descargar PDF' }}
           </VButton>
           <VButton @click="imprimir">Imprimir</VButton>
+        </div>
+      </VModal>
+    </Teleport>
+
+    <!-- "¿Se terminó el pedido?" (migración 65) — después de imprimir un
+         remito de un pedido con el pesaje abierto. Después del modal de
+         impresión en el DOM para quedar arriba. -->
+    <Teleport to="body">
+      <VModal :open="preguntaCierreAbierta" title="¿Se terminó el pedido?" @update:open="!$event && responderPedidoSigue()">
+        <div v-if="resumenPreguntaCierre" class="space-y-3">
+          <p class="text-sm text-text-mid">
+            <strong>{{ resumenPreguntaCierre.numero }}</strong> · {{ resumenPreguntaCierre.destino }}
+          </p>
+          <p class="text-sm text-text-mid">
+            Pesado: <strong>{{ resumenPreguntaCierre.pesadoTn != null ? formatearCantidadHasta(resumenPreguntaCierre.pesadoTn) : '—' }} tn</strong>
+            de {{ formatearCantidadHasta(resumenPreguntaCierre.pedidoTn) }} tn pedidas
+            ({{ resumenPreguntaCierre.cantidadVales === 1 ? '1 vale' : `${resumenPreguntaCierre.cantidadVales} vales` }}).
+          </p>
+          <p v-if="resumenPreguntaCierre.alcanzado" class="text-sm text-text-mid">Ya se alcanzó la cantidad pedida.</p>
+          <p class="text-xs text-text-soft">
+            Si se terminó, el pedido ya no admite más pesadas (un plantista lo puede reabrir desde Pedidos). El despacho se sigue finalizando en Pedidos.
+          </p>
+          <div v-if="errorPreguntaCierre" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ errorPreguntaCierre }}</div>
+          <div class="flex justify-end gap-2">
+            <VButton variant="secondary" :disabled="cerrandoPesaje" @click="responderPedidoTerminado">
+              {{ cerrandoPesaje ? 'Cerrando…' : 'Sí, se terminó' }}
+            </VButton>
+            <VButton autofocus @click="responderPedidoSigue">No, sigue abierto</VButton>
+          </div>
         </div>
       </VModal>
     </Teleport>
@@ -625,6 +677,10 @@ watch(
         </p>
 
         <div v-if="error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ error }}</div>
+
+        <div v-if="avisoImpresionesDelVale.length" class="rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-sm text-warning">
+          Este vale ya salió impreso en: {{ avisoImpresionesDelVale.join('; ') }}. Después de guardar, reimprimí lo que corresponda.
+        </div>
 
         <!-- Pedido del vale de asfalto (migración 48, 2026-09-30): reasignar
              si se pesó contra el pedido equivocado — conserva el N° de vale,
@@ -764,6 +820,10 @@ watch(
         </p>
 
         <div v-if="errorAnulacion" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">{{ errorAnulacion }}</div>
+
+        <div v-if="avisoImpresionesDelVale.length" class="rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-sm text-warning">
+          Este vale ya salió impreso en: {{ avisoImpresionesDelVale.join('; ') }}. Después de anularlo, reimprimí lo que corresponda.
+        </div>
 
         <label class="block text-sm text-text-mid">
           Motivo (obligatorio)
