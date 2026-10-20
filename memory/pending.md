@@ -2,7 +2,55 @@
 
 ## ▶ RETOMAR AQUÍ
 
-### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-19)
+### ▶▶ PARA RETOMAR (cierre de sesión 2026-10-20)
+
+**Acumulado de asfalto por pedido + "¿Se terminó el pedido?" + impresiones
+auditadas — EN PRODUCCIÓN (2026-10-20, migración 65 APLICADA con OK de
+Federico, commits `d9e3724` + `b8b278b`, bundle `index-BWPdEi8c.js`
+verificado servido).** Origen: en los nocturnos P-0230 (05/10) y P-0233
+(06/10) el acumulado reiniciaba a las 00:00 (y el valor guardado al pesar, a
+las 21:00 por usar el día UTC). Ahora:
+- Acumulado por pedido sin corte de fecha, sin anulados; sin pedido, por obra
+  y día de Argentina. Una sola regla: `plantas_acumulado_asfalto` (pesada,
+  vista `plantas_v_bascula_viva`, impresión) y su gemela JS
+  `obtenerAcumuladoHastaFecha` (solo vista previa). Residual = otro pedido,
+  acumula lo suyo con el mismo N° de remito (decisión de Federico; una
+  entrega en otro día se carga como pedido distinto con su propio remito).
+- Báscula: después de imprimir un remito de un pedido confirmado con pesaje
+  abierto pregunta "¿Se terminó el pedido?". Sí → `cerrar_pesaje_pedido`
+  (balancero/plantista/admin): no admite más pesadas y sale de las puertas.
+  El despacho se sigue finalizando en Pedidos. "Reabrir pesaje" en la
+  tarjeta de Pedidos (admin/plantista, motivo obligatorio).
+- `registrar_pesada_bascula` y `reasignar_vale_bascula` rechazan pedidos no
+  confirmados o con pesaje cerrado (antes la pesada no miraba el estado).
+- Toda impresión/PDF de vale o remito (Báscula y Despachos) queda en
+  Auditoría (acción IMPRIMIR, `registrar_impresion`: la base calcula lo que
+  se imprime y marca reimpresión + diferencia con la anterior). Aviso al
+  editar/anular un vale que ya salió impreso (`impresiones_del_vale`). Aviso
+  al elegir un pedido cuya última pesada fue hace más de 6 h (caso P-0212).
+- Dry-run con P-0230, P-0233, P-0212 y escenarios a–i:
+  `supabase/scripts/dry_run_migracion_65.sql` (todo OK, secuencias
+  restauradas). Reversión: `revertir_migracion_65.sql`.
+- Verificado en vivo (sesión admin): remito de P-0259 → fila IMPRIMIR 449
+  (58,30 tn, vales 10272 y 10275), sin pregunta porque está despachado;
+  selector de puertas muestra P-0263; sin errores de consola. Una pesada real
+  de la balanza (I-00846, 14:52) pasó bien después de aplicar.
+
+Falta:
+1. **`git push origin main`** (lo corre Federico: bloqueado desde la sesión).
+2. **Ver la pregunta "¿Se terminó el pedido?" con sesión de balancero**: no
+   se pudo (no hay sesión de balancero en el navegador automatizado y hoy no
+   hay ningún pedido confirmado con pesadas). Se ve con el primer remito real
+   de P-0263 (o el próximo pedido): imprimir el remito → aparece la pregunta.
+3. **Otra tanda (pedido de Federico):** en Pedidos, completar las cargas del
+   modal "Registrar despacho" desde los vales de Báscula (hoy se tipean).
+4. Mensaje de "pesaje cerrado" muestra el email de quien cerró (no el
+   nombre): cambiar si molesta.
+
+**Migración del Simulador → auditoría: pasa a ser la 66** (la 65 se usó
+para esto). El plan de abajo sigue igual.
+
+### ▶▶ (anterior) cierre de sesión 2026-10-19
 
 **Auditoría legible — EN PRODUCCIÓN (2026-10-19, deploy `dpl_4QfDXFc78FtuRSiYpvfFxDkBHLXh`, bundle `index-DtnShsGV.js` / `AuditoriaView-DJ1NXJDb.js` verificado servido).** Commits `6d37582` + `767966b`; el push lo corre Federico (bloqueado desde la sesión). Detalle de
 `/auditoria` como en flota: frase "quién hizo qué sobre qué", motivo
@@ -23,7 +71,7 @@ agregado/quitado/cambiado + cambio de tipo). Falta:
    la frase ya muestra el nombre nuevo (se resuelve al mostrar, no se toca
    la auditoría guardada).
 
-**Migración 65 (Simulador → auditoría) — NO escrita ni aplicada.** Plan
+**Migración 66 (Simulador → auditoría; era la "65") — NO escrita ni aplicada.** Plan
 aprobado por Federico el 19/10: el simulador hoy no escribe nada en la base
 (100 % en pantalla). Acción nueva `SIMULAR` en el CHECK de `tipo_accion` +
 entidad `simulador/simulacion` en el catálogo; RPC

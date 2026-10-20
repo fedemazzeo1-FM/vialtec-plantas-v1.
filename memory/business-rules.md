@@ -122,12 +122,22 @@ código (`pedidos.service.js`, `supabase/migrations/09_*.sql` dentro de
 - Los vales de pesaje usan una **secuencia numérica nativa y global**, que
   **empieza en 9579** (continuidad con la numeración en papel que ya usaba la
   planta antes del sistema — no se reinicia en 1).
-- El acumulado que figura en cada vale (total despachado del día para ese
-  pedido/obra) se **recalcula dinámicamente** al momento de imprimir/consultar, no
-  se toma como dato fijo guardado — evita inconsistencias si se edita un vale
-  anterior.
+- El acumulado que figura en cada vale y remito es **por pedido, desde la
+  primera pesada, sin corte de fecha** (Federico, 2026-10-20, migración 65:
+  los trabajos nocturnos cruzan la medianoche). No suma vales anulados. Se
+  **recalcula dinámicamente** al imprimir/consultar (`plantas_acumulado_asfalto`),
+  no se toma el valor guardado al pesar.
+- El residual de un despacho dividido es otro pedido: acumula lo suyo aunque
+  mantenga el mismo N° de remito. Una entrega en otro día se carga como un
+  pedido distinto, con su propio remito.
 - Un vale puede no estar asociado a ningún pedido del sistema (despacho de
-  emergencia); en ese caso el acumulado se agrupa por nombre de obra/destino.
+  emergencia); en ese caso el acumulado se agrupa por obra y día de Argentina.
+- Después de imprimir el remito, Báscula pregunta "¿Se terminó el pedido?".
+  "Sí" cierra el pesaje: el pedido no admite más pesadas (lo reabre un
+  plantista/admin desde Pedidos, con motivo). Finalizar el despacho sigue
+  siendo de Pedidos. Solo se pesa contra pedidos confirmados.
+- Toda impresión o PDF de un vale/remito queda en Auditoría (quién, cuándo,
+  cantidad y vales que incluía, reimpresiones).
 
 ## Ingresos de áridos por báscula
 
