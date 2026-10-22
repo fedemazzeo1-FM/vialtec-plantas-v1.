@@ -19,7 +19,10 @@ import VKpiCard from '@/components/shared/VKpiCard.vue'
 import { usePedidos } from '@/modules/pedidos/composables/usePedidos'
 import { useDespachoAsfalto } from '@/modules/pedidos/composables/useDespachoAsfalto'
 import { useCargaHormigon } from '@/modules/pedidos/composables/useCargaHormigon'
+import { usePermisosPedido } from '@/modules/pedidos/composables/usePermisosPedido'
 import PedidoCard from '@/modules/pedidos/components/PedidoCard.vue'
+import ModalDespachoAsfalto from '@/modules/pedidos/components/ModalDespachoAsfalto.vue'
+import ModalDespachoMixer from '@/modules/pedidos/components/ModalDespachoMixer.vue'
 import ResumenAnualMobile from '@/modules/dashboard/components/ResumenAnualMobile.vue'
 import { ESTADOS, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
 import { useBreakpoint } from '@/composables/useBreakpoint'
@@ -27,7 +30,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { tiposConTotalVisible, unidadLabelTipoProducto } from '@/config/tipos-producto'
-import { formatearCantidad, formatearCantidadHasta, formatearNumeroPedido } from '@/services/formato-numeros'
+import { formatearCantidad, formatearNumeroPedido } from '@/services/formato-numeros'
 
 const { esMobile } = useBreakpoint()
 const auth = useAuthStore()
@@ -39,25 +42,8 @@ const router = useRouter()
 // paso y su validación).
 const TITULOS_PASO = { 1: 'Obra y responsable', 2: 'Material y cantidad', 3: 'Fecha y notas' }
 
-// RBAC (2026-09-16, pedido de Federico): Confirmar/Despachar solo para
-// plantista/admin — "pedidos.aprobar" en la matriz hoy resuelve exactamente
-// a ese par de roles (admin por bypass total). Despachar difiere por tipo
-// porque las RPC detrás (registrar_carga_asfalto/registrar_carga_hormigon)
-// hardcodean roles distintos, no pasan por la matriz: asfalto queda
-// admin/plantista únicamente, hormigón además admite plantista_hormigon
-// (rol que existe específicamente para despachar hormigón — no se le puede
-// sacar esa única acción sin romper su función real). Ver esos 2 archivos
-// de migración si esto cambia algún día.
-const puedeConfirmar = computed(() => auth.tienePermiso('pedidos', 'aprobar'))
-const puedeDespacharAsfalto = computed(() => auth.rol === 'admin' || auth.rol === 'plantista')
-const puedeDespacharHormigon = computed(
-  () => auth.rol === 'admin' || auth.rol === 'plantista' || auth.rol === 'plantista_hormigon'
-)
-// Editar/Postergar por creador (2026-09-17, migración 41): admin/plantista
-// mantienen alcance global; cualquier otro rol (encargado/supervisor, los
-// únicos que además pueden crear pedidos) solo sobre el pedido que él mismo
-// creó — PedidoCard.vue compara pedido.creado_por contra este email.
-const puedeGestionarPedidosGlobal = computed(() => auth.rol === 'admin' || auth.rol === 'plantista')
+// Permisos de UI de las acciones del pedido: compartidos con Plan semanal.
+const { puedeConfirmar, puedeDespacharAsfalto, puedeDespacharHormigon, puedeGestionarPedidosGlobal } = usePermisosPedido()
 
 const {
   error,
@@ -130,9 +116,11 @@ const {
 
 const despacho = useDespachoAsfalto(cargarPedidos)
 const cargaHormigon = useCargaHormigon(cargarPedidos)
-// El modal de cargas sirve a todo el circuito de mixer (hormigón en m³,
-// mezcla cemento en tn): la unidad sale del pedido que se está despachando.
-const unidadCargaMixer = computed(() => unidadLabelTipoProducto(cargaHormigon.pedido?.tipo))
+// Encabezado de los modales de despacho: cliente si es venta, obra si no.
+function destinoDe(pedido) {
+  if (!pedido) return ''
+  return pedido.tipo_pedido === 'venta' ? pedido.cliente_externo : obras.value.find((o) => o.id === pedido.obra_id)?.nombre
+}
 
 /**
  * KPI de estado como filtro rápido (2026-09-02, roadmap Mobile/UX): click
@@ -692,199 +680,9 @@ iniciar()
       </form>
     </VModal>
 
-    <!-- Despacho de asfalto: multi-camión con vale por carga -->
-    <VModal :open="despacho.abierto" title="Registrar despacho" @update:open="despacho.abierto = $event">
-      <div class="space-y-3">
-        <div v-if="despacho.error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
-          {{ despacho.error }}
-        </div>
-        <p class="text-sm text-text-mid">
-          {{ despacho.pedido?.tipo_pedido === 'venta' ? despacho.pedido?.cliente_externo : obras.find((o) => o.id === despacho.pedido?.obra_id)?.nombre }}
-          — Solicitado: {{ formatearCantidadHasta(despacho.pedido?.cantidad_solicitada) }} tn · Saldo antes de este despacho: {{ formatearCantidad(despacho.saldoPendiente, 1) }} tn
-        </p>
-
-        <div class="space-y-2">
-          <p class="text-xs font-semibold uppercase tracking-wide text-text-soft">Cargas / camiones</p>
-          <div
-            v-for="(carga, idx) in despacho.cargas"
-            :key="idx"
-            class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_1fr_1fr_auto]"
-          >
-            <label class="text-xs text-text-mid">
-              Cantidad (tn) *
-              <input
-                v-model.number="carga.cantidad_tn"
-                type="number"
-                step="0.01"
-                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <label class="text-xs text-text-mid">
-              N° vale *
-              <input
-                v-model="carga.numero_vale"
-                type="text"
-                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <label class="text-xs text-text-mid">
-              Patente (opcional)
-              <input
-                v-model="carga.patente"
-                list="patentes-despacho"
-                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <VButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              :disabled="despacho.cargas.length <= 1"
-              @click="despacho.quitarCarga(idx)"
-            >
-              ✕ Quitar carga
-            </VButton>
-          </div>
-          <VButton type="button" variant="secondary" size="sm" @click="despacho.agregarCarga">+ Agregar carga</VButton>
-        </div>
-
-        <p class="text-sm font-semibold text-text">Total: {{ formatearCantidad(despacho.totalCargas, 2) }} tn</p>
-        <!-- N° de remito: se origina en Báscula, no acá (migración 39,
-             2026-09-16) — el balancero lo asigna e imprime en la primera
-             pesada del pedido, el plantista lo recibe ya en papel. Esta
-             línea es solo de lectura/confirmación contra ese papel. -->
-        <p class="text-sm text-text-mid">
-          N° de remito:
-          <span v-if="despacho.pedido?.nro_remito_global" class="font-semibold text-text">
-            {{ despacho.pedido.nro_remito_global }}
-          </span>
-          <span v-else class="text-warning">
-            todavía sin asignar — falta procesar la primera pesada en Báscula
-          </span>
-        </p>
-
-        <!-- Cierre parcial + pedido residual (Logica sis. plantas v1.rtf §2.2) -->
-        <div v-if="despacho.residualEstimado > 0" class="rounded-lg border border-warning/30 bg-warning-light/40 p-3">
-          <p class="text-sm text-text-mid">
-            Con estas cargas queda un saldo de <strong>{{ formatearCantidad(despacho.residualEstimado, 2) }} tn</strong> sin despachar.
-            El pedido se va a cerrar como <strong>despachado</strong> igual, con lo cargado.
-          </p>
-          <label class="mt-2 flex items-center gap-2 text-sm text-text-mid">
-            <input v-model="despacho.dividirPedido" type="checkbox" />
-            Dividir pedido: crear un pedido nuevo confirmado por el saldo
-          </label>
-          <label v-if="despacho.dividirPedido" class="mt-2 block text-sm text-text-mid">
-            Fecha del pedido residual
-            <input
-              v-model="despacho.fechaResidual"
-              type="date"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none md:w-1/2"
-            />
-          </label>
-        </div>
-
-        <datalist id="patentes-despacho">
-          <option v-for="p in patentes" :key="p.id" :value="p.patente" />
-        </datalist>
-
-        <div class="flex justify-end gap-2 pt-2">
-          <VButton type="button" variant="secondary" @click="despacho.abierto = false">Cancelar</VButton>
-          <VButton type="button" variant="success" :disabled="despacho.guardando" @click="despacho.guardar">
-            {{ despacho.guardando ? 'Guardando…' : 'Confirmar despacho' }}
-          </VButton>
-        </div>
-      </div>
-    </VModal>
-
-    <!-- Despacho de hormigón: mismo patrón multi-camión, remito por carga -->
-    <VModal :open="cargaHormigon.abierto" title="Registrar despacho" @update:open="cargaHormigon.abierto = $event">
-      <div class="space-y-3">
-        <div v-if="cargaHormigon.error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
-          {{ cargaHormigon.error }}
-        </div>
-        <p class="text-sm text-text-mid">
-          {{ cargaHormigon.pedido?.tipo_pedido === 'venta' ? cargaHormigon.pedido?.cliente_externo : obras.find((o) => o.id === cargaHormigon.pedido?.obra_id)?.nombre }}
-          — Solicitado: {{ formatearCantidadHasta(cargaHormigon.pedido?.cantidad_solicitada) }} {{ unidadCargaMixer }} · Saldo antes de este despacho: {{ formatearCantidad(cargaHormigon.saldoPendiente, 1) }} {{ unidadCargaMixer }}
-        </p>
-
-        <div class="space-y-2">
-          <p class="text-xs font-semibold uppercase tracking-wide text-text-soft">Cargas / camiones</p>
-          <div
-            v-for="(carga, idx) in cargaHormigon.cargas"
-            :key="idx"
-            class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_1fr_1fr_auto]"
-          >
-            <label class="text-xs text-text-mid">
-              Cantidad ({{ unidadCargaMixer }}) *
-              <input
-                v-model.number="carga.volumen_m3"
-                type="number"
-                step="0.01"
-                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <label class="text-xs text-text-mid">
-              N° remito *
-              <input
-                v-model="carga.numero_remito"
-                type="text"
-                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <label class="text-xs text-text-mid">
-              Patente (opcional)
-              <input
-                v-model="carga.patente_mixer"
-                list="patentes-mixer"
-                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
-              />
-            </label>
-            <VButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              :disabled="cargaHormigon.cargas.length <= 1"
-              @click="cargaHormigon.quitarCarga(idx)"
-            >
-              ✕ Quitar carga
-            </VButton>
-          </div>
-          <VButton type="button" variant="secondary" size="sm" @click="cargaHormigon.agregarCarga">+ Agregar carga</VButton>
-        </div>
-
-        <p class="text-sm font-semibold text-text">Total: {{ formatearCantidad(cargaHormigon.totalCargas, 2) }} {{ unidadCargaMixer }}</p>
-
-        <div v-if="cargaHormigon.residualEstimado > 0" class="rounded-lg border border-warning/30 bg-warning-light/40 p-3">
-          <p class="text-sm text-text-mid">
-            Con estas cargas queda un saldo de <strong>{{ formatearCantidad(cargaHormigon.residualEstimado, 2) }} {{ unidadCargaMixer }}</strong> sin despachar.
-            El pedido se va a cerrar como <strong>despachado</strong> igual, con lo cargado.
-          </p>
-          <label class="mt-2 flex items-center gap-2 text-sm text-text-mid">
-            <input v-model="cargaHormigon.dividirPedido" type="checkbox" />
-            Dividir pedido: crear un pedido nuevo confirmado por el saldo
-          </label>
-          <label v-if="cargaHormigon.dividirPedido" class="mt-2 block text-sm text-text-mid">
-            Fecha del pedido residual
-            <input
-              v-model="cargaHormigon.fechaResidual"
-              type="date"
-              class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none md:w-1/2"
-            />
-          </label>
-        </div>
-
-        <datalist id="patentes-mixer">
-          <option v-for="p in patentes" :key="p.id" :value="p.patente" />
-        </datalist>
-
-        <div class="flex justify-end gap-2 pt-2">
-          <VButton type="button" variant="secondary" @click="cargaHormigon.abierto = false">Cancelar</VButton>
-          <VButton type="button" variant="success" :disabled="cargaHormigon.guardando" @click="cargaHormigon.guardar">
-            {{ cargaHormigon.guardando ? 'Guardando…' : 'Confirmar despacho' }}
-          </VButton>
-        </div>
-      </div>
-    </VModal>
+    <!-- Despacho: mismos modales que Plan semanal (componentes compartidos) -->
+    <ModalDespachoAsfalto :despacho="despacho" :destino="destinoDe(despacho.pedido)" :patentes="patentes" />
+    <ModalDespachoMixer :despacho="cargaHormigon" :destino="destinoDe(cargaHormigon.pedido)" :patentes="patentes" />
 
     <!-- Postergar -->
     <VModal :open="modalPostergarAbierto" title="Postergar pedido" @update:open="modalPostergarAbierto = $event">
