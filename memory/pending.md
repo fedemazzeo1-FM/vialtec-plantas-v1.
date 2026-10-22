@@ -2,6 +2,37 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶ 2026-10-22 — trabajo autónomo (sin push, sin deploy, sin tocar la base)
+
+Carpetas movidas a `Desktop/Vialtec Sistemas/VTlink/`. En el repo no había
+rutas absolutas a la ubicación vieja; git, `npm run dev` y `npm run build`
+andan desde la nueva. Fuera del repo quedaron referencias viejas (ver
+informe de la sesión): `~/.claude/settings.json` (repo de confianza de
+flota) y la memoria automática de Claude de plantas, que vive en la carpeta
+de proyecto de la ruta vieja.
+
+Commits locales (no pusheados, no deployados):
+- `68d99a9` refactor: `ModalDespachoAsfalto.vue`/`ModalDespachoMixer.vue` y
+  `usePermisosPedido.js` compartidos (Pedidos sin cambios de comportamiento).
+- `f166cda` Plan semanal: "Despachar" en confirmados (escritorio y mobile),
+  mismos roles, modales, composables y RPC que Pedidos. Lógica de la vista
+  en `src/modules/plan-semanal/composables/usePlanSemanal.js`. Sin cambios
+  en la base (las RPC ya validan rol/estado y auditan).
+- `7f08ea4` Comparativo del mes en mobile (Pedidos), solo admin/gerencia
+  (`ComparativoMesMobile.vue` + `useComparativoMesMobile.js`, reusa
+  `useComparativoMes`).
+
+Probado con un banco de pruebas local que reemplaza el cliente de Supabase
+por uno simulado (sin red): por rol con la matriz sembrada (migraciones 26 y
+30), validaciones del modal, RPC que se mandarían. NO probado con sesión
+real ni contra la base. Falta: OK de Federico → push → `npx vercel --prod` →
+mirar en producción con un admin/plantista (despachar uno real desde el
+calendario) y con gerencia en el celular. Ojo: con la matriz sembrada,
+plantista_hormigon no tiene `plan_semanal:ver` (no ve el calendario; verificar
+la matriz real en Administración → Roles si se quiere que despache desde ahí).
+El "Confirmar" de la grilla de escritorio sigue sin gatear por rol (como
+antes; el servidor rechaza igual).
+
 ### ▶▶ EN CURSO (2026-10-20 tarde)
 
 **Migración 66 — recálculo del acumulado guardado: APLICADA 2026-10-20 ~17:00
