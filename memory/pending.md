@@ -30,8 +30,33 @@ mirar en producción con un admin/plantista (despachar uno real desde el
 calendario) y con gerencia en el celular. Ojo: con la matriz sembrada,
 plantista_hormigon no tiene `plan_semanal:ver` (no ve el calendario; verificar
 la matriz real en Administración → Roles si se quiere que despache desde ahí).
-El "Confirmar" de la grilla de escritorio sigue sin gatear por rol (como
-antes; el servidor rechaza igual).
+El "Confirmar" de la grilla de escritorio ahora también se gatea con
+`usePermisosPedido` (pedido de Federico, mismo día).
+
+**Push:** Federico dio el OK el 22/10 pero el clasificador de permisos lo
+bloqueó otra vez desde la sesión: lo corre él (`git push origin main`). El
+deploy lo hace con Federico presente, para probar enseguida un despacho real.
+
+**Pesaje cerrado con nombre (22/10):** la tarjeta de Pedidos mostraba el
+email guardado en `pesaje_cerrado_por`. Frontend (sin base, commiteado):
+`usePedidos` lo traduce con `fetchNombresPorEmail` (directorio de flota);
+cae al email si no lo encuentra. balanza@ (Diego Sanchez) no está en flota,
+así que sigue saliendo como email hasta aplicar la **migración 68**
+(`supabase/migrations/68_nombre_usuario_en_plantas.sql`, BORRADOR, sin
+dry-run): columna `nombre` en `plantas_usuarios_roles`, "Diego Sanchez" con
+auditoría, y `plantas_nombres_usuarios(text[])` (prefiere plantas, cae a
+flota; solo authenticated). Después de aplicarla, un cambio en
+`fetchNombresPorEmail` + `auth.store.js` (escrito al pie de la migración)
+alcanza a Pedidos, Báscula, Stock y Auditoría. Reversión:
+`supabase/scripts/revertir_migracion_68.sql`. Esto reemplaza el punto
+"Nombre Diego Sanchez — DECIDIDO (b), sin hacer" y el punto 4 de "Falta" del
+20/10.
+
+**Fuera del proyecto (22/10, pedido de Federico):** memoria automática de
+Claude copiada a `~/.claude/projects/-Users-federicomazzeo-Desktop-Vialtec-Sistemas-VTlink-vialtec-plantas-v2/memory/`
+(las 5 notas + MEMORY.md, idénticas); regla "Trusted repo" de
+`~/.claude/settings.json` con las 3 rutas de VTlink. La línea "Source
+control" de ese archivo sigue nombrando solo el repo de flota (no se tocó).
 
 ### ▶▶ EN CURSO (2026-10-20 tarde)
 
