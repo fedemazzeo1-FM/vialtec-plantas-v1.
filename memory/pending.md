@@ -20,6 +20,17 @@
   (si se quiere, otro cambio: `admin_upsert_usuario_rol` no lo recibe).
 - Antes, mismo día: deploy del Plan semanal/comparativo (`index-lyq9C4oi.js`).
 
+- **"Ya no aparece el aviso de pesaje cerrado" (23/10): no es un bug.** El
+  aviso solo se muestra con el pedido `confirmado` (regla de la migración 65,
+  `PedidoCard.vue`, commit `b8b278b`); los 11 pedidos cerrados por balanza@
+  (P-0263..P-0275) ya estaban `despachado` (Felix los finalizó el 22/10,
+  12:19–14:58 UTC, antes de los deploys). Verificado en producción con sesión
+  admin: listado completo, todas las llamadas 200 (incluida
+  `rpc/plantas_nombres_usuarios`), sin errores de consola. Falta ver "Diego
+  Sanchez" en el aviso con el próximo cierre de la balanza (antes de que se
+  despache). Propuesta en espera (Federico: "por ahora no"): mostrar
+  "Pesaje cerrado por …" también en pedidos despachados.
+
 ### ▶▶▶ Verificar después del despacho real de P-0271 (desde el calendario)
 
 P-0271 (`fb5e7282-c1e2-449b-9104-1226cd2b957a`): Moorlands Pilar, MEZCLA
