@@ -4,21 +4,48 @@
 
 ### ▶▶▶ 23/10 (con Federico presente) — estado
 
-- Push hecho por Federico (origin/main al día con los 10 commits).
-- **Dry-run 68 corrido contra producción: OK** (A–F; C OK para los 7 roles;
-  usuario de flota de prueba: alejandro.fernandez@ → Alejandro Fernandez; acl
-  `{postgres, authenticated, service_role}`). Verificado después: sin columna,
-  sin función, auditoría y secuencia sin cambios (686). **Falta el OK de
-  Federico para aplicar.**
-- **Deploy hecho** (`npx vercel --prod`), producción sirve `index-lyq9C4oi.js`
-  (= build local de `cb818d1`), `PlanSemanalView-C5IBWIMH.js` con "Despachar".
-- Prueba de despacho real: no hay pedido de prueba (único confirmado: P-0271,
-  real). Un despacho no se puede deshacer desde la app (`corregir_despacho`
-  exige cantidad > 0; no hay cancelar despachado) y descuenta stock, deja
-  cargas/auditoría y cuenta en Despachos/informe mensual. Recomendado: probar
-  con el despacho real de P-0271 cuando se tengan los remitos.
+- **Migración 68 APLICADA** (23/10, `apply_migration`, OK de Federico, después
+  del dry-run OK). Verificado sobre lo instalado: balanza@ = Diego Sanchez
+  (balancero, activo), 1 sola fila con nombre, auditoría EDITAR usuario_rol por
+  "sistema (SQL)" con el motivo; `plantas_nombres_usuarios` da lo mismo para
+  los 7 roles (balanza@ → Diego Sanchez, alejandro.fernandez@ → Alejandro
+  Fernandez, desconocido → sin fila); anon sin EXECUTE (rechazado al llamar),
+  authenticated con EXECUTE, SECURITY DEFINER.
+- **Frontend de la 68 en producción** (commit `c93b8db`, bundle
+  `index-QlFvBjlw.js`, `flota.service-7p8BxisS.js` llama a la RPC):
+  `fetchNombresPorEmail` por `plantas_nombres_usuarios` (Pedidos, Báscula,
+  Stock, Auditoría) y `auth.store.js` prefiere el nombre de plantas. Falta
+  mirarlo logueado (tarjeta "🔒 Pesaje cerrado", Báscula, Auditoría). La
+  pantalla Administración → Usuarios todavía no muestra ni edita `nombre`
+  (si se quiere, otro cambio: `admin_upsert_usuario_rol` no lo recibe).
+- Antes, mismo día: deploy del Plan semanal/comparativo (`index-lyq9C4oi.js`).
 
-### ▶▶▶ PRÓXIMA SESIÓN (23/10 a la mañana, con Federico presente)
+### ▶▶▶ Verificar después del despacho real de P-0271 (desde el calendario)
+
+P-0271 (`fb5e7282-c1e2-449b-9104-1226cd2b957a`): Moorlands Pilar, MEZCLA
+CEMENTO 80/20 (por tn: 800 kg CEMENTO + 200 kg ARENA), 18 tn solicitadas,
+fecha 22/10, confirmado, 0 cargas. Foto tomada el 23/10 antes del despacho:
+CEMENTO 81.110 kg, ARENA 921.427 kg, último id de auditoría 687.
+
+1. **Pedido:** estado `despachado`, `cantidad_despachada` = suma de las cargas
+   (tn), una fila en `plantas_cargas_hormigon` por carga con su N° de remito.
+   Si se dividió: residual `confirmado` por el saldo, en la fecha elegida, con
+   la observación "…al dividir el despacho del pedido del 22/10/2026…".
+2. **Stock:** movimientos `egreso_despacho` ligados a P-0271: CEMENTO −800 kg
+   y ARENA −200 kg por tn despachada (18 tn → −14.400 y −3.600). Comparar los
+   movimientos del pedido, no el saldo total (puede haber otros movimientos en
+   el medio). Ver que no haya recorte por piso en 0 (nota en observaciones).
+3. **Auditoría** (filas con id > 687): una CREAR `carga_hormigon` por carga,
+   una CAMBIAR_ESTADO `despacho` de P-0271, y CREAR `pedido` si hubo residual;
+   usuario = quien despachó (no "sistema"). En `/auditoria`, la frase legible.
+4. **Pantallas e informes:** Plan semanal (22/10 con P-0271 despachado y el
+   tilde del día si todo quedó despachado); Pedidos; Despachos (fila de P-0271
+   con pedido/real/diferencia, Resumen por obra de octubre en Moorlands, KPI
+   de mezcla cemento del mes); Home y comparativo del mes (mezcla cemento de
+   octubre sube); informe mensual de octubre (Excel): hoja de Moorlands y
+   "Consumo de insumos" con CEMENTO/ARENA de este pedido.
+
+### (hecho el 23/10, ver arriba) plan de la sesión del 23/10
 
 0. **Antes que nada: `git push origin main`** si todavía no se hizo (10
    commits locales al cierre del 22/10). Desde la sesión lo bloqueó el
