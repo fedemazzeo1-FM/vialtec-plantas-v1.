@@ -20,7 +20,7 @@ import {
   fetchHistorialPedido,
   obtenerRangoSemana,
 } from '@/modules/pedidos/services/pedidos.service'
-import { fetchObras, fetchTelefonoPorNombre } from '@/services/flota.service'
+import { fetchObras, fetchNombresPorEmail, fetchTelefonoPorNombre } from '@/services/flota.service'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 import { patentesService, choferesService, clientesService } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
@@ -141,6 +141,9 @@ export function usePedidos() {
   // -------------------------------------------------------------------------
 
   const pedidos = ref([])
+  // Nombre para mostrar de quien cerró el pesaje (la base guarda el email,
+  // migración 65). Lo que no se encuentra se sigue mostrando como email.
+  const nombresUsuarios = ref({})
   const cargando = ref(false)
   const filtros = reactive({ estado: '', obraId: '', desde: '', hasta: '', incluirArchivados: false, numero: '' })
 
@@ -280,6 +283,22 @@ export function usePedidos() {
       cargando.value = false
     }
     cargarResumenPeriodo()
+    cargarNombresUsuarios()
+  }
+
+  // Best-effort, igual que el nombre del usuario logueado en auth.store.js:
+  // si falla, la tarjeta muestra el email, no se tapa el listado con un error.
+  // Hoy resuelve contra el directorio de flota; balanza@ (Diego Sanchez) no
+  // está ahí y sigue saliendo como email hasta que se aplique la migración 68
+  // (nombre del lado de plantas, BORRADOR — ver memory/pending.md).
+  async function cargarNombresUsuarios() {
+    const emails = pedidos.value.map((p) => p.pesaje_cerrado_por).filter(Boolean)
+    if (!emails.length) return
+    try {
+      nombresUsuarios.value = await fetchNombresPorEmail(emails)
+    } catch {
+      nombresUsuarios.value = {}
+    }
   }
 
   function aplicarFiltros() {
@@ -631,6 +650,7 @@ export function usePedidos() {
   }
 
   return {
+    nombresUsuarios,
     error,
     obras,
     formulas,

@@ -48,6 +48,7 @@ const { puedeConfirmar, puedeDespacharAsfalto, puedeDespacharHormigon, puedeGest
 
 const {
   error,
+  nombresUsuarios,
   obras,
   formulas,
   patentes,
@@ -417,6 +418,7 @@ iniciar()
               :puede-gestionar-global="puedeGestionarPedidosGlobal"
               :usuario-actual="auth.user?.email"
               :puede-reabrir-pesaje="puedeGestionarPedidosGlobal"
+              :nombre-cerrado-por="nombresUsuarios[pedido.pesaje_cerrado_por]"
               @confirmar="confirmar"
               @despachar="despacho.abrir"
               @registrar-carga="cargaHormigon.abrir"

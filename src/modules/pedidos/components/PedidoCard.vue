@@ -56,6 +56,9 @@ const props = defineProps({
   // Reabrir el pesaje cerrado desde Báscula (migración 65): admin/plantista,
   // mismo criterio que reabrir_pesaje_pedido() en el servidor.
   puedeReabrirPesaje: { type: Boolean, default: false },
+  // Nombre de quien cerró el pesaje, resuelto en usePedidos.js (si no se
+  // encontró, se muestra el email guardado).
+  nombreCerradoPor: { type: String, default: null },
 })
 
 // Pesaje cerrado en Báscula ("¿Se terminó el pedido? Sí", migración 65):
@@ -170,7 +173,7 @@ function formatearFechaHoraCreacion(iso) {
         Ver historial
       </button>
       <span v-if="pesajeCerrado" class="font-semibold text-text-mid">
-        🔒 Pesaje cerrado {{ formatearFechaHoraCreacion(pedido.pesaje_cerrado_en) }} ({{ pedido.pesaje_cerrado_por }})
+        🔒 Pesaje cerrado {{ formatearFechaHoraCreacion(pedido.pesaje_cerrado_en) }} ({{ nombreCerradoPor || pedido.pesaje_cerrado_por }})
       </span>
 
       <!-- Resto de acciones: botones sueltos en Desktop (2026-09-04, réplica
