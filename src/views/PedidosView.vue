@@ -24,6 +24,7 @@ import PedidoCard from '@/modules/pedidos/components/PedidoCard.vue'
 import ModalDespachoAsfalto from '@/modules/pedidos/components/ModalDespachoAsfalto.vue'
 import ModalDespachoMixer from '@/modules/pedidos/components/ModalDespachoMixer.vue'
 import ResumenAnualMobile from '@/modules/dashboard/components/ResumenAnualMobile.vue'
+import ComparativoMesMobile from '@/modules/dashboard/components/ComparativoMesMobile.vue'
 import { ESTADOS, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useAuthStore } from '@/stores/auth.store'
@@ -203,6 +204,9 @@ iniciar()
     <!-- Acumulado del año: solo mobile, solo admin/gerencia (2026-10-02) —
          en mobile no hay Home y estos roles aterrizan acá. -->
     <ResumenAnualMobile />
+    <!-- Comparativo del mes (2026-10-22): la misma tarjeta de Home, mismos
+         roles y mismo criterio que el acumulado de arriba. -->
+    <ComparativoMesMobile />
 
     <VSection title="Pedidos">
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">

@@ -15,7 +15,8 @@ import {
   fetchProduccionAnualHormigon,
 } from '@/modules/dashboard/services/dashboard.service'
 
-const ROLES_CON_RESUMEN = ['admin', 'gerencia']
+// También la usa el comparativo del mes mobile (useComparativoMesMobile.js).
+export const ROLES_CON_RESUMEN = ['admin', 'gerencia']
 
 export function useResumenAnualMobile() {
   const auth = useAuthStore()
