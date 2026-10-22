@@ -20,9 +20,9 @@ import { formatearCantidad, formatearCantidadHasta } from '@/services/formato-nu
 const { esMobile } = useBreakpoint()
 
 // Mismos permisos de UI que Pedidos (usePermisosPedido.js): evita mostrar
-// un botón que la RPC del servidor va a rechazar igual. "Confirmar" de la
-// grilla de Desktop sigue sin gatear por rol, como siempre (no se cambió
-// comportamiento existente ahí); "Despachar" sí, en las dos versiones.
+// un botón que la RPC del servidor va a rechazar igual. "Confirmar" y
+// "Despachar" se gatean igual en la grilla de Desktop y en la franja mobile
+// (2026-10-22: antes "Confirmar" de Desktop se mostraba a todos los roles).
 const { puedeConfirmar, puedeDespachar } = usePermisosPedido()
 
 const {
@@ -258,7 +258,7 @@ cargarSemana()
                 </p>
                 <div class="mt-1.5 flex flex-wrap items-center justify-between gap-1">
                   <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>
-                  <VButton v-if="p.estado === 'solicitado'" variant="ghost" size="sm" @click="confirmar(p)">
+                  <VButton v-if="p.estado === 'solicitado' && puedeConfirmar" variant="ghost" size="sm" @click="confirmar(p)">
                     Confirmar
                   </VButton>
                   <VButton v-else-if="puedeDespachar(p)" variant="success" size="sm" @click="abrirDespacho(p)">
