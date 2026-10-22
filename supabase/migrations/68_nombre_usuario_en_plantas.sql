@@ -1,8 +1,8 @@
 -- ============================================================================
 -- Migración 68 — nombre para mostrar del lado de plantas
--- ESTADO: BORRADOR, NO APLICADA. No tiene dry-run todavía (la sesión del
--- 2026-10-22 no podía tocar la base). Orden: dry-run → OK de Federico →
--- aplicar → frontend (ver al final) → build → deploy.
+-- ESTADO: APLICADA en producción el 2026-10-23 con OK de Federico, después
+-- del dry-run OK (supabase/scripts/dry_run_migracion_68.sql). Frontend del pie
+-- aplicado el mismo día.
 -- (La 67 queda reservada para Simulador → auditoría, ver memory/pending.md.)
 -- ============================================================================
 --

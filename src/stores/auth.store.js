@@ -136,7 +136,7 @@ export const useAuthStore = defineStore('auth', {
       const [{ data: rolRow, error: errorRol }, { data: perfilFlota }] = await Promise.all([
         supabase
           .from('plantas_usuarios_roles')
-          .select('rol, ver_todas_obras, ver_ventas, obra_ids, activo')
+          .select('rol, nombre, ver_todas_obras, ver_ventas, obra_ids, activo')
           .eq('email', email)
           .maybeSingle(),
         supabase.from('flota_usuarios_email').select('nombre').eq('email', email).maybeSingle(),
@@ -180,7 +180,9 @@ export const useAuthStore = defineStore('auth', {
       // Nombre para mostrar — best-effort (ya resuelto en paralelo arriba),
       // no bloquea el login si falla (memory/architecture.md: solo lectura
       // sobre flota_*).
-      this.nombre = perfilFlota?.nombre ?? email
+      // El nombre cargado en plantas (migración 68) tiene prioridad sobre el
+      // de flota.
+      this.nombre = rolRow.nombre ?? perfilFlota?.nombre ?? email
     },
 
     async login(email, password) {

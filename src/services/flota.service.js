@@ -55,7 +55,7 @@ export async function fetchTodasLasObrasConResumen() {
 }
 
 /**
- * Mapa email -> nombre para mostrar, contra flota_usuarios_email (mismo
+ * Mapa email -> nombre para mostrar (plantas, si no flota_usuarios_email; mismo
  * patrón que ya usa auth.store.js para el usuario logueado). Usado por
  * stock.service.js para resolver el "Responsable" del historial de
  * movimientos (plantas_stock_movimientos.responsable_email, migración 15) —
@@ -69,9 +69,15 @@ export async function fetchNombresPorEmail(emails) {
   const unicos = [...new Set(emails.filter(Boolean))]
   if (!unicos.length) return {}
 
-  const { data, error } = await supabase.from('flota_usuarios_email').select('email, nombre').in('email', unicos)
+  // Migración 68 (2026-10-23): plantas_nombres_usuarios prefiere el nombre
+  // cargado en plantas (plantas_usuarios_roles.nombre, ej. "Diego Sanchez"
+  // para balanza@, que no está en el directorio de flota) y cae al de
+  // flota_usuarios_email. Devuelve los emails en minúscula: el mapa se arma
+  // con las claves tal como llegaron, para que los llamadores no cambien.
+  const { data, error } = await supabase.rpc('plantas_nombres_usuarios', { p_emails: unicos })
   if (error) throw error
-  return Object.fromEntries((data ?? []).map((u) => [u.email, u.nombre]))
+  const porEmail = Object.fromEntries((data ?? []).map((u) => [u.email, u.nombre]))
+  return Object.fromEntries(unicos.filter((e) => porEmail[e.toLowerCase()]).map((e) => [e, porEmail[e.toLowerCase()]]))
 }
 
 /**

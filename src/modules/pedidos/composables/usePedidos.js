@@ -288,9 +288,8 @@ export function usePedidos() {
 
   // Best-effort, igual que el nombre del usuario logueado en auth.store.js:
   // si falla, la tarjeta muestra el email, no se tapa el listado con un error.
-  // Hoy resuelve contra el directorio de flota; balanza@ (Diego Sanchez) no
-  // está ahí y sigue saliendo como email hasta que se aplique la migración 68
-  // (nombre del lado de plantas, BORRADOR — ver memory/pending.md).
+  // Desde la migración 68 resuelve primero el nombre cargado en plantas
+  // (balanza@ → Diego Sanchez) y después el del directorio de flota.
   async function cargarNombresUsuarios() {
     const emails = pedidos.value.map((p) => p.pesaje_cerrado_por).filter(Boolean)
     if (!emails.length) return
