@@ -2,6 +2,22 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 23/10 (con Federico presente) — estado
+
+- Push hecho por Federico (origin/main al día con los 10 commits).
+- **Dry-run 68 corrido contra producción: OK** (A–F; C OK para los 7 roles;
+  usuario de flota de prueba: alejandro.fernandez@ → Alejandro Fernandez; acl
+  `{postgres, authenticated, service_role}`). Verificado después: sin columna,
+  sin función, auditoría y secuencia sin cambios (686). **Falta el OK de
+  Federico para aplicar.**
+- **Deploy hecho** (`npx vercel --prod`), producción sirve `index-lyq9C4oi.js`
+  (= build local de `cb818d1`), `PlanSemanalView-C5IBWIMH.js` con "Despachar".
+- Prueba de despacho real: no hay pedido de prueba (único confirmado: P-0271,
+  real). Un despacho no se puede deshacer desde la app (`corregir_despacho`
+  exige cantidad > 0; no hay cancelar despachado) y descuenta stock, deja
+  cargas/auditoría y cuenta en Despachos/informe mensual. Recomendado: probar
+  con el despacho real de P-0271 cuando se tengan los remitos.
+
 ### ▶▶▶ PRÓXIMA SESIÓN (23/10 a la mañana, con Federico presente)
 
 0. **Antes que nada: `git push origin main`** si todavía no se hizo (10
