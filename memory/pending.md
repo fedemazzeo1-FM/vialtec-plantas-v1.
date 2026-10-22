@@ -2,6 +2,35 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ PRÓXIMA SESIÓN (23/10 a la mañana, con Federico presente)
+
+0. **Antes que nada: `git push origin main`** si todavía no se hizo (10
+   commits locales al cierre del 22/10). Desde la sesión lo bloqueó el
+   clasificador otra vez, aun con la línea "Source control" de
+   `~/.claude/settings.json` ya actualizada con los 3 repos (puede que tome
+   efecto recién en una sesión nueva). Si vuelve a bloquearse, lo corre
+   Federico.
+1. **Deploy + prueba de despacho real desde el calendario.** `npm run build`
+   → `npx vercel --prod` → verificar el bundle servido → con Federico logueado
+   (admin/plantista): Plan semanal → un pedido confirmado real → "↑ Despachar"
+   → cargas → confirmar. Verificar: pedido despachado, residual si se dividió,
+   fila de auditoría del despacho, movimiento de stock. Mirar también: el
+   "Confirmar" de escritorio oculto para gerencia/supervisor, el comparativo
+   del mes en el celular de un admin o gerencia, y el nombre en "🔒 Pesaje
+   cerrado" (balanza@ sigue saliendo como email hasta el paso 2).
+2. **Migración 68: ensayo y aplicación** (propuesta aprobada por Federico el
+   22/10). Correr juntos `supabase/scripts/dry_run_migracion_68.sql` en el SQL
+   Editor (pbcopy + abrir el editor, paso a paso). Resultado esperado:
+   `ERROR: DRYRUN 68 OK — A … || B … || C <rol> OK … || D … || E … || F …`
+   (prueba por rol: balanza@ → Diego Sanchez, un usuario de flota → su
+   nombre, email desconocido → sin fila, anon sin EXECUTE; y la vuelta atrás).
+   No se pudo correr ni verificar la sintaxis antes (no había base ni
+   Postgres local): si falla por sintaxis, corregir y regenerar. Con el OK:
+   aplicar `68_nombre_usuario_en_plantas.sql` → chequeos del pie de la
+   migración → cambio de frontend del pie (`fetchNombresPorEmail` por RPC +
+   `auth.store.js`) → build → deploy. El mensaje de error de Báscula con
+   pedido cerrado queda como está (decisión de Federico, 22/10).
+
 ### ▶▶ 2026-10-22 — trabajo autónomo (sin push, sin deploy, sin tocar la base)
 
 Carpetas movidas a `Desktop/Vialtec Sistemas/VTlink/`. En el repo no había
@@ -37,7 +66,7 @@ El "Confirmar" de la grilla de escritorio ahora también se gatea con
 bloqueó otra vez desde la sesión: lo corre él (`git push origin main`). El
 deploy lo hace con Federico presente, para probar enseguida un despacho real.
 
-**Pesaje cerrado con nombre (22/10):** la tarjeta de Pedidos mostraba el
+**Pesaje cerrado con nombre (22/10, propuesta de la 68 aprobada; dry-run listo, sin correr):** la tarjeta de Pedidos mostraba el
 email guardado en `pesaje_cerrado_por`. Frontend (sin base, commiteado):
 `usePedidos` lo traduce con `fetchNombresPorEmail` (directorio de flota);
 cae al email si no lo encuentra. balanza@ (Diego Sanchez) no está en flota,
