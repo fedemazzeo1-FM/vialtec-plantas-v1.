@@ -1,85 +1,57 @@
 <script setup>
-// Plan Semanal: matriz lunes-domingo de pedidos + KPIs de acumulado semanal en
-// dos métricas paralelas (asfalto en tn, hormigón en m³). Toda la persistencia
-// pasa por pedidos.service.js — este componente no llama a Supabase
-// directamente (memory/conventions.md).
+// Plan Semanal: matriz lunes-domingo de pedidos + KPIs de acumulado semanal
+// por tipo de producto. Template puro: la lógica vive en usePlanSemanal.js
+// (2026-10-22, extraída de esta vista al sumar "Despachar" desde el
+// calendario). Los modales de despacho son los mismos de Pedidos.
 
-import { computed, ref } from 'vue'
 import VCard from '@/components/shared/VCard.vue'
 import VKpiCard from '@/components/shared/VKpiCard.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
-import {
-  obtenerRangoSemana,
-  fetchPedidosSemana,
-  fetchTotalesSemana,
-  confirmarPedido,
-} from '@/modules/pedidos/services/pedidos.service'
-import { fetchObras } from '@/services/flota.service'
-import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
-import { hoyISO } from '@/services/fecha'
-import {
-  etiquetasTotales,
-  sumarEnTotal,
-  tiposConTotalVisible,
-  totalesVacios,
-  unidadLabelTipoProducto,
-} from '@/config/tipos-producto'
+import ModalDespachoAsfalto from '@/modules/pedidos/components/ModalDespachoAsfalto.vue'
+import ModalDespachoMixer from '@/modules/pedidos/components/ModalDespachoMixer.vue'
+import { usePlanSemanal } from '@/modules/plan-semanal/composables/usePlanSemanal'
+import { usePermisosPedido } from '@/modules/pedidos/composables/usePermisosPedido'
+import { tiposConTotalVisible, unidadLabelTipoProducto } from '@/config/tipos-producto'
 import { useBreakpoint } from '@/composables/useBreakpoint'
-import { useAuthStore } from '@/stores/auth.store'
 import { formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
 
 const { esMobile } = useBreakpoint()
-const auth = useAuthStore()
 
-// Mismo criterio de permiso que PedidosView.vue (auth.store.js): evita
-// mostrar un botón "Confirmar" que la RPC del servidor va a rechazar igual.
-// La franja diaria de mobile (más abajo) es la única que usa esto — la
-// grilla de Desktop ya lo tenía sin gatear por rol desde siempre, no se
-// tocó para no cambiar comportamiento existente ahí.
-const puedeConfirmar = computed(() => auth.tienePermiso('pedidos', 'aprobar'))
+// Mismos permisos de UI que Pedidos (usePermisosPedido.js): evita mostrar
+// un botón que la RPC del servidor va a rechazar igual. "Confirmar" de la
+// grilla de Desktop sigue sin gatear por rol, como siempre (no se cambió
+// comportamiento existente ahí); "Despachar" sí, en las dos versiones.
+const { puedeConfirmar, puedeDespachar } = usePermisosPedido()
 
-const NOMBRES_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+const {
+  totales,
+  patentes,
+  cargando,
+  error,
+  formulasPorId,
+  nombreDestinoPedido,
+  nombreDestinoTotal,
+  diasSemana,
+  rangoLabel,
+  diaSeleccionadoIso,
+  diaSeleccionado,
+  cargarSemana,
+  semanaAnterior,
+  semanaSiguiente,
+  irAHoySemana,
+  confirmar,
+  despacho,
+  cargaHormigon,
+  abrirDespacho,
+} = usePlanSemanal()
+
 const VARIANTE_ESTADO = {
   solicitado: 'default',
   confirmado: 'info',
   despachado: 'success',
   cancelado: 'danger',
-}
-
-const fechaRef = ref(new Date())
-const pedidos = ref([])
-const totales = ref({ rango: null, porObra: [], total: totalesVacios() })
-const obras = ref([])
-const formulas = ref([])
-const cargando = ref(false)
-const error = ref(null)
-
-const obrasPorId = computed(() => Object.fromEntries(obras.value.map((o) => [o.id, o])))
-const formulasPorId = computed(() => Object.fromEntries(formulas.value.map((f) => [f.id, f])))
-
-// Formato de mejora visual (2026-09-01, pedido de Federico: "dejalo bien
-// profesional"): cada día ahora trae número de fecha + nombre de mes
-// separados (para el header de la columna) y un flag `esHoy` para resaltar
-// la columna del día actual, mismo criterio que un calendario semanal
-// estándar.
-// Nombre a mostrar por destino — venta externa vs. obra propia vs. dato
-// huérfano (fix 2026-09-03, bug real reportado por Federico: "Obra #null").
-// La vista asumía que TODO pedido tiene obra_id, pero una venta externa
-// (tipo_pedido='venta') nunca la tiene por diseño — mismo criterio que
-// `destinoDe()` ya usa PedidosView/DespachosView, replicado acá (no existía
-// un helper compartido para esto, son 3 formas ligeramente distintas de
-// nombrar según qué objeto trae cada vista — no vale la pena forzar un solo
-// helper transversal por 3 líneas de lógica).
-function nombreDestinoPedido(p) {
-  if (p.tipo_pedido === 'venta') return p.cliente_externo || 'Venta externa'
-  if (p.obra_id) return obrasPorId.value[p.obra_id]?.nombre ?? `Obra #${p.obra_id}`
-  // obra_id null y NO es venta -> dato huérfano real de la migración del
-  // histórico legado (memory/pending.md, "Municipalidad Exaltación de la
-  // Cruz" sin equivalente en flota_obras) — fallback legible en vez de
-  // "Obra #null" literal, pero sigue señalando que falta resolverlo.
-  return 'Obra sin asignar'
 }
 
 /** Los pedidos no tienen hora de entrega propia (solo `fecha_programada`,
@@ -88,123 +60,6 @@ function nombreDestinoPedido(p) {
 function formatearHoraCreacion(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-}
-
-function nombreDestinoTotal(t) {
-  if (t.obraId) return obrasPorId.value[t.obraId]?.nombre ?? `Obra #${t.obraId}`
-  return t.clienteExterno || 'Obra sin asignar'
-}
-
-const diasSemana = computed(() => {
-  const { lunes } = obtenerRangoSemana(fechaRef.value)
-  const hoy = hoyISO()
-  return Array.from({ length: 7 }, (_, i) => {
-    const fecha = new Date(lunes)
-    fecha.setDate(lunes.getDate() + i)
-    const iso = fecha.toISOString().slice(0, 10)
-    const pedidosDia = pedidos.value.filter((p) => p.fecha_programada === iso)
-
-    // Tilde + cantidades cuando el día cerró 100% despachado (2026-09-03,
-    // réplica del legado pedida por Federico: "como tiene el sistema
-    // viejo, abajo de la fecha"). Los totales del día usan cantidad_despachada
-    // (cantidadReal) — mismo criterio de "fuente de verdad" que el resto de
-    // la app (memory/business-rules.md), no cantidad_solicitada.
-    const todosDespachados = pedidosDia.length > 0 && pedidosDia.every((p) => p.estado === 'despachado')
-    // Un total por tipo de producto (config/tipos-producto.js), solo los
-    // que tienen algo.
-    const totalesDia = totalesVacios()
-    for (const p of pedidosDia) {
-      if (p.estado === 'despachado') sumarEnTotal(totalesDia, p.tipo, p.cantidad_despachada)
-    }
-    const totalesDiaLabels = etiquetasTotales(totalesDia, { soloConValor: true })
-
-    return {
-      etiqueta: NOMBRES_DIA[i],
-      etiquetaCorta: NOMBRES_DIA[i].slice(0, 3),
-      numeroDia: fecha.getDate(),
-      mesLabel: fecha.toLocaleDateString('es-AR', { month: 'short' }).replace('.', ''),
-      iso,
-      esHoy: iso === hoy,
-      esFinDeSemana: i >= 5,
-      pedidos: pedidosDia,
-      todosDespachados,
-      totalesDiaLabels,
-    }
-  })
-})
-
-const rangoLabel = computed(() =>
-  diasSemana.value.length ? `${diasSemana.value[0].iso} — ${diasSemana.value[6].iso}` : ''
-)
-
-// Franja diaria mobile (rediseño Mobile-First 2026-09-22, reemplaza la
-// grilla apilada de 7 días que tenía mobile antes): día seleccionado en la
-// franja horizontal de arriba, cuyo detalle se despliega abajo. Se
-// recalcula cada vez que cambia la semana cargada — no tiene sentido
-// arrastrar el ISO de la semana anterior a la nueva.
-const diaSeleccionadoIso = ref(null)
-
-const diaSeleccionado = computed(
-  () => diasSemana.value.find((d) => d.iso === diaSeleccionadoIso.value) ?? diasSemana.value[0] ?? null
-)
-
-function seleccionarDiaPorDefecto() {
-  const hoy = hoyISO()
-  diaSeleccionadoIso.value = diasSemana.value.some((d) => d.iso === hoy) ? hoy : diasSemana.value[0]?.iso ?? null
-}
-
-async function cargarSemana() {
-  cargando.value = true
-  error.value = null
-  try {
-    const [listaPedidos, totalesSemana, listaObras, listaFormulas] = await Promise.all([
-      fetchPedidosSemana(fechaRef.value),
-      fetchTotalesSemana(fechaRef.value),
-      fetchObras(),
-      fetchFormulas({ soloActivas: true }),
-    ])
-    pedidos.value = listaPedidos
-    totales.value = totalesSemana
-    obras.value = listaObras
-    formulas.value = listaFormulas
-    seleccionarDiaPorDefecto()
-  } catch (e) {
-    error.value = e.message
-  } finally {
-    cargando.value = false
-  }
-}
-
-function semanaAnterior() {
-  const f = new Date(fechaRef.value)
-  f.setDate(f.getDate() - 7)
-  fechaRef.value = f
-  cargarSemana()
-}
-
-function semanaSiguiente() {
-  const f = new Date(fechaRef.value)
-  f.setDate(f.getDate() + 7)
-  fechaRef.value = f
-  cargarSemana()
-}
-
-/** "Hoy" (rediseño Mobile-First 2026-09-22, pedido explícito de Federico:
- * volver rápido al día actual desde la franja) — salta directo a la semana
- * en curso, sea cual sea la que esté cargada, y selecciona el día de hoy. */
-function irAHoySemana() {
-  fechaRef.value = new Date()
-  cargarSemana()
-}
-
-async function confirmar(pedido) {
-  error.value = null
-  try {
-    await confirmarPedido(pedido.id)
-    await cargarSemana()
-  } catch (e) {
-    error.value = e.message
-  }
 }
 
 cargarSemana()
@@ -338,6 +193,9 @@ cargarSemana()
             <div v-if="p.estado === 'solicitado' && puedeConfirmar" class="mt-2 flex justify-end">
               <VButton size="sm" @click="confirmar(p)">Confirmar</VButton>
             </div>
+            <div v-else-if="puedeDespachar(p)" class="mt-2 flex justify-end">
+              <VButton variant="success" size="sm" @click="abrirDespacho(p)">↑ Despachar</VButton>
+            </div>
           </div>
         </div>
       </template>
@@ -398,10 +256,13 @@ cargarSemana()
                   {{ formulasPorId[p.formula_id]?.nombre ?? '—' }} ·
                   {{ formatearCantidadHasta(p.cantidad_solicitada) }} {{ unidadLabelTipoProducto(p.tipo) }}
                 </p>
-                <div class="mt-1.5 flex items-center justify-between gap-1">
+                <div class="mt-1.5 flex flex-wrap items-center justify-between gap-1">
                   <VBadge :variant="VARIANTE_ESTADO[p.estado]">{{ p.estado }}</VBadge>
                   <VButton v-if="p.estado === 'solicitado'" variant="ghost" size="sm" @click="confirmar(p)">
                     Confirmar
+                  </VButton>
+                  <VButton v-else-if="puedeDespachar(p)" variant="success" size="sm" @click="abrirDespacho(p)">
+                    ↑ Despachar
                   </VButton>
                 </div>
               </div>
@@ -410,5 +271,9 @@ cargarSemana()
         </div>
       </div>
     </VSection>
+
+    <!-- Despacho: los mismos modales y el mismo circuito que Pedidos -->
+    <ModalDespachoAsfalto :despacho="despacho" :destino="nombreDestinoPedido(despacho.pedido)" :patentes="patentes" />
+    <ModalDespachoMixer :despacho="cargaHormigon" :destino="nombreDestinoPedido(cargaHormigon.pedido)" :patentes="patentes" />
   </div>
 </template>
