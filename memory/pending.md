@@ -50,17 +50,32 @@ cargas cambiaron de fecha (0-3 días antes). Si Obras compara contra el Excel
 por fecha, remitos que había marcado como "nuevos" por fecha corrida pueden
 pasar a "repetidos". **Falta avisar a Obras** (Federico).
 
-**Sigue:**
-1. **Migración 73 + frontend** (aprobado 28/10): en el despacho de asfalto,
-   las cargas salen solas de los vales de balanza del pedido (N° de vale,
-   neto, patente; no editables). Aviso si el pesaje sigue abierto. "Carga sin
-   vale de balanza" con aviso y motivo obligatorio. La RPC toma el neto del
-   vale, rechaza vale anulado, de otro pedido o repetido, y audita la carga
-   sin vale. Escribir con dry-run, sin correr.
-2. Avisar a Obras (arriba).
-3. Que la app vuelva al login cuando se vence la sesión (escuchar
-   SIGNED_OUT / refresh fallido en `auth.store.js#escucharCambiosAuth`). Con
-   la 72, las lecturas sin sesión ahora dan 401.
+**▶ RETOMAR AQUÍ (cierre del 28/10, en este orden):**
+1. **Migración 73 con Federico: dry-run, aplicación y publicar las cargas
+   desde balanza.** Escrita, sin correr:
+   `supabase/migrations/73_cargas_asfalto_desde_balanza.sql` +
+   `scripts/dry_run_migracion_73.sql` (pegar los dos en la misma ejecución;
+   debe terminar con "DRYRUN 73 OK — A … G"). Reversión:
+   `scripts/revertir_migracion_73.sql`. Controla el md5 de producción de
+   `registrar_carga_asfalto` (6a1bcee8…).
+   - Base: la carga toma neto y patente del vale de balanza (ignora lo
+     tipeado); rechaza vale anulado, de otro pedido o repetido; un vale que
+     no está en balanza solo entra con motivo y queda auditado ("Carga sin
+     vale de balanza: …").
+   - Frontend (commiteado, sin publicar; probado en local abriendo el modal
+     de P-0303 sin guardar): `ModalDespachoAsfalto.vue` +
+     `useDespachoAsfalto.js` + `fetchValesAsfaltoDelPedido`. Cargas de
+     balanza no editables; aviso si el pesaje sigue abierto o si no hay
+     vales; "+ Carga sin vale de balanza" con motivo obligatorio. Es
+     compatible con la RPC actual (manda el neto), así que se puede publicar
+     antes o después de la 73, pero la protección real es la 73.
+   - Después: `npm run build` → `npx vercel --prod` (con OK) → verificar el
+     bundle servido.
+2. **Que la app vuelva al login cuando se vence la sesión** (escuchar
+   SIGNED_OUT / refresh fallido en `auth.store.js#escucharCambiosAuth` y
+   redirigir a /login). Con la 72 aplicada, las lecturas sin sesión dan 401.
+
+Además, pendiente de Federico: avisar a Obras (arriba).
 
 **Diagnósticos del 28/10:** lecturas anon del 26/10 19:54 = pantalla
 Auditoría con la sesión vencida (nada roto, login OK). P-0271 despachado el
