@@ -15,6 +15,7 @@ declare
   v_ok      text[] := '{}';
   v_n       int;
   v_txt     text;
+  v_fecha   date;
 begin
   -- A. Vista: tipos y unidades de la rama mixer
   select string_agg(material || '/' || unidad_volumen || ' ' || n, ', ' order by material) into v_txt
@@ -69,23 +70,25 @@ begin
   if v_conf.id is null then
     v_ok := v_ok || 'E sin pedido de mixer confirmado para probar (salteado)'::text;
   else
+    -- Igual que el modal: la fecha del pedido, o hoy si el pedido está programado para más adelante.
+    v_fecha := least(v_conf.fecha_programada, (now() at time zone 'America/Argentina/Buenos_Aires')::date);
     set local role authenticated;
-    v_carga := registrar_carga_hormigon(v_conf.id, 'DRYRUN-71', 1, null, null, now(), null, v_conf.fecha_programada);
+    v_carga := registrar_carga_hormigon(v_conf.id, 'DRYRUN-71', 1, null, null, now(), null, v_fecha);
     reset role;
-    if v_carga.fecha_despacho is distinct from v_conf.fecha_programada then
-      raise exception 'E: fecha_despacho % (se esperaba %)', v_carga.fecha_despacho, v_conf.fecha_programada;
+    if v_carga.fecha_despacho is distinct from v_fecha then
+      raise exception 'E: fecha_despacho % (se esperaba %)', v_carga.fecha_despacho, v_fecha;
     end if;
     if not exists (select 1 from plantas_v_despachos_camion
                     where numero_remito = 'DRYRUN-71'
-                      and (fecha at time zone 'America/Argentina/Buenos_Aires')::date = v_conf.fecha_programada
+                      and (fecha at time zone 'America/Argentina/Buenos_Aires')::date = v_fecha
                       and material = v_conf.tipo) then
       raise exception 'E: la vista no muestra la carga con su fecha de despacho';
     end if;
     if not exists (select 1 from plantas_auditoria where entidad = 'carga_hormigon' and entidad_ref = 'DRYRUN-71'
-                    and valores_despues ->> 'fecha_despacho' = v_conf.fecha_programada::text) then
+                    and valores_despues ->> 'fecha_despacho' = v_fecha::text) then
       raise exception 'E: la auditoría no guarda fecha_despacho';
     end if;
-    v_ok := v_ok || ('E carga en ' || plantas_etiqueta_pedido(v_conf.numero) || ' con fecha ' || v_conf.fecha_programada || ' → vista y auditoría OK')::text;
+    v_ok := v_ok || ('E carga en ' || plantas_etiqueta_pedido(v_conf.numero) || ' con fecha ' || v_fecha || ' → vista y auditoría OK')::text;
   end if;
 
   raise exception 'DRYRUN 71 OK — %', array_to_string(v_ok, ' || ');

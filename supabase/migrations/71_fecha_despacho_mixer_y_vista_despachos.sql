@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migración 71 — fecha de despacho de las cargas de mixer + vista que lee Obras
--- ESTADO: BORRADOR. Dry-run: supabase/scripts/dry_run_migracion_71.sql.
+-- ESTADO: APLICADA en producción el 2026-10-28 con OK de Federico (dry-run OK: supabase/scripts/dry_run_migracion_71.sql).
 -- Reversión: supabase/scripts/revertir_migracion_71.sql.
 -- Decisión de Federico (28/10/2026): opciones (a) y (b) juntas.
 -- ============================================================================
