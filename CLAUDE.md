@@ -24,6 +24,9 @@ que dispare deploy a producción). Ver detalle y protocolo en `memory/procedimie
 
 ## Sobre este proyecto
 
+El sistema integral de VialTec se llama **VT360** (plantas, flota y obras; carpeta
+`Desktop/Vialtec Sistemas/VT360/`).
+
 VialTec Plantas es el sistema de gestión de producción (asfalto y hormigón) de VialTec.
 Comparte el proyecto de Supabase con el sistema de flota (`ejitztewkpnmrckwmvny`):
 usa las tablas compartidas `flota_*` (obras, empresas, usuarios, roles) y agrega sus
