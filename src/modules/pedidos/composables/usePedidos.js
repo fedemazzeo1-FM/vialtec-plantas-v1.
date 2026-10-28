@@ -147,6 +147,40 @@ export function usePedidos() {
   const cargando = ref(false)
   const filtros = reactive({ estado: '', obraId: '', desde: '', hasta: '', incluirArchivados: false, numero: '' })
 
+  // Pendientes / Despachados (2026-10-28, pedido de Federico): los
+  // despachados salen de la pantalla principal a medida que se despachan
+  // (molestaban para ver lo pendiente) y se consultan en su propia pestaña,
+  // con los mismos filtros de semana/obra/fecha. "Pendientes" lista todos los
+  // demás estados (incluidos postergados y cancelados de la semana). La
+  // búsqueda por N° de pedido sigue buscando en todo, sin mirar la pestaña.
+  const listado = ref('pendientes')
+  const ESTADOS_DESPACHADOS = ['despachado']
+
+  function filtroEstadoDelListado() {
+    if (listado.value === 'despachados') return { estado: 'despachado' }
+    if (filtros.estado) return { estado: filtros.estado }
+    return { excluirEstados: ESTADOS_DESPACHADOS }
+  }
+
+  function cambiarListado(nuevo) {
+    if (listado.value === nuevo) return
+    listado.value = nuevo
+    // El filtro de estado solo aplica dentro de Pendientes.
+    if (nuevo === 'despachados' || ESTADOS_DESPACHADOS.includes(filtros.estado)) filtros.estado = ''
+    aplicarFiltros()
+  }
+
+  /** KPI de estado: despachado lleva a su pestaña; el resto filtra Pendientes (click de nuevo lo saca). */
+  function filtrarPorEstado(estado) {
+    if (ESTADOS_DESPACHADOS.includes(estado)) {
+      cambiarListado(listado.value === 'despachados' ? 'pendientes' : 'despachados')
+      return
+    }
+    listado.value = 'pendientes'
+    filtros.estado = filtros.estado === estado ? '' : estado
+    aplicarFiltros()
+  }
+
   // -------------------------------------------------------------------------
   // Vista por semana (2026-09-01, pedido de Federico): con 184 pedidos
   // históricos migrados, la lista sin acotar por fecha quedaba saturada.
@@ -270,7 +304,7 @@ export function usePedidos() {
         numero
           ? { numero, incluirArchivados: true }
           : {
-              estado: filtros.estado || undefined,
+              ...filtroEstadoDelListado(),
               obraId: filtros.obraId || undefined,
               desde: filtros.desde || undefined,
               hasta: filtros.hasta || undefined,
@@ -664,6 +698,9 @@ export function usePedidos() {
     pedidosPorTipo,
     cargando,
     filtros,
+    listado,
+    cambiarListado,
+    filtrarPorEstado,
     conteoEstados,
     totalesPeriodo,
     cargarPedidos,

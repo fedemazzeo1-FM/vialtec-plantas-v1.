@@ -55,6 +55,9 @@ const {
   clientes,
   cargando,
   filtros,
+  listado,
+  cambiarListado,
+  filtrarPorEstado,
   conteoEstados,
   totalesPeriodo,
   pedidosPorTipo,
@@ -124,15 +127,15 @@ function destinoDe(pedido) {
   return pedido.tipo_pedido === 'venta' ? pedido.cliente_externo : obras.value.find((o) => o.id === pedido.obra_id)?.nombre
 }
 
-/**
- * KPI de estado como filtro rápido (2026-09-02, roadmap Mobile/UX): click
- * en la card aplica ese estado al mismo filtro que ya existía en el
- * <select> de abajo; click de nuevo sobre la card activa lo saca (toggle).
- */
-function filtrarPorEstado(estado) {
-  filtros.estado = filtros.estado === estado ? '' : estado
-  aplicarFiltros()
-}
+// KPI de estado como filtro rápido (2026-09-02): filtrarPorEstado() vive en
+// usePedidos.js desde 2026-10-28 ("despachado" lleva a su pestaña).
+
+// Pestañas Pendientes / Despachados, con el conteo del período (KPIs).
+const ESTADOS_PENDIENTES = ESTADOS.filter((e) => e !== 'despachado')
+const pestanasListado = computed(() => [
+  { valor: 'pendientes', label: 'Pendientes', cantidad: ESTADOS_PENDIENTES.reduce((s, e) => s + (conteoEstados.value[e] ?? 0), 0) },
+  { valor: 'despachados', label: 'Despachados', cantidad: conteoEstados.value.despachado ?? 0 },
+])
 
 // Pill Todos/Hormigón/Asfalto — mobile únicamente (rediseño Mobile-First
 // 2026-09-22, pedido de Federico: "adaptalo al mobile" para el módulo
@@ -248,7 +251,7 @@ iniciar()
           type="button"
           class="rounded-xl border bg-white p-4 text-left shadow-sm transition-colors duration-150"
           :class="
-            filtros.estado === estado
+            (estado === 'despachado' ? listado === 'despachados' : filtros.estado === estado)
               ? 'border-vialtec ring-1 ring-vialtec'
               : 'border-border hover:border-vialtec/40'
           "
@@ -335,16 +338,17 @@ iniciar()
               @keyup.enter="aplicarFiltros"
             />
           </label>
-          <label class="text-sm text-text-mid">
+          <label v-if="listado === 'pendientes'" class="text-sm text-text-mid">
             Estado
             <select
               v-model="filtros.estado"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
             >
-              <option value="">Todos</option>
-              <option v-for="e in ESTADOS" :key="e" :value="e">{{ e }}</option>
+              <option value="">Todos los pendientes</option>
+              <option v-for="e in ESTADOS_PENDIENTES" :key="e" :value="e">{{ e }}</option>
             </select>
           </label>
+          <p v-else class="self-end text-xs text-text-soft">Pestaña Despachados: solo pedidos despachados.</p>
           <label class="text-sm text-text-mid">
             Obra
             <select
@@ -396,8 +400,25 @@ iniciar()
            central de MobileLayout.vue ya cubre "Nuevo pedido" desde
            cualquier pantalla, este botón duplicado le comía espacio a la
            lista. Sigue en Desktop, que no tiene FAB. -->
-      <div v-if="!esMobile" class="mb-3 flex justify-end">
-        <VButton size="md" @click="abrirNuevo">+ Nuevo pedido</VButton>
+      <div class="mb-3 flex items-center justify-between gap-3">
+        <!-- Pendientes / Despachados (2026-10-28): los despachados salen de la
+             lista principal y se consultan acá, con los mismos filtros. -->
+        <div class="flex gap-1.5" role="tablist">
+          <button
+            v-for="p in pestanasListado"
+            :key="p.valor"
+            type="button"
+            role="tab"
+            :aria-selected="listado === p.valor"
+            class="rounded-full border px-4 py-2 text-sm font-semibold"
+            :class="listado === p.valor ? 'border-vialtec bg-vialtec text-white' : 'border-border bg-white text-text-mid hover:border-vialtec/40'"
+            style="min-height: 44px"
+            @click="cambiarListado(p.valor)"
+          >
+            {{ p.label }} <span class="ml-1 opacity-80">{{ p.cantidad }}</span>
+          </button>
+        </div>
+        <VButton v-if="!esMobile" size="md" @click="abrirNuevo">+ Nuevo pedido</VButton>
       </div>
 
       <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>

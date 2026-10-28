@@ -72,6 +72,8 @@ function queryPedidos(filtros) {
 
   if (filtros.numero) query = query.eq('numero', filtros.numero)
   if (filtros.estado) query = query.eq('estado', filtros.estado)
+  // Listado "Pendientes" de Pedidos (2026-10-28): todo menos los estados indicados.
+  if (filtros.excluirEstados?.length) query = query.not('estado', 'in', `(${filtros.excluirEstados.join(',')})`)
   if (filtros.obraId) query = query.eq('obra_id', filtros.obraId)
   if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
   if (filtros.desde) query = query.gte('fecha_programada', filtros.desde)
