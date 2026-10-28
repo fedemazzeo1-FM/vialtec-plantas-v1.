@@ -26,6 +26,7 @@ import { patentesService, choferesService, clientesService } from '@/modules/mae
 import { useAuthStore } from '@/stores/auth.store'
 import { toastCrearPedido, toastConfirmarPedido, toastConfirmarHormigonOperador } from '@/modules/pedidos/whatsapp'
 import { parsearNumeroPedido } from '@/services/formato-numeros'
+import { ESTADOS_PENDIENTES, ESTADOS_HISTORIAL } from '@/modules/pedidos/estados'
 import {
   TIPOS_PRODUCTO_EN_ORDEN_DE_LISTADO,
   esCircuitoMixer,
@@ -147,36 +148,31 @@ export function usePedidos() {
   const cargando = ref(false)
   const filtros = reactive({ estado: '', obraId: '', desde: '', hasta: '', incluirArchivados: false, numero: '' })
 
-  // Pendientes / Despachados (2026-10-28, pedido de Federico): los
-  // despachados salen de la pantalla principal a medida que se despachan
-  // (molestaban para ver lo pendiente) y se consultan en su propia pestaña,
-  // con los mismos filtros de semana/obra/fecha. "Pendientes" lista todos los
-  // demás estados (incluidos postergados y cancelados de la semana). La
-  // búsqueda por N° de pedido sigue buscando en todo, sin mirar la pestaña.
+  // Pendientes / Historial (2026-10-28, pedido de Federico): la lista
+  // principal muestra solo lo pendiente (solicitado, confirmado, postergado);
+  // despachados y cancelados salen a medida que pasan a ese estado y se
+  // consultan en "Historial", con los mismos filtros de semana/obra/fecha y
+  // un filtro de estado propio. La búsqueda por N° de pedido sigue buscando
+  // en todo, sin mirar la pestaña.
   const listado = ref('pendientes')
-  const ESTADOS_DESPACHADOS = ['despachado']
+  const estadosDelListado = computed(() => (listado.value === 'historial' ? ESTADOS_HISTORIAL : ESTADOS_PENDIENTES))
 
   function filtroEstadoDelListado() {
-    if (listado.value === 'despachados') return { estado: 'despachado' }
-    if (filtros.estado) return { estado: filtros.estado }
-    return { excluirEstados: ESTADOS_DESPACHADOS }
+    if (filtros.estado && estadosDelListado.value.includes(filtros.estado)) return { estado: filtros.estado }
+    return { estados: estadosDelListado.value }
   }
 
   function cambiarListado(nuevo) {
     if (listado.value === nuevo) return
     listado.value = nuevo
-    // El filtro de estado solo aplica dentro de Pendientes.
-    if (nuevo === 'despachados' || ESTADOS_DESPACHADOS.includes(filtros.estado)) filtros.estado = ''
+    // Cada pestaña tiene sus propios estados: el filtro de la otra no aplica.
+    if (!estadosDelListado.value.includes(filtros.estado)) filtros.estado = ''
     aplicarFiltros()
   }
 
-  /** KPI de estado: despachado lleva a su pestaña; el resto filtra Pendientes (click de nuevo lo saca). */
+  /** KPI de estado: va a la pestaña de ese estado y lo filtra (click de nuevo lo saca). */
   function filtrarPorEstado(estado) {
-    if (ESTADOS_DESPACHADOS.includes(estado)) {
-      cambiarListado(listado.value === 'despachados' ? 'pendientes' : 'despachados')
-      return
-    }
-    listado.value = 'pendientes'
+    listado.value = ESTADOS_HISTORIAL.includes(estado) ? 'historial' : 'pendientes'
     filtros.estado = filtros.estado === estado ? '' : estado
     aplicarFiltros()
   }
@@ -699,6 +695,7 @@ export function usePedidos() {
     cargando,
     filtros,
     listado,
+    estadosDelListado,
     cambiarListado,
     filtrarPorEstado,
     conteoEstados,

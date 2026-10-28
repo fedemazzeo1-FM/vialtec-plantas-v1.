@@ -4,6 +4,11 @@
 
 export const ESTADOS = ['solicitado', 'confirmado', 'despachado', 'postergado', 'cancelado']
 
+// Pestañas de Pedidos (2026-10-28, pedido de Federico): la lista principal
+// muestra solo lo pendiente; despachados y cancelados van a "Historial".
+export const ESTADOS_PENDIENTES = ['solicitado', 'confirmado', 'postergado']
+export const ESTADOS_HISTORIAL = ['despachado', 'cancelado']
+
 export const VARIANTE_ESTADO = {
   solicitado: 'default',
   confirmado: 'info',

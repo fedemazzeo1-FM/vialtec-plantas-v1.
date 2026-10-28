@@ -25,7 +25,7 @@ import ModalDespachoAsfalto from '@/modules/pedidos/components/ModalDespachoAsfa
 import ModalDespachoMixer from '@/modules/pedidos/components/ModalDespachoMixer.vue'
 import ResumenAnualMobile from '@/modules/dashboard/components/ResumenAnualMobile.vue'
 import ComparativoMesMobile from '@/modules/dashboard/components/ComparativoMesMobile.vue'
-import { ESTADOS, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
+import { ESTADOS, ESTADOS_PENDIENTES, ESTADOS_HISTORIAL, VARIANTE_ESTADO, COLOR_KPI_ESTADO } from '@/modules/pedidos/estados'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useAuthStore } from '@/stores/auth.store'
 import { computed, ref, watch } from 'vue'
@@ -56,6 +56,7 @@ const {
   cargando,
   filtros,
   listado,
+  estadosDelListado,
   cambiarListado,
   filtrarPorEstado,
   conteoEstados,
@@ -128,13 +129,13 @@ function destinoDe(pedido) {
 }
 
 // KPI de estado como filtro rápido (2026-09-02): filtrarPorEstado() vive en
-// usePedidos.js desde 2026-10-28 ("despachado" lleva a su pestaña).
+// usePedidos.js desde 2026-10-28 (lleva a la pestaña de ese estado).
 
-// Pestañas Pendientes / Despachados, con el conteo del período (KPIs).
-const ESTADOS_PENDIENTES = ESTADOS.filter((e) => e !== 'despachado')
+// Pestañas Pendientes / Historial, con el conteo del período (KPIs).
+const sumarConteo = (estados) => estados.reduce((s, e) => s + (conteoEstados.value[e] ?? 0), 0)
 const pestanasListado = computed(() => [
-  { valor: 'pendientes', label: 'Pendientes', cantidad: ESTADOS_PENDIENTES.reduce((s, e) => s + (conteoEstados.value[e] ?? 0), 0) },
-  { valor: 'despachados', label: 'Despachados', cantidad: conteoEstados.value.despachado ?? 0 },
+  { valor: 'pendientes', label: 'Pendientes', cantidad: sumarConteo(ESTADOS_PENDIENTES) },
+  { valor: 'historial', label: 'Historial', cantidad: sumarConteo(ESTADOS_HISTORIAL) },
 ])
 
 // Pill Todos/Hormigón/Asfalto — mobile únicamente (rediseño Mobile-First
@@ -251,7 +252,7 @@ iniciar()
           type="button"
           class="rounded-xl border bg-white p-4 text-left shadow-sm transition-colors duration-150"
           :class="
-            (estado === 'despachado' ? listado === 'despachados' : filtros.estado === estado)
+            filtros.estado === estado
               ? 'border-vialtec ring-1 ring-vialtec'
               : 'border-border hover:border-vialtec/40'
           "
@@ -338,17 +339,16 @@ iniciar()
               @keyup.enter="aplicarFiltros"
             />
           </label>
-          <label v-if="listado === 'pendientes'" class="text-sm text-text-mid">
+          <label class="text-sm text-text-mid">
             Estado
             <select
               v-model="filtros.estado"
               class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
             >
-              <option value="">Todos los pendientes</option>
-              <option v-for="e in ESTADOS_PENDIENTES" :key="e" :value="e">{{ e }}</option>
+              <option value="">{{ listado === 'historial' ? 'Despachados y cancelados' : 'Todos los pendientes' }}</option>
+              <option v-for="e in estadosDelListado" :key="e" :value="e">{{ e }}</option>
             </select>
           </label>
-          <p v-else class="self-end text-xs text-text-soft">Pestaña Despachados: solo pedidos despachados.</p>
           <label class="text-sm text-text-mid">
             Obra
             <select
@@ -401,8 +401,9 @@ iniciar()
            cualquier pantalla, este botón duplicado le comía espacio a la
            lista. Sigue en Desktop, que no tiene FAB. -->
       <div class="mb-3 flex items-center justify-between gap-3">
-        <!-- Pendientes / Despachados (2026-10-28): los despachados salen de la
-             lista principal y se consultan acá, con los mismos filtros. -->
+        <!-- Pendientes / Historial (2026-10-28): despachados y cancelados salen
+             de la lista principal y se consultan en Historial, con los mismos
+             filtros y su propio filtro de estado. -->
         <div class="flex gap-1.5" role="tablist">
           <button
             v-for="p in pestanasListado"
