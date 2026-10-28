@@ -16,6 +16,7 @@
 // Área táctil: cada ítem de la nav inferior es un botón de altura completa
 // (~56px) con ícono 22px + label 10px, big enough para el pulgar sin
 // apretarse contra el vecino.
+import AvisoPisoStock from '@/modules/stock/components/AvisoPisoStock.vue'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
@@ -92,6 +93,7 @@ function abrirNuevoPedido() {
     <main class="min-w-0 flex-1 overflow-x-hidden bg-fondo p-4 pb-20">
       <router-view />
     </main>
+    <AvisoPisoStock />
 
     <!-- Nav inferior: Pedidos/Calendario · FAB Nuevo pedido · Stock/Báscula,
          sin "Más" (rediseño Mobile-First 2026-09-22). Altura ~56px por

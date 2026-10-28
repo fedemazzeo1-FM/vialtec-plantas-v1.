@@ -6,6 +6,7 @@
 // ver memory/pending.md — roadmap Mobile 2026-09-02) y su ruta en
 // src/router/index.js.
 
+import AvisoPisoStock from '@/modules/stock/components/AvisoPisoStock.vue'
 import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import logoVialtec from '@/assets/img/logo-vialtec.png'
@@ -165,5 +166,6 @@ const iniciales = computed(() =>
     <main class="min-h-screen min-w-0 flex-1 overflow-x-auto bg-fondo p-6">
       <router-view />
     </main>
+    <AvisoPisoStock />
   </div>
 </template>

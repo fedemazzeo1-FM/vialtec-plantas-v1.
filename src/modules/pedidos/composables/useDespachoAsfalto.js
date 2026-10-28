@@ -16,6 +16,7 @@
 
 import { computed, reactive, ref } from 'vue'
 import { registrarCargaAsfalto, finalizarDespacho } from '@/modules/pedidos/services/pedidos.service'
+import { useAvisoPisoStock, inicioVentanaRecortes } from '@/modules/stock/composables/useAvisoPisoStock'
 
 function cargaVacia(cantidadSugerida = null) {
   return reactive({ cantidad_tn: cantidadSugerida, numero_vale: '', patente: '' })
@@ -26,6 +27,7 @@ function cargaVacia(cantidadSugerida = null) {
  *   despacho con éxito (típicamente refrescar el listado de pedidos).
  */
 export function useDespachoAsfalto(onGuardado) {
+  const { revisarRecortesPorPiso } = useAvisoPisoStock()
   const error = ref(null)
   const abierto = ref(false)
   const pedido = ref(null)
@@ -95,10 +97,13 @@ export function useDespachoAsfalto(onGuardado) {
       }
       // Cierra el pedido con lo cargado (parcial o completo) y, si se pidió,
       // genera el residual — ver migración 11.
+      const desde = inicioVentanaRecortes()
       await finalizarDespacho(pedido.value.id, {
         dividir: dividirPedido.value,
         fechaResidual: fechaResidual.value || undefined,
       })
+      // Aviso si el piso en 0 recortó algún descuento (no espera ni bloquea).
+      revisarRecortesPorPiso(pedido.value, desde)
       abierto.value = false
       await onGuardado?.()
     } catch (e) {

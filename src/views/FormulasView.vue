@@ -15,6 +15,7 @@ import {
   crearFormula,
   actualizarFormula,
   setFormulaActiva,
+  validarDosajeFormula,
 } from '@/modules/maestros/services/formulas.service'
 import { materialesService } from '@/modules/maestros/services/maestros.service'
 import {
@@ -159,6 +160,12 @@ async function guardar() {
     return
   }
   insumosValidos.forEach(normalizarMaterial)
+
+  const errorDosaje = validarDosajeFormula(insumosValidos)
+  if (errorDosaje) {
+    error.value = errorDosaje
+    return
+  }
 
   guardando.value = true
   error.value = null

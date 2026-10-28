@@ -206,3 +206,35 @@ export async function registrarRelevamiento(conteos, motivo) {
   if (error) throw error
   return data ?? []
 }
+
+// Texto que deja plantas_aplicar_movimiento_stock cuando el piso en 0 recorta
+// un descuento (migración 15): "consumo solicitado -X kg, aplicado -Y kg (stock
+// insuficiente, piso en 0)".
+const RE_RECORTE_PISO = /consumo solicitado (-?[\d.]+) kg, aplicado (-?[\d.]+) kg \(stock insuficiente, piso en 0\)/
+
+/**
+ * Descuentos de un pedido que el piso en 0 recortó desde `desde` (ISO): por
+ * material, cuánto pedía la fórmula y cuánto se pudo descontar. Lo usa el
+ * aviso en pantalla después de despachar o corregir (2026-10-28, caso AM3).
+ * Un pedido tiene pocos movimientos: no hace falta paginar.
+ *
+ * @returns {Promise<Array<{ material: string, solicitadoKg: number, aplicadoKg: number }>>}
+ */
+export async function fetchRecortesPorPiso(pedidoId, desde) {
+  const { data, error } = await supabase
+    .from('plantas_stock_movimientos')
+    .select('observaciones, plantas_materiales(nombre)')
+    .eq('pedido_id', pedidoId)
+    .gte('created_at', desde)
+    .ilike('observaciones', '%stock insuficiente, piso en 0%')
+  if (error) throw error
+  return (data ?? []).flatMap((m) => {
+    const coincidencia = RE_RECORTE_PISO.exec(m.observaciones || '')
+    if (!coincidencia) return []
+    return [{
+      material: m.plantas_materiales?.nombre ?? '—',
+      solicitadoKg: Math.abs(Number(coincidencia[1])),
+      aplicadoKg: Math.abs(Number(coincidencia[2])),
+    }]
+  })
+}

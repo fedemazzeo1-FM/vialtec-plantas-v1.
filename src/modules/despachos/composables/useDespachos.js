@@ -23,6 +23,7 @@ import {
   corregirDespacho,
 } from '@/services/despachos.service'
 import { fetchObras } from '@/services/flota.service'
+import { useAvisoPisoStock, inicioVentanaRecortes } from '@/modules/stock/composables/useAvisoPisoStock'
 import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 // Catálogo de clientes de venta externa (2026-09-14, filtro "Cliente externo"
 // pedido por Federico) — mismo catálogo que ya usa el <select> de Pedidos
@@ -55,6 +56,7 @@ function mesActual() {
 }
 
 export function useDespachos() {
+  const { revisarRecortesPorPiso } = useAvisoPisoStock()
   const error = ref(null)
 
   // -------------------------------------------------------------------------
@@ -407,12 +409,15 @@ export function useDespachos() {
     corrigiendo.value = true
     error.value = null
     try {
+      const desde = inicioVentanaRecortes()
       await corregirDespacho(pedidoCorregir.value.id, {
         cantidadDespachada: Number(formCorregir.cantidadDespachada),
         nroRemitoGlobal: formCorregir.nroRemitoGlobal.trim() || null,
         nroValeGlobal: formCorregir.nroValeGlobal.trim() || null,
         notas: formCorregir.notas.trim() || null,
       })
+      // Aviso si el piso en 0 recortó el descuento de la corrección.
+      revisarRecortesPorPiso(pedidoCorregir.value, desde)
       modalCorregirAbierto.value = false
       await cargarDespachos()
     } catch (e) {

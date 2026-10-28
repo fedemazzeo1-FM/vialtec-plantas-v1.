@@ -80,3 +80,40 @@ export function calcularConsumoTotalKg(formula, cantidadProducida) {
     kg: calcularConsumoKg(insumo, cantidadProducida),
   }))
 }
+
+// Validación de dosaje (2026-10-28, migración 70). Gemela de
+// plantas_trg_validar_dosaje_formula: si se cambia un límite o la lista de
+// ligantes, cambiar los dos. Origen: CAC D19 (AM3) cargada con 47 % de asfalto
+// en vez de 4,7 % descontó 10 veces el asfalto de cada despacho.
+export const LIGANTES = ['ASFALTO CA30', 'ASFALTO AM3', 'AM3 AUTOVIA']
+export const MAX_PORCENTAJE_LIGANTE = 10
+export const MAX_SUMA_PORCENTAJES = 110
+
+const formatoPct = (n) => n.toLocaleString('es-AR', { maximumFractionDigits: 2 })
+
+/**
+ * Devuelve el mensaje de error del primer dosaje imposible, o null si está bien.
+ * Solo mira insumos en %.
+ *
+ * @param {Array<{ material: string, cantidad: number|string, unidad: string }>} insumos
+ * @returns {string|null}
+ */
+export function validarDosajeFormula(insumos) {
+  let suma = 0
+  for (const insumo of insumos || []) {
+    if (insumo.unidad !== '%') continue
+    const material = (insumo.material || '').trim().toUpperCase()
+    const cantidad = Number(insumo.cantidad) || 0
+    if (LIGANTES.includes(material) && cantidad > MAX_PORCENTAJE_LIGANTE) {
+      return `${material} al ${formatoPct(cantidad)} %: un ligante no puede pasar de ${MAX_PORCENTAJE_LIGANTE} %. ¿Quisiste poner ${formatoPct(cantidad / 10)} %?`
+    }
+    if (cantidad > 100) {
+      return `${material} al ${formatoPct(cantidad)} %: ningún insumo puede pasar de 100 %.`
+    }
+    suma += cantidad
+  }
+  if (suma > MAX_SUMA_PORCENTAJES) {
+    return `Los insumos en % suman ${formatoPct(suma)} % (máximo ${MAX_SUMA_PORCENTAJES} %). Revisá el dosaje.`
+  }
+  return null
+}

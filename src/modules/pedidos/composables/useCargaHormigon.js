@@ -13,6 +13,7 @@
 
 import { computed, reactive, ref } from 'vue'
 import { registrarCargaHormigon, finalizarDespacho } from '@/modules/pedidos/services/pedidos.service'
+import { useAvisoPisoStock, inicioVentanaRecortes } from '@/modules/stock/composables/useAvisoPisoStock'
 
 function cargaVacia(cantidadSugerida = null) {
   return reactive({ volumen_m3: cantidadSugerida, numero_remito: '', patente_mixer: '' })
@@ -22,6 +23,7 @@ function cargaVacia(cantidadSugerida = null) {
  * @param {() => Promise<void>|void} onGuardado callback tras cerrar el despacho con éxito.
  */
 export function useCargaHormigon(onGuardado) {
+  const { revisarRecortesPorPiso } = useAvisoPisoStock()
   const error = ref(null)
   const abierto = ref(false)
   const pedido = ref(null)
@@ -85,10 +87,13 @@ export function useCargaHormigon(onGuardado) {
           patente_mixer: carga.patente_mixer || null,
         })
       }
+      const desde = inicioVentanaRecortes()
       await finalizarDespacho(pedido.value.id, {
         dividir: dividirPedido.value,
         fechaResidual: fechaResidual.value || undefined,
       })
+      // Aviso si el piso en 0 recortó algún descuento (no espera ni bloquea).
+      revisarRecortesPorPiso(pedido.value, desde)
       abierto.value = false
       await onGuardado?.()
     } catch (e) {
