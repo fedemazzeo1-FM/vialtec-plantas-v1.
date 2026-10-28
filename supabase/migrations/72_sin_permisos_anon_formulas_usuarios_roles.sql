@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Migración 72 — usuarios sin sesión (anon) sin permisos de tabla en plantas_*
--- ESTADO: BORRADOR, preparada (Federico 28/10/2026: extenderla a todas las
--- tablas y vistas plantas_*; no correr todavía).
+-- ESTADO: APLICADA en producción el 2026-10-28 con OK de Federico (extendida a todas las
+-- tablas y vistas plantas_*; dry-run OK).
 -- Dry-run: supabase/scripts/dry_run_migracion_72.sql.
 -- Reversión: supabase/scripts/revertir_migracion_72.sql.
 -- ============================================================================

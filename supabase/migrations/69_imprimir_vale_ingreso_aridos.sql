@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migración 69 — registrar_impresion acepta vales de ingreso de áridos
--- ESTADO: BORRADOR. Dry-run: supabase/scripts/dry_run_migracion_69.sql.
+-- ESTADO: APLICADA en producción el 2026-10-28 con OK de Federico (dry-run OK).
 -- Reversión: supabase/scripts/revertir_migracion_69.sql.
 -- ============================================================================
 --

@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migración 70 — corrección de despacho por diferencia + validar dosaje
--- ESTADO: BORRADOR. Dry-run: supabase/scripts/dry_run_migracion_70.sql.
+-- ESTADO: APLICADA en producción el 2026-10-28 con OK de Federico (dry-run OK).
 -- Reversión: supabase/scripts/revertir_migracion_70.sql.
 -- ============================================================================
 --
