@@ -133,9 +133,20 @@ const copiasVale = [
             {{ vale.cantidad_remito_ingreso != null ? formatearCantidad(vale.cantidad_remito_ingreso, 2) + ' tn' : '—' }}
           </p>
         </template>
-        <p><span class="text-gray-500">Bruto:</span> {{ vale.peso_bruto }} {{ vale.unidad }}</p>
-        <p><span class="text-gray-500">Tara:</span> {{ vale.tara }} {{ vale.unidad }}</p>
-        <p><span class="text-gray-500">Neto:</span> {{ formatearCantidadHasta(vale.peso_neto) }} {{ vale.unidad }}</p>
+        <!-- Bruto / Tara / Neto uno abajo del otro, con los números alineados
+             a la derecha (2026-10-28, pedido de Federico: antes Tara quedaba
+             al costado de Bruto en la grilla de 2 columnas). -->
+        <div class="col-span-2 grid w-max grid-cols-[auto_auto_auto] gap-x-2 gap-y-3">
+          <span class="text-gray-500">Bruto:</span>
+          <span class="text-right tabular-nums">{{ vale.peso_bruto }}</span>
+          <span>{{ vale.unidad }}</span>
+          <span class="text-gray-500">Tara:</span>
+          <span class="text-right tabular-nums">{{ vale.tara }}</span>
+          <span>{{ vale.unidad }}</span>
+          <span class="text-gray-500">Neto:</span>
+          <span class="text-right tabular-nums">{{ formatearCantidadHasta(vale.peso_neto) }}</span>
+          <span>{{ vale.unidad }}</span>
+        </div>
         <p v-if="vale.temperatura != null"><span class="text-gray-500">Temp.:</span> {{ vale.temperatura }} °C</p>
       </div>
 
