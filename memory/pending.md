@@ -2,6 +2,35 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ PRÓXIMA SESIÓN — en este orden (Federico, cierre del 28/10)
+
+1. **Aplicar 69 y 70** (dry-runs OK el 28/10). Antes, confirmar los md5 de
+   partida que controlan los scripts.
+2. **Dry-run de la 71 en el SQL Editor con Federico** (migración 71 +
+   `scripts/dry_run_migracion_71.sql` en la misma ejecución) y, si da
+   "DRYRUN 71 OK", aplicarla.
+3. **Build y deploy** (`npm run build` → `npx vercel --prod`). El modal de
+   mixer manda `p_fecha_despacho`: no deployar sin la 71 aplicada. Incluye
+   validación de dosaje, aviso de piso en 0, fecha de despacho y vale
+   impreso con Bruto/Tara/Neto en columna.
+4. **Avisar a Obras** del cambio de fechas y unidades de mixer (ver "AVISO
+   PARA OBRAS" abajo).
+5. **Aplicar la 72 extendida**: revoke de todo a anon en las 25 tablas y
+   vistas `plantas_*`. Dry-run OK el 28/10 (anon rechazado en las 29
+   relaciones `plantas_*`; Felix sigue leyendo).
+6. **Revisar con Felix si P-0264 fueron 117,25 o 100,79 tn.** Su medición de
+   AM3 (19.130 kg) cierra casi exacto con 117,25 (diferencia 775 kg ≈ 16,46
+   tn × 47 kg). Si fueron 117,25, corregir el despacho de nuevo (con la 70
+   aplicada descuenta solo la diferencia) y compensar el ajuste de la
+   medición para no mover el saldo.
+7. **Que la app vuelva al login cuando se vence la sesión.** Hoy una pestaña
+   con la sesión vencida sigue consultando sin sesión (caso Auditoría del
+   26/10 19:54: refresh 400 y lecturas anon). Escuchar SIGNED_OUT / refresh
+   fallido en `auth.store.js` (`escucharCambiosAuth`) y redirigir a /login.
+   Después de la 72 esas lecturas dan 401.
+
+Push de los commits del 28/10: ver resultado al final de la sesión.
+
 ### ▶▶▶ 28/10 — estado (sin deploy; migraciones 69 a 72 SIN aplicar)
 
 Carpeta renombrada a `Desktop/Vialtec Sistemas/VT360/` (git, dev y build OK;
@@ -34,13 +63,8 @@ Felix −775,06 → AM3 = 19.130 kg. Auditoría 1027-1030 ("sistema (SQL)").
   **El frontend del modal mixer (fecha de despacho) manda `p_fecha_despacho`:
   NO deployar antes de aplicar la 71** (si no, "Registrar despacho" de mixer
   falla).
-- **72** revoke de todo a anon en `plantas_formulas` y
-  `plantas_usuarios_roles`. Preparada, dry-run OK, **no correr sin OK**. Ojo:
-  anon tiene los mismos permisos en las otras 23 tablas/vistas `plantas_*`
-  (cargas, choferes, clientes, encargados, ingresos, materiales,
-  obras_locales, patentes, pedidos, pedidos_historial, permisos, proveedores,
-  remitos_manuales(+items), roles, stock, stock_movimientos, vales y las 4
-  vistas): decidir si se extiende.
+- **72** revoke de todo a anon en las 25 tablas y vistas `plantas_*`
+  (extendida por pedido de Federico). Dry-run OK. Se aplica en el paso 5.
 
 **AVISO PARA OBRAS (antes de aplicar la 71):** `obras_remitos_plantas` lee
 `plantas_v_despachos_camion`. Con la 71: (1) material de mixer pasa a ser
