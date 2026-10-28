@@ -2,82 +2,65 @@
 
 ## ▶ RETOMAR AQUÍ
 
-### ▶▶▶ PRÓXIMA SESIÓN — en este orden (Federico, cierre del 28/10)
+### ▶▶▶ 28/10 (tarde, con Federico) — APLICADO Y PUBLICADO
 
-1. **Aplicar 69 y 70** (dry-runs OK el 28/10). Antes, confirmar los md5 de
-   partida que controlan los scripts.
-2. **Dry-run de la 71 en el SQL Editor con Federico** (migración 71 +
-   `scripts/dry_run_migracion_71.sql` en la misma ejecución) y, si da
-   "DRYRUN 71 OK", aplicarla.
-3. **Build y deploy** (`npm run build` → `npx vercel --prod`). El modal de
-   mixer manda `p_fecha_despacho`: no deployar sin la 71 aplicada. Incluye
-   validación de dosaje, aviso de piso en 0, fecha de despacho y vale
-   impreso con Bruto/Tara/Neto en columna.
-4. **Avisar a Obras** del cambio de fechas y unidades de mixer (ver "AVISO
-   PARA OBRAS" abajo).
-5. **Aplicar la 72 extendida**: revoke de todo a anon en las 25 tablas y
-   vistas `plantas_*`. Dry-run OK el 28/10 (anon rechazado en las 29
-   relaciones `plantas_*`; Felix sigue leyendo).
-6. **Revisar con Felix si P-0264 fueron 117,25 o 100,79 tn.** Su medición de
-   AM3 (19.130 kg) cierra casi exacto con 117,25 (diferencia 775 kg ≈ 16,46
-   tn × 47 kg). Si fueron 117,25, corregir el despacho de nuevo (con la 70
-   aplicada descuenta solo la diferencia) y compensar el ajuste de la
-   medición para no mover el saldo.
-7. **Que la app vuelva al login cuando se vence la sesión.** Hoy una pestaña
-   con la sesión vencida sigue consultando sin sesión (caso Auditoría del
-   26/10 19:54: refresh 400 y lecturas anon). Escuchar SIGNED_OUT / refresh
-   fallido en `auth.store.js` (`escucharCambiosAuth`) y redirigir a /login.
-   Después de la 72 esas lecturas dan 401.
-
-Push de los commits del 28/10: ver resultado al final de la sesión.
-
-### ▶▶▶ 28/10 — estado (sin deploy; migraciones 69 a 72 SIN aplicar)
-
-Carpeta renombrada a `Desktop/Vialtec Sistemas/VT360/` (git, dev y build OK;
-"Trusted repo" de `~/.claude/settings.json` con las 3 rutas nuevas). El sistema
-integral se llama VT360 (anotado en CLAUDE.md).
-
-**AM3 — APLICADO (28/10, OK de Federico).** La fórmula CAC D19 (AM3) se cargó
-el 21/10 con 47 % de asfalto (Felix la corrigió a 4,7 % el 27/10 15:51). El
-ingreso I-00857 del 26/10 sí sumó; se lo llevó la corrección de P-0264 del
-27/10 (descontó "lo que debía llevar − lo aplicado" con la fórmula en 47 %).
-`supabase/scripts/correccion_am3_formula_cac_d19.sql`: P-0264 +42.634,17,
-P-0298 −3.139,86, ajuste del relevamiento del 26/10 −19.589,25 y medición de
-Felix −775,06 → AM3 = 19.130 kg. Auditoría 1027-1030 ("sistema (SQL)").
-
-**Para correr juntos (dry-run hecho salvo la 71):**
-- **69** `registrar_impresion` acepta `ingreso_arido` en modo vale (caso
-  I-00856 del 26/10). Dry-run OK. Sin frontend.
+**Base (todo con OK de Federico, dry-run antes):**
+- **69** `registrar_impresion` acepta vales de ingreso de áridos (modo vale).
 - **70** corrección de despacho por diferencia (sin cobrar lo que recortó el
-  piso, sin stock fantasma de la 22) + trigger que valida dosaje en fórmulas
-  (ligante ≤ 10 %, insumo ≤ 100 %, suma ≤ 110 %). Dry-run OK (8 chequeos).
-  Frontend ya commiteado: validación en Fórmulas (gemela) y aviso "Stock
-  insuficiente" en los layouts después de despachar/corregir.
+  piso; sin stock fantasma de la 22) + trigger que valida dosaje en fórmulas
+  (ligante ≤ 10 %, insumo ≤ 100 %, suma ≤ 110 %).
 - **71** `plantas_cargas_hormigon.fecha_despacho` + `registrar_carga_hormigon`
-  con `p_fecha_despacho` (firma de 8) + vista `plantas_v_despachos_camion`
-  (mixer: material = tipo del pedido, mezcla cemento en tn, fecha = despacho
-  o la del pedido en las viejas). **Dry-run NO corrido**: la herramienta de
-  SQL respondió dos veces "Invalid or expired requestState" (verificado que
-  no quedó nada aplicado). Correrlo en el SQL Editor:
-  migración 71 + `scripts/dry_run_migracion_71.sql` en la misma ejecución.
-  **El frontend del modal mixer (fecha de despacho) manda `p_fecha_despacho`:
-  NO deployar antes de aplicar la 71** (si no, "Registrar despacho" de mixer
-  falla).
-- **72** revoke de todo a anon en las 25 tablas y vistas `plantas_*`
-  (extendida por pedido de Federico). Dry-run OK. Se aplica en el paso 5.
+  con `p_fecha_despacho` (firma de 8, sin anon) + vista
+  `plantas_v_despachos_camion` (mixer: tipo y unidad del pedido, fecha de
+  despacho o la del pedido en las viejas). Verificado: 1071 asfalto/tn, 186
+  hormigón/m³, 19 mezcla cemento/tn; Moorlands Pilar sin fechas distintas a
+  la del pedido. (`apply_migration` respondió una vez "Invalid or expired
+  requestState" sin aplicar nada; el segundo intento entró.)
+- **72** anon sin permisos de tabla en las 25 tablas y vistas `plantas_*`.
+  Después de aplicar, producción siguió todo en 200.
+- **Cargas tipeadas con el bruto** corregidas (`scripts/correccion_cargas_asfalto_peso_bruto.sql`):
+  P-0264 vale 10288 48,88 → 32,42 y P-0273 vale 10312 30,88 → 17,63.
+  Stock sin cambio; auditoría 1067 y 1068. P-0213 (27,374 vs 27,34) sin tocar,
+  por decisión de Federico.
+- **AM3** (mañana): 19.130 kg, auditoría 1027-1030
+  (`scripts/correccion_am3_formula_cac_d19.sql`).
 
-**AVISO PARA OBRAS (antes de aplicar la 71):** `obras_remitos_plantas` lee
-`plantas_v_despachos_camion`. Con la 71: (1) material de mixer pasa a ser
-`hormigon` o `mezcla_cemento` (antes todo `hormigon`) y la mezcla cemento
-viene en `tn`, no `m3`; (2) la fecha de las cargas de mixer pasa a ser el día
-del despacho (las viejas: la fecha del pedido) en vez del día en que se
-registró. Moorlands Pilar: 66 de 71 cargas cambian de fecha (0-3 días antes).
-Si Obras compara contra el Excel por fecha, los remitos que había marcado
-como "nuevos" por fecha corrida pueden pasar a "repetidos".
+**Publicado** (deploy `dpl_72KQn7DhdWYqNLyCqMbvBFe3BhKG`, bundle
+`index-CGoyX9nj.js`, verificado servido y mirado con sesión admin):
+Pedidos con pestañas Pendientes (solicitado/confirmado/postergado) e
+Historial (despachado/cancelado, con filtro de estado); "Fecha de despacho"
+en el modal de mixer (precargada con la fecha del pedido, o hoy si es
+futura); vale impreso con Bruto/Tara/Neto en columna; validación de dosaje en
+Fórmulas; aviso "Stock insuficiente" cuando el piso en 0 recorta. Sin errores
+de consola.
 
-**Vale impreso:** Bruto/Tara/Neto uno abajo del otro, números alineados a la
-derecha (`ValeImprimible.vue`, vale para los 3 tipos). Temp. queda en su
-propio renglón abajo. Sin deploy.
+**P-0264 — investigado:** salieron 100,79 tn (3 vales de balanza, remito
+00070). Las 117,25 eran la carga del vale 10288 tipeada con el bruto (48,88).
+Los 775 kg de diferencia entre el cálculo y la medición de Felix NO vienen de
+P-0264 (las 16,46 tn no aparecen en otro pedido): tolerancia de medición u
+otra causa sin encontrar.
+
+**⚠ AVISO PARA OBRAS — la vista cambió el 28/10 (migración 71 aplicada):**
+`obras_remitos_plantas` lee `plantas_v_despachos_camion`. Desde ahora, en
+las cargas de mixer: (1) el material es `hormigon` o `mezcla_cemento` (antes
+todo `hormigon`) y la mezcla cemento viene en `tn`, no en `m3`; (2) la fecha
+es el día del despacho que carga el plantista (las cargas viejas: la fecha
+del pedido) en vez del día en que se registró. Moorlands Pilar: 66 de 71
+cargas cambiaron de fecha (0-3 días antes). Si Obras compara contra el Excel
+por fecha, remitos que había marcado como "nuevos" por fecha corrida pueden
+pasar a "repetidos". **Falta avisar a Obras** (Federico).
+
+**Sigue:**
+1. **Migración 73 + frontend** (aprobado 28/10): en el despacho de asfalto,
+   las cargas salen solas de los vales de balanza del pedido (N° de vale,
+   neto, patente; no editables). Aviso si el pesaje sigue abierto. "Carga sin
+   vale de balanza" con aviso y motivo obligatorio. La RPC toma el neto del
+   vale, rechaza vale anulado, de otro pedido o repetido, y audita la carga
+   sin vale. Escribir con dry-run, sin correr.
+2. Avisar a Obras (arriba).
+3. Que la app vuelva al login cuando se vence la sesión (escuchar
+   SIGNED_OUT / refresh fallido en `auth.store.js#escucharCambiosAuth`). Con
+   la 72, las lecturas sin sesión ahora dan 401.
 
 **Diagnósticos del 28/10:** lecturas anon del 26/10 19:54 = pantalla
 Auditoría con la sesión vencida (nada roto, login OK). P-0271 despachado el
