@@ -10,6 +10,7 @@ import VModal from '@/components/shared/VModal.vue'
 import VButton from '@/components/shared/VButton.vue'
 import { unidadLabelTipoProducto } from '@/config/tipos-producto'
 import { formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
+import { hoyISO } from '@/services/fecha'
 
 const props = defineProps({
   // Instancia de useCargaHormigon() (reactive) de la vista.
@@ -21,6 +22,7 @@ const props = defineProps({
 
 // La unidad sale del pedido que se está despachando (m³ o tn).
 const unidad = computed(() => unidadLabelTipoProducto(props.despacho.pedido?.tipo))
+const hoy = hoyISO()
 </script>
 
 <template>
@@ -33,6 +35,17 @@ const unidad = computed(() => unidadLabelTipoProducto(props.despacho.pedido?.tip
         {{ destino }}
         — Solicitado: {{ formatearCantidadHasta(despacho.pedido?.cantidad_solicitada) }} {{ unidad }} · Saldo antes de este despacho: {{ formatearCantidad(despacho.saldoPendiente, 1) }} {{ unidad }}
       </p>
+
+      <label class="block text-sm text-text-mid">
+        Fecha de despacho *
+        <input
+          v-model="despacho.fechaDespacho"
+          type="date"
+          :max="hoy"
+          class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none md:w-1/2"
+        />
+        <span class="mt-0.5 block text-xs text-text-soft">El día en que salieron los mixers (es la fecha que ve Obras).</span>
+      </label>
 
       <div class="space-y-2">
         <p class="text-xs font-semibold uppercase tracking-wide text-text-soft">Cargas / camiones</p>

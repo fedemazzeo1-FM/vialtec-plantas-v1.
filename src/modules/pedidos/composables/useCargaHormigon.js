@@ -7,6 +7,10 @@
 // fecha/hora (esos dos campos estaban de más en la versión anterior de este
 // composable, se sacaron acá).
 //
+// Fecha de despacho (2026-10-28, migración 71, aviso de Obras): el día real en
+// que salieron los mixers, precargado con la fecha del pedido. Antes la única
+// fecha era el momento de registro, que suele ser el día hábil siguiente.
+//
 // Cierre del pedido: igual que asfalto, SIEMPRE se llama a
 // finalizarDespacho() al terminar de cargar (parcial o completo, con
 // opción de dividir pedido) — Logica sis. plantas v1.rtf §2.2, migración 11.
@@ -14,6 +18,7 @@
 import { computed, reactive, ref } from 'vue'
 import { registrarCargaHormigon, finalizarDespacho } from '@/modules/pedidos/services/pedidos.service'
 import { useAvisoPisoStock, inicioVentanaRecortes } from '@/modules/stock/composables/useAvisoPisoStock'
+import { hoyISO } from '@/services/fecha'
 
 function cargaVacia(cantidadSugerida = null) {
   return reactive({ volumen_m3: cantidadSugerida, numero_remito: '', patente_mixer: '' })
@@ -30,6 +35,7 @@ export function useCargaHormigon(onGuardado) {
   const cargas = ref([])
   const dividirPedido = ref(false)
   const fechaResidual = ref('')
+  const fechaDespacho = ref('')
   const guardando = ref(false)
 
   const saldoPendiente = computed(() => {
@@ -45,6 +51,9 @@ export function useCargaHormigon(onGuardado) {
     cargas.value = [cargaVacia(saldoPendiente.value)]
     dividirPedido.value = false
     fechaResidual.value = ''
+    // Un pedido programado para más adelante que sale antes: hoy.
+    const programada = pedidoHormigon?.fecha_programada || ''
+    fechaDespacho.value = programada && programada <= hoyISO() ? programada : hoyISO()
     error.value = null
     abierto.value = true
   }
@@ -59,6 +68,14 @@ export function useCargaHormigon(onGuardado) {
   }
 
   async function guardar() {
+    if (!fechaDespacho.value) {
+      error.value = 'Indicá la fecha de despacho.'
+      return
+    }
+    if (fechaDespacho.value > hoyISO()) {
+      error.value = 'La fecha de despacho no puede ser futura.'
+      return
+    }
     for (const carga of cargas.value) {
       if (!(Number(carga.volumen_m3) > 0)) {
         error.value = 'Cada carga necesita un volumen mayor a 0.'
@@ -85,6 +102,7 @@ export function useCargaHormigon(onGuardado) {
           numero_remito: carga.numero_remito.trim(),
           volumen_m3: carga.volumen_m3,
           patente_mixer: carga.patente_mixer || null,
+          fecha_despacho: fechaDespacho.value,
         })
       }
       const desde = inicioVentanaRecortes()
@@ -113,6 +131,7 @@ export function useCargaHormigon(onGuardado) {
     cargas,
     dividirPedido,
     fechaResidual,
+    fechaDespacho,
     guardando,
     saldoPendiente,
     totalCargas,

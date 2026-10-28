@@ -466,6 +466,9 @@ export async function registrarCargaHormigon(cargaData) {
     p_chofer: cargaData.chofer || null,
     p_fecha_carga: fechaCarga.toISOString(),
     p_observaciones: cargaData.observaciones || null,
+    // Día real del despacho ('YYYY-MM-DD', migración 71). fecha_carga sigue
+    // siendo el momento de registro.
+    p_fecha_despacho: cargaData.fecha_despacho || null,
   })
 
   if (error) throw error
