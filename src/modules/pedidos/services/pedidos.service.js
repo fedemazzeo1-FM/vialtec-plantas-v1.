@@ -502,6 +502,25 @@ export async function registrarCargaHormigon(cargaData) {
  *   despacho acá. Antes (migración 36) se asignaba en la primera carga de
  *   ESTA función — eso no reflejaba la operativa real.
  */
+/**
+ * Vales de balanza (asfalto, no anulados) de un pedido, en orden de pesada —
+ * de acá salen las cargas del modal "Registrar despacho" (migración 73,
+ * 2026-10-28: ya no se tipean). Un pedido tiene pocos vales: no hace falta
+ * paginar.
+ */
+export async function fetchValesAsfaltoDelPedido(pedidoId) {
+  const { data, error } = await supabase
+    .from('plantas_vales')
+    .select('id, numero_vale, peso_neto, patente, fecha_pesada')
+    .eq('pedido_id', pedidoId)
+    .eq('tipo_vale', 'asfalto')
+    .eq('anulado', false)
+    .order('fecha_pesada', { ascending: true })
+    .order('id', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function registrarCargaAsfalto(cargaData) {
   const fechaCarga = cargaData.fecha_carga ? new Date(cargaData.fecha_carga) : new Date()
 

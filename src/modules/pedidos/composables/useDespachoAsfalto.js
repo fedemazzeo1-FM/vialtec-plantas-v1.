@@ -13,13 +13,23 @@
 // pasa a despachado con lo cargado hasta ese momento, sea parcial o
 // completo. Si queda saldo, se puede activar "dividir pedido" para generar
 // automáticamente un pedido residual confirmado en una fecha a elegir.
+//
+// Cargas desde balanza (2026-10-28, migración 73, pedido de Federico tras
+// P-0264/P-0273 cargados con el peso bruto): al abrir, las cargas salen de
+// los vales de balanza del pedido (N° de vale, neto, patente) y no se
+// editan. "Carga sin vale de balanza" queda para cuando no se pesó: se
+// tipea, pide motivo y la base la audita con ese motivo.
 
 import { computed, reactive, ref } from 'vue'
-import { registrarCargaAsfalto, finalizarDespacho } from '@/modules/pedidos/services/pedidos.service'
+import { registrarCargaAsfalto, finalizarDespacho, fetchValesAsfaltoDelPedido } from '@/modules/pedidos/services/pedidos.service'
 import { useAvisoPisoStock, inicioVentanaRecortes } from '@/modules/stock/composables/useAvisoPisoStock'
 
-function cargaVacia(cantidadSugerida = null) {
-  return reactive({ cantidad_tn: cantidadSugerida, numero_vale: '', patente: '' })
+function cargaDesdeVale(vale) {
+  return reactive({ cantidad_tn: Number(vale.peso_neto), numero_vale: String(vale.numero_vale), patente: vale.patente || '', desdeBalanza: true, motivo: '' })
+}
+
+function cargaSinBalanza() {
+  return reactive({ cantidad_tn: null, numero_vale: '', patente: '', desdeBalanza: false, motivo: '' })
 }
 
 /**
@@ -35,6 +45,10 @@ export function useDespachoAsfalto(onGuardado) {
   const dividirPedido = ref(false)
   const fechaResidual = ref('')
   const guardando = ref(false)
+  const cargandoVales = ref(false)
+  // Pesaje todavía abierto en Báscula: puede faltar pesar algún camión.
+  const pesajeAbierto = computed(() => Boolean(pedido.value) && !pedido.value.pesaje_cerrado_en)
+  const sinValesEnBalanza = computed(() => !cargandoVales.value && !cargas.value.some((c) => c.desdeBalanza))
 
   const saldoPendiente = computed(() => {
     if (!pedido.value) return 0
@@ -46,26 +60,42 @@ export function useDespachoAsfalto(onGuardado) {
   /** Lo que va a quedar pendiente después de guardar estas cargas — solo tiene sentido si es > 0. */
   const residualEstimado = computed(() => Math.max(0, saldoPendiente.value - totalCargas.value))
 
-  function abrir(pedidoAsfalto) {
+  async function abrir(pedidoAsfalto) {
     pedido.value = pedidoAsfalto
-    cargas.value = [cargaVacia(saldoPendiente.value)]
+    cargas.value = []
     dividirPedido.value = false
     fechaResidual.value = ''
     error.value = null
     abierto.value = true
+    cargandoVales.value = true
+    try {
+      const vales = await fetchValesAsfaltoDelPedido(pedidoAsfalto.id)
+      cargas.value = vales.map(cargaDesdeVale)
+    } catch (e) {
+      error.value = `No se pudieron leer los vales de balanza: ${e.message}`
+    } finally {
+      cargandoVales.value = false
+    }
   }
 
-  function agregarCarga() {
-    cargas.value.push(cargaVacia())
+  function agregarCargaSinBalanza() {
+    cargas.value.push(cargaSinBalanza())
   }
 
   function quitarCarga(index) {
-    if (cargas.value.length <= 1) return
     cargas.value.splice(index, 1)
   }
 
   async function guardar() {
+    if (!cargas.value.length) {
+      error.value = 'No hay cargas: el pedido no tiene vales de balanza. Si no se pesó, usá "Carga sin vale de balanza".'
+      return
+    }
     for (const carga of cargas.value) {
+      if (!carga.desdeBalanza && !carga.motivo.trim()) {
+        error.value = 'Cada carga sin vale de balanza necesita un motivo.'
+        return
+      }
       if (!(Number(carga.cantidad_tn) > 0)) {
         error.value = 'Cada carga necesita una cantidad mayor a 0.'
         return
@@ -93,6 +123,8 @@ export function useDespachoAsfalto(onGuardado) {
           numero_vale: carga.numero_vale.trim(),
           cantidad_tn: carga.cantidad_tn,
           patente: carga.patente || null,
+          // Sin vale de balanza: la base exige el motivo y lo audita.
+          observaciones: carga.desdeBalanza ? null : carga.motivo.trim(),
         })
       }
       // Cierra el pedido con lo cargado (parcial o completo) y, si se pidió,
@@ -129,8 +161,11 @@ export function useDespachoAsfalto(onGuardado) {
     saldoPendiente,
     totalCargas,
     residualEstimado,
+    cargandoVales,
+    pesajeAbierto,
+    sinValesEnBalanza,
     abrir,
-    agregarCarga,
+    agregarCargaSinBalanza,
     quitarCarga,
     guardar,
   })

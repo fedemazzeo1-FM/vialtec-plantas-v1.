@@ -4,6 +4,7 @@
 // el estado y el guardado viven en useDespachoAsfalto.js, que recibe la
 // vista que lo abre. Extraído de PedidosView.vue (2026-10-22) para que
 // Pedidos y Plan semanal despachen con el mismo modal y el mismo circuito.
+// Desde 2026-10-28 (migración 73) las cargas salen de los vales de balanza.
 import VModal from '@/components/shared/VModal.vue'
 import VButton from '@/components/shared/VButton.vue'
 import { formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
@@ -28,49 +29,84 @@ defineProps({
         — Solicitado: {{ formatearCantidadHasta(despacho.pedido?.cantidad_solicitada) }} tn · Saldo antes de este despacho: {{ formatearCantidad(despacho.saldoPendiente, 1) }} tn
       </p>
 
+      <!-- Cargas desde balanza (migración 73, 2026-10-28): salen de los vales
+           del pedido y no se editan. "Carga sin vale de balanza" se tipea y
+           pide motivo (queda en Auditoría). -->
+      <div
+        v-if="despacho.pesajeAbierto"
+        class="rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-sm text-warning"
+      >
+        La balanza todavía no cerró el pesaje de este pedido: puede faltar algún camión.
+      </div>
+
       <div class="space-y-2">
         <p class="text-xs font-semibold uppercase tracking-wide text-text-soft">Cargas / camiones</p>
+        <p v-if="despacho.cargandoVales" class="text-sm text-text-soft">Leyendo los vales de balanza…</p>
+        <p
+          v-else-if="despacho.sinValesEnBalanza"
+          class="rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-sm text-warning"
+        >
+          Este pedido no tiene vales de balanza. Si los camiones no se pesaron, cargalos con "Carga sin vale de balanza".
+        </p>
         <div
           v-for="(carga, idx) in despacho.cargas"
           :key="idx"
-          class="grid grid-cols-1 items-end gap-2 rounded-lg border border-border p-2 md:grid-cols-[1fr_1fr_1fr_auto]"
+          class="grid grid-cols-1 items-end gap-2 rounded-lg border p-2 md:grid-cols-[1fr_1fr_1fr_auto]"
+          :class="carga.desdeBalanza ? 'border-border' : 'border-warning/40 bg-warning-light/40'"
         >
-          <label class="text-xs text-text-mid">
-            Cantidad (tn) *
+          <template v-if="carga.desdeBalanza">
+            <p class="text-xs text-text-mid">
+              Vale de balanza
+              <span class="mt-1 block text-sm font-semibold text-text">N° {{ carga.numero_vale }}</span>
+            </p>
+            <p class="text-xs text-text-mid">
+              Neto
+              <span class="mt-1 block text-sm font-semibold tabular-nums text-text">{{ formatearCantidad(carga.cantidad_tn, 2) }} tn</span>
+            </p>
+            <p class="text-xs text-text-mid">
+              Patente
+              <span class="mt-1 block text-sm text-text">{{ carga.patente || '—' }}</span>
+            </p>
+          </template>
+          <template v-else>
+            <label class="text-xs text-text-mid">
+              Cantidad (tn) *
+              <input
+                v-model.number="carga.cantidad_tn"
+                type="number"
+                step="0.01"
+                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
+              />
+            </label>
+            <label class="text-xs text-text-mid">
+              N° vale *
+              <input
+                v-model="carga.numero_vale"
+                type="text"
+                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
+              />
+            </label>
+            <label class="text-xs text-text-mid">
+              Patente (opcional)
+              <input
+                v-model="carga.patente"
+                list="patentes-despacho"
+                class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
+              />
+            </label>
+          </template>
+          <VButton type="button" variant="ghost" size="sm" @click="despacho.quitarCarga(idx)">✕ Quitar carga</VButton>
+          <label v-if="!carga.desdeBalanza" class="text-xs text-warning md:col-span-4">
+            Sin vale de balanza — motivo *
             <input
-              v-model.number="carga.cantidad_tn"
-              type="number"
-              step="0.01"
-              class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-          <label class="text-xs text-text-mid">
-            N° vale *
-            <input
-              v-model="carga.numero_vale"
+              v-model="carga.motivo"
               type="text"
-              class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
+              placeholder="Ej.: balanza fuera de servicio"
+              class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm text-text focus:border-vialtec focus:outline-none"
             />
           </label>
-          <label class="text-xs text-text-mid">
-            Patente (opcional)
-            <input
-              v-model="carga.patente"
-              list="patentes-despacho"
-              class="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-vialtec focus:outline-none"
-            />
-          </label>
-          <VButton
-            type="button"
-            variant="ghost"
-            size="sm"
-            :disabled="despacho.cargas.length <= 1"
-            @click="despacho.quitarCarga(idx)"
-          >
-            ✕ Quitar carga
-          </VButton>
         </div>
-        <VButton type="button" variant="secondary" size="sm" @click="despacho.agregarCarga">+ Agregar carga</VButton>
+        <VButton type="button" variant="secondary" size="sm" @click="despacho.agregarCargaSinBalanza">+ Carga sin vale de balanza</VButton>
       </div>
 
       <p class="text-sm font-semibold text-text">Total: {{ formatearCantidad(despacho.totalCargas, 2) }} tn</p>
