@@ -2,6 +2,64 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 28/10 — estado (sin deploy; migraciones 69 a 72 SIN aplicar)
+
+Carpeta renombrada a `Desktop/Vialtec Sistemas/VT360/` (git, dev y build OK;
+"Trusted repo" de `~/.claude/settings.json` con las 3 rutas nuevas). El sistema
+integral se llama VT360 (anotado en CLAUDE.md).
+
+**AM3 — APLICADO (28/10, OK de Federico).** La fórmula CAC D19 (AM3) se cargó
+el 21/10 con 47 % de asfalto (Felix la corrigió a 4,7 % el 27/10 15:51). El
+ingreso I-00857 del 26/10 sí sumó; se lo llevó la corrección de P-0264 del
+27/10 (descontó "lo que debía llevar − lo aplicado" con la fórmula en 47 %).
+`supabase/scripts/correccion_am3_formula_cac_d19.sql`: P-0264 +42.634,17,
+P-0298 −3.139,86, ajuste del relevamiento del 26/10 −19.589,25 y medición de
+Felix −775,06 → AM3 = 19.130 kg. Auditoría 1027-1030 ("sistema (SQL)").
+
+**Para correr juntos (dry-run hecho salvo la 71):**
+- **69** `registrar_impresion` acepta `ingreso_arido` en modo vale (caso
+  I-00856 del 26/10). Dry-run OK. Sin frontend.
+- **70** corrección de despacho por diferencia (sin cobrar lo que recortó el
+  piso, sin stock fantasma de la 22) + trigger que valida dosaje en fórmulas
+  (ligante ≤ 10 %, insumo ≤ 100 %, suma ≤ 110 %). Dry-run OK (8 chequeos).
+  Frontend ya commiteado: validación en Fórmulas (gemela) y aviso "Stock
+  insuficiente" en los layouts después de despachar/corregir.
+- **71** `plantas_cargas_hormigon.fecha_despacho` + `registrar_carga_hormigon`
+  con `p_fecha_despacho` (firma de 8) + vista `plantas_v_despachos_camion`
+  (mixer: material = tipo del pedido, mezcla cemento en tn, fecha = despacho
+  o la del pedido en las viejas). **Dry-run NO corrido**: la herramienta de
+  SQL respondió dos veces "Invalid or expired requestState" (verificado que
+  no quedó nada aplicado). Correrlo en el SQL Editor:
+  migración 71 + `scripts/dry_run_migracion_71.sql` en la misma ejecución.
+  **El frontend del modal mixer (fecha de despacho) manda `p_fecha_despacho`:
+  NO deployar antes de aplicar la 71** (si no, "Registrar despacho" de mixer
+  falla).
+- **72** revoke de todo a anon en `plantas_formulas` y
+  `plantas_usuarios_roles`. Preparada, dry-run OK, **no correr sin OK**. Ojo:
+  anon tiene los mismos permisos en las otras 23 tablas/vistas `plantas_*`
+  (cargas, choferes, clientes, encargados, ingresos, materiales,
+  obras_locales, patentes, pedidos, pedidos_historial, permisos, proveedores,
+  remitos_manuales(+items), roles, stock, stock_movimientos, vales y las 4
+  vistas): decidir si se extiende.
+
+**AVISO PARA OBRAS (antes de aplicar la 71):** `obras_remitos_plantas` lee
+`plantas_v_despachos_camion`. Con la 71: (1) material de mixer pasa a ser
+`hormigon` o `mezcla_cemento` (antes todo `hormigon`) y la mezcla cemento
+viene en `tn`, no `m3`; (2) la fecha de las cargas de mixer pasa a ser el día
+del despacho (las viejas: la fecha del pedido) en vez del día en que se
+registró. Moorlands Pilar: 66 de 71 cargas cambian de fecha (0-3 días antes).
+Si Obras compara contra el Excel por fecha, los remitos que había marcado
+como "nuevos" por fecha corrida pueden pasar a "repetidos".
+
+**Vale impreso:** Bruto/Tara/Neto uno abajo del otro, números alineados a la
+derecha (`ValeImprimible.vue`, vale para los 3 tipos). Temp. queda en su
+propio renglón abajo. Sin deploy.
+
+**Diagnósticos del 28/10:** lecturas anon del 26/10 19:54 = pantalla
+Auditoría con la sesión vencida (nada roto, login OK). P-0271 despachado el
+23/10 por Felix desde Pedidos (no desde el calendario): 17/18 tn, checklist
+de base OK; falta mirar pantallas e informe de octubre.
+
 ### ▶▶▶ 23/10 (con Federico presente) — estado
 
 - **Migración 68 APLICADA** (23/10, `apply_migration`, OK de Federico, después
