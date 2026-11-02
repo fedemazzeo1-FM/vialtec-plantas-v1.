@@ -2,6 +2,39 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 02/11 (con Federico) — APLICADO Y PUBLICADO
+
+**▶ RETOMAR AQUÍ (próxima sesión):**
+1. **Vuelta al login cuando vence la sesión** (postergada por Federico el
+   02/11): escuchar SIGNED_OUT / refresh fallido en
+   `auth.store.js#escucharCambiosAuth` y redirigir a /login. Con la 72, las
+   lecturas sin sesión dan 401.
+2. Mirar el primer despacho real de asfalto con la 73 (cargas desde balanza:
+   neto y patente del vale; "Carga sin vale de balanza" con motivo en
+   Auditoría).
+3. Sigue pendiente de Federico: avisar a Obras del cambio de la vista (28/10, abajo).
+
+**Hecho el 02/11:**
+- **Informe mensual** (commits `121bd42`, `ae37612` ícono): imágenes con
+  comparación vs. mes anterior por material (reusa `filasComparativo` de Home
+  con meses completos: `periodosMesCerrado`, campo `resumen`
+  "Asfalto: 5.063 tn, 9% más que septiembre (+435 tn)") y totales interno /
+  ventas externas destacados; botón "Descargar informe mensual" arriba en
+  Despachos (modal con mes, por defecto el anterior: Excel o imágenes),
+  ícono SVG del sistema. Revisado por Federico.
+- **Migración 73 APLICADA** (`apply_migration`, OK de Federico presente).
+  Ensayo OK A–G (el dry-run se corrigió: P-0264 con despachado null, no 0,
+  por el CHECK > 0 — commit `fbbe76f`); prueba de reversión OK (md5
+  6a1bcee8 → b78d2f4d → 6a1bcee8, grants iguales), ambas en un solo DO
+  revertido. Instalado: md5 `b78d2f4df432c68c96512401a0f32167`, anon no,
+  authenticated sí; 369 cargas y auditoría 1286 sin cambios al aplicar.
+  Reversión: `supabase/scripts/revertir_migracion_73.sql`.
+- **Publicado** `dpl_HKukkDzvrTXBqxciKQJ6HZqJ9TBp` (bundle
+  `index-DGjCzbG5.js`, verificado servido): informe mensual + frontend de
+  cargas desde balanza (`ba323ff`, chunk `ModalDespachoMixer-*.js`; salió
+  minutos antes de aplicar la 73, compatible con la RPC anterior). Falta
+  mirarlo logueado en un despacho real.
+
 ### ▶▶▶ 28/10 (tarde, con Federico) — APLICADO Y PUBLICADO
 
 **Base (todo con OK de Federico, dry-run antes):**
@@ -50,8 +83,8 @@ cargas cambiaron de fecha (0-3 días antes). Si Obras compara contra el Excel
 por fecha, remitos que había marcado como "nuevos" por fecha corrida pueden
 pasar a "repetidos". **Falta avisar a Obras** (Federico).
 
-**▶ RETOMAR AQUÍ (cierre del 28/10, en este orden):**
-1. **Migración 73 con Federico: dry-run, aplicación y publicar las cargas
+**(cierre del 28/10 — punto 1 HECHO el 02/11, punto 2 pasa a la próxima sesión):**
+1. **[HECHO 02/11] Migración 73 con Federico: dry-run, aplicación y publicar las cargas
    desde balanza.** Escrita, sin correr:
    `supabase/migrations/73_cargas_asfalto_desde_balanza.sql` +
    `scripts/dry_run_migracion_73.sql` (pegar los dos en la misma ejecución;
