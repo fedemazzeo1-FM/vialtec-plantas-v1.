@@ -4,7 +4,7 @@
 -- ejecución. Termina SIEMPRE con ERROR "DRYRUN 73 OK — …" (todo revertido).
 --
 -- Escenario: dentro de la transacción (se revierte) P-0264 vuelve a
--- 'confirmado' con 0 tn y sin cargas, para probar el despacho desde sus 3
+-- 'confirmado' sin despachado (null) y sin cargas, para probar el despacho desde sus 3
 -- vales de balanza (10286, 10287, 10288). No consume numeración.
 -- ============================================================================
 do $dry$
@@ -22,7 +22,7 @@ begin
 
   -- Escenario (como postgres, se revierte al final)
   delete from plantas_cargas_asfalto where pedido_id = v_p264;
-  update plantas_pedidos set estado = 'confirmado', cantidad_despachada = 0 where id = v_p264;
+  update plantas_pedidos set estado = 'confirmado', cantidad_despachada = null where id = v_p264; -- null: CHECK (> 0)
 
   -- A. Vale de balanza con cantidad tipeada mal (el bruto) → guarda el neto
   set local role authenticated;
