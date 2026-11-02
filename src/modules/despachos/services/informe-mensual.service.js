@@ -29,6 +29,7 @@ import { appConfig } from '@/config/app.config'
 // de proveedores (memory/conventions.md, no duplicar la query/agregación).
 import { fetchAnaliticaProveedoresDetalle } from '@/modules/analytics/services/analytics.service'
 import { PRODUCCION_PRE_MAYO_2026 } from '@/modules/dashboard/services/dashboard.service'
+import { filasComparativo, mesAnteriorDe, periodosMesCerrado } from '@/modules/dashboard/services/comparativo-mes'
 import {
   esCircuitoBascula,
   esCircuitoMixer,
@@ -135,6 +136,25 @@ export function nombreMesLargo(mes) {
   return `${NOMBRES_MES[mesNum - 1]} ${anio}`
 }
 
+/** Totales del mes más el histórico fijo pre-mayo 2026 si corresponde (ver fetchResumenAnual). */
+function conHistorico(mes, totales) {
+  return sumarTotales(totales, PRODUCCION_PRE_MAYO_2026[mes])
+}
+
+/**
+ * Comparación del mes con el mes anterior, por tipo de producto (informe
+ * mensual en imágenes, 2026-11-02, pedido de Federico). Misma lógica y
+ * textos que el comparativo de Home (dashboard/services/comparativo-mes.js),
+ * con los dos meses completos.
+ * @param {string} mes 'YYYY-MM'
+ * @param {Record<string, number>} totalesMes totales del mes ya calculados (fila del resumen anual)
+ */
+export async function fetchComparativoMesAnterior(mes, totalesMes) {
+  const mesPrevio = mesAnteriorDe(mes)
+  const anterior = conHistorico(mesPrevio, await fetchTotalesMes(mesPrevio))
+  return filasComparativo(periodosMesCerrado(mes), totalesMes, anterior)
+}
+
 /**
  * Acumulado del año, de enero hasta el mes elegido (inclusive) — "Resumen
  * anual" del informe (memory/relevamiento, formato del Excel de referencia
@@ -154,10 +174,7 @@ export async function fetchResumenAnual(mesHasta) {
   // sola siempre iba a dar 0/casi 0 ahí. Se suma el histórico fijo de ese
   // Excel cuando el mes corresponde (no aplica a ningún otro año/mes, el
   // objeto solo tiene esas 4 claves).
-  const filas = meses.map((m, i) => {
-    const historico = PRODUCCION_PRE_MAYO_2026[m]
-    return { mes: nombreMesLargo(m), ...sumarTotales(totales[i], historico) }
-  })
+  const filas = meses.map((m, i) => ({ mes: nombreMesLargo(m), ...conHistorico(m, totales[i]) }))
   const totalAcumulado = sumarTotales(...filas)
   return { filas, totalAcumulado, anio }
 }

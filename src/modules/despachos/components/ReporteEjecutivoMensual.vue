@@ -24,6 +24,9 @@ const props = defineProps({
   obras: { type: Array, default: () => [] },
   // { filas: [{ mes, ...totales }], totalAcumulado, anio } — fetchResumenAnual()
   resumenAnual: { type: Object, required: true },
+  // filasComparativo() (dashboard/services/comparativo-mes.js) del mes contra
+  // el anterior — fetchComparativoMesAnterior().
+  comparativo: { type: Array, default: () => [] },
 })
 
 const ANCHO_PIEZA = 900
@@ -75,6 +78,32 @@ const totalMes = computed(() => {
     })),
   }
 })
+
+// Interno (obras propias) vs. ventas externas — misma distinción que el
+// Excel (fetchDespachosPorObraDelMes: sin obraId = venta externa). Nunca se
+// suman tipos entre sí: un número por tipo con producción en el mes.
+const origenes = computed(() =>
+  [
+    { id: 'interno', titulo: 'Total interno (obras propias)', lista: props.obras.filter((o) => o.obraId != null) },
+    { id: 'externo', titulo: 'Total ventas externas', lista: props.obras.filter((o) => o.obraId == null) },
+  ].map(({ id, titulo, lista }) => {
+    const totales = sumarTotales(...lista)
+    const lineas = LISTA_TIPOS_PRODUCTO.filter((t) => totales[t.total] > 0).map((t) => ({
+      id: t.id,
+      valor: numero(totales[t.total]),
+      unidad: t.unidadLabel,
+      nombre: t.nombre.toLowerCase(),
+    }))
+    return { id, titulo, lineas, despachos: lista.reduce((acc, o) => acc + (o.cantidadDespachos || 0), 0) }
+  })
+)
+
+// Badge del comparativo: verde si sube, rojo si baja (mismo criterio que Home).
+const claseBadge = {
+  sube: 'bg-success-light text-success',
+  baja: 'bg-danger-light text-danger',
+  igual: 'bg-gray-100 text-text-soft',
+}
 
 // --- Piezas 2 y 3: resumen anual -------------------------------------------
 
@@ -128,6 +157,43 @@ const grafico = computed(() => {
         </div>
         <img :src="logoVialtec" alt="VialTec" class="h-11" />
       </header>
+
+      <!-- Comparación con el mes anterior (2026-11-02) -->
+      <div v-if="comparativo.length" class="mb-4 rounded-lg border border-gray-200 px-4 py-2">
+        <p class="pt-1 text-[11px] font-semibold uppercase tracking-widest text-text-soft">
+          Comparación con {{ comparativo[0].mesAnterior }}
+        </p>
+        <div
+          v-for="f in comparativo"
+          :key="f.tipo.id"
+          class="flex items-center justify-between gap-4 border-b border-gray-100 py-2.5 last:border-0"
+        >
+          <p class="flex items-baseline gap-2">
+            <span class="w-40 text-sm font-bold">{{ f.tipo.nombre }}</span>
+            <span class="text-xl font-extrabold">{{ f.actualTexto }}</span>
+            <span class="text-xs text-text-soft">vs. {{ f.anteriorTexto }} en {{ f.mesAnterior }}</span>
+          </p>
+          <span
+            class="whitespace-nowrap rounded-full px-3 py-1 text-sm font-bold"
+            :class="f.anterior === 0 ? claseBadge.igual : claseBadge[f.tendencia]"
+          >
+            {{ f.badge }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Interno vs. ventas externas, destacados (2026-11-02) -->
+      <div class="mb-5 grid grid-cols-2 gap-3">
+        <div v-for="o in origenes" :key="o.id" class="rounded-lg bg-gray-50 px-4 py-3">
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-text-soft">{{ o.titulo }}</p>
+          <p v-for="l in o.lineas" :key="l.id" class="mt-1.5 leading-none">
+            <span class="text-2xl font-extrabold text-vialtec">{{ l.valor }}</span>
+            <span class="ml-1 text-xs text-text-soft">{{ l.unidad }} {{ l.nombre }}</span>
+          </p>
+          <p v-if="!o.lineas.length" class="mt-1.5 text-sm text-text-soft">Sin despachos.</p>
+          <p class="mt-2 text-[11px] text-text-soft">{{ o.despachos }} despacho{{ o.despachos === 1 ? '' : 's' }}</p>
+        </div>
+      </div>
 
       <div class="grid grid-cols-3 gap-3">
         <div

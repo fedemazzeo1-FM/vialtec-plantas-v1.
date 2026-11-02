@@ -9,7 +9,7 @@
 // rasteriza cada <section data-pieza> y se desmonta.
 
 import { nextTick, reactive } from 'vue'
-import { fetchResumenAnual, nombreMesLargo } from '@/modules/despachos/services/informe-mensual.service'
+import { fetchComparativoMesAnterior, fetchResumenAnual, nombreMesLargo } from '@/modules/despachos/services/informe-mensual.service'
 
 const TITULOS = {
   obras: 'Despachos por obra',
@@ -53,7 +53,9 @@ export function useReporteEjecutivo() {
         estado.puedeCopiar = servicio.puedeCopiarImagen()
         estado.mes = mes
         estado.mesLabel = nombreMesLargo(mes)
-        estado.datos = { mesLabel: estado.mesLabel, obras, resumenAnual }
+        // El mes elegido es la última fila del resumen anual (enero..mes).
+        const comparativo = await fetchComparativoMesAnterior(mes, resumenAnual.filas.at(-1))
+        estado.datos = { mesLabel: estado.mesLabel, obras, resumenAnual, comparativo }
 
         await nextTick()
         // Deja que el navegador resuelva el layout del componente recién montado.

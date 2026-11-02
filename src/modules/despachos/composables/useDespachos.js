@@ -347,6 +347,41 @@ export function useDespachos() {
   }
 
   // -------------------------------------------------------------------------
+  // "Descargar informe mensual" (2026-11-02, pedido de Federico: botón arriba
+  // de todo, igual al de Combustible en Flota). Mes por defecto: el anterior
+  // (el último cerrado). Lleva el Resumen por obra a ese mes y reusa el
+  // mismo Excel/imágenes de esa sección.
+  // -------------------------------------------------------------------------
+
+  const modalInformeAbierto = ref(false)
+  const mesInforme = ref('')
+
+  function abrirModalInforme() {
+    const hoy = new Date()
+    const anterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
+    mesInforme.value = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, '0')}`
+    modalInformeAbierto.value = true
+  }
+
+  /** Pone el Resumen por obra en el mes elegido en el modal. */
+  async function usarMesInforme() {
+    if (!mesInforme.value) throw new Error('Elegí el mes del informe.')
+    mesResumen.value = mesInforme.value
+    await cargarResumenPorObra()
+    if (error.value) throw new Error(error.value)
+  }
+
+  async function descargarInformeDelMes() {
+    try {
+      await usarMesInforme()
+      await exportarInformeMensual()
+      if (!error.value) modalInformeAbierto.value = false
+    } catch (e) {
+      error.value = e.message
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Modal "Ver detalle de cargas" (🚛) — patente + cantidad + remito/vale por
   // camión, rango de N° al pie (memory/relevamiento-sistema-viejo.md Etapa 3).
   // -------------------------------------------------------------------------
@@ -734,6 +769,11 @@ export function useDespachos() {
     cargarResumenPorObra,
     exportandoInforme,
     exportarInformeMensual,
+    modalInformeAbierto,
+    mesInforme,
+    abrirModalInforme,
+    usarMesInforme,
+    descargarInformeDelMes,
     modalDetalleAbierto,
     pedidoDetalle,
     cargasDetalle,

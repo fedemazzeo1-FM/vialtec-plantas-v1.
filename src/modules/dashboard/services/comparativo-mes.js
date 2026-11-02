@@ -49,6 +49,24 @@ export function periodosComparativo(hoy = new Date()) {
   }
 }
 
+/**
+ * Mes cerrado completo contra el mes anterior completo (informe mensual,
+ * 2026-11-02): son los tramos de periodosComparativo() parados el día 1 del
+ * mes siguiente.
+ * @param {string} mes 'YYYY-MM'
+ */
+export function periodosMesCerrado(mes) {
+  const [anio, mesNum] = mes.split('-').map(Number)
+  return periodosComparativo(new Date(anio, mesNum, 1))
+}
+
+/** 'YYYY-MM' del mes anterior a `mes`. */
+export function mesAnteriorDe(mes) {
+  const [anio, mesNum] = mes.split('-').map(Number)
+  const previo = new Date(anio, mesNum - 2, 1)
+  return `${previo.getFullYear()}-${String(previo.getMonth() + 1).padStart(2, '0')}`
+}
+
 function tramo({ anio, mes0, diaHasta }, conAnio) {
   const mes = `${NOMBRES_MES[mes0]}${conAnio ? ` de ${anio}` : ''}`
   return diaHasta === 1 ? `1 de ${mes}` : `1 al ${diaHasta} de ${mes}`
@@ -113,12 +131,22 @@ export function filasComparativo(periodos, totalesActual, totalesAnterior) {
     }
 
     const signo = diferencia > 0 ? '+' : diferencia < 0 ? '−' : ''
+    // Versión corta para el informe mensual: "Asfalto: 5.063 tn, 9% más que
+    // septiembre (+435 tn)".
+    let comparacion
+    if (sinAnterior) comparacion = `sin producción en ${mesAnterior}`
+    else if (tendencia === 'igual') comparacion = `igual que ${mesAnterior}`
+    else comparacion = `${formatearPorcentaje(pct)} ${tendencia === 'sube' ? 'más' : 'menos'} que ${mesAnterior} (${signo}${cantidad(Math.abs(diferencia))})`
     return {
       tipo,
       actual,
       anterior,
       tendencia,
       frase,
+      mesAnterior,
+      actualTexto: cantidad(actual),
+      anteriorTexto: cantidad(anterior),
+      resumen: `${tipo.nombre}: ${cantidad(actual)}, ${comparacion}`,
       badge: sinAnterior
         ? 'sin producción el mes anterior'
         : `${tendencia === 'sube' ? '▲' : tendencia === 'baja' ? '▼' : '='} ${formatearPorcentaje(pct)} · ${signo}${cantidad(Math.abs(diferencia))}`,

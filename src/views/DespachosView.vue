@@ -71,6 +71,11 @@ const {
   cargarResumenPorObra,
   exportandoInforme,
   exportarInformeMensual,
+  modalInformeAbierto,
+  mesInforme,
+  abrirModalInforme,
+  usarMesInforme,
+  descargarInformeDelMes,
   modalDetalleAbierto,
   pedidoDetalle,
   cargasDetalle,
@@ -123,6 +128,18 @@ iniciar()
 const reporte = useReporteEjecutivo()
 
 const unidadDe = unidadLabelTipoProducto
+
+// "Imágenes para email" desde el modal de informe mensual: mismo flujo que el
+// botón de Resumen por obra, con el mes elegido en el modal.
+async function imagenesDelMesInforme() {
+  try {
+    await usarMesInforme()
+    modalInformeAbierto.value = false
+    await reporte.generar(mesResumen.value, resumenObras.value)
+  } catch (e) {
+    error.value = e.message
+  }
+}
 
 // Tipos sin KPI fijo arriba (los que no son `siempreVisible` en
 // config/tipos-producto.js, hoy mezcla cemento): se muestran solo si tienen algo.
@@ -180,6 +197,12 @@ async function descargarPdfVale() {
 <template>
   <div>
     <VSection title="Despachos">
+      <!-- Informe mensual como acción principal, arriba (2026-11-02, pedido
+           de Federico: igual que "Descargar informe mensual" de Combustible). -->
+      <div class="mb-4 flex justify-end">
+        <VButton @click="abrirModalInforme">📊 Descargar informe mensual</VButton>
+      </div>
+
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
@@ -724,6 +747,30 @@ async function descargarPdfVale() {
     >
       <ReporteEjecutivoMensual v-bind="reporte.datos" />
     </div>
+
+    <VModal :open="modalInformeAbierto" title="Descargar informe mensual" @update:open="modalInformeAbierto = $event">
+      <label class="mb-1 block text-sm font-semibold text-text-mid">Mes *</label>
+      <input
+        v-model="mesInforme"
+        type="month"
+        class="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+      />
+      <p class="mt-1 text-xs text-text-soft">
+        El Excel del informe (resumen, una hoja por obra, consumo de insumos, resumen anual y proveedores) o las
+        imágenes para el cuerpo del mail.
+      </p>
+      <div class="mt-5 flex flex-wrap justify-end gap-2">
+        <VButton variant="secondary" :disabled="exportandoInforme || reporte.generando" @click="modalInformeAbierto = false">
+          Cancelar
+        </VButton>
+        <VButton variant="secondary" :disabled="exportandoInforme || reporte.generando" @click="imagenesDelMesInforme">
+          🖼 Imágenes para email
+        </VButton>
+        <VButton :disabled="exportandoInforme || reporte.generando" @click="descargarInformeDelMes">
+          {{ exportandoInforme ? 'Generando…' : '⬇ Descargar Excel' }}
+        </VButton>
+      </div>
+    </VModal>
 
     <VModal
       :open="reporte.abierto"
