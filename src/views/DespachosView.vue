@@ -200,7 +200,23 @@ async function descargarPdfVale() {
       <!-- Informe mensual como acción principal, arriba (2026-11-02, pedido
            de Federico: igual que "Descargar informe mensual" de Combustible). -->
       <div class="mb-4 flex justify-end">
-        <VButton @click="abrirModalInforme">📊 Descargar informe mensual</VButton>
+        <VButton @click="abrirModalInforme">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="mr-1.5 inline-block h-4 w-4 align-[-3px]"
+            aria-hidden="true"
+          >
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+          Descargar informe mensual
+        </VButton>
       </div>
 
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
