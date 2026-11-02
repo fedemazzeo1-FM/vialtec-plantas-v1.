@@ -166,7 +166,7 @@ export async function fetchResumenPorObra(mes) {
   const filas = await fetchPaginado(() =>
     supabase
       .from(TABLA_PEDIDOS)
-      .select('obra_id, tipo, cantidad_despachada, tipo_pedido, cliente_externo')
+      .select('obra_id, tipo, cantidad_despachada, tipo_pedido, cliente_id, cliente_externo')
       .eq('estado', 'despachado')
       .gte('fecha_programada', desde)
       .lte('fecha_programada', hasta)
@@ -174,12 +174,14 @@ export async function fetchResumenPorObra(mes) {
 
   const porObra = new Map()
   for (const p of filas) {
-    // Ventas externas (sin obra_id) se agrupan por nombre de cliente, igual
-    // que el criterio ya usado para vales sin pedido (memory/business-rules.md).
-    const clave = p.obra_id ?? `venta:${p.cliente_externo || 'sin nombre'}`
+    // Ventas externas (sin obra_id) se agrupan por cliente_id (migración 74:
+    // editar el nombre en Maestros no las divide); cliente_externo es siempre
+    // el nombre actual del maestro.
+    const clave = p.obra_id ?? `venta:${p.cliente_id ?? p.cliente_externo ?? 'sin nombre'}`
     if (!porObra.has(clave)) {
       porObra.set(clave, {
         obraId: p.obra_id,
+        clienteId: p.obra_id ? null : p.cliente_id ?? null,
         clienteExterno: p.obra_id ? null : p.cliente_externo || 'Venta externa',
         ...totalesVacios(),
         cantidadDespachos: 0,

@@ -21,6 +21,15 @@ import { supabase } from '@/config/supabase'
  * consistente con que son vistas separadas, no un filtro que el usuario
  * pueda tocar.
  */
+// Migración 74: clientes y proveedores no admiten dos nombres iguales
+// (sin distinguir mayúsculas ni espacios) ni se pueden borrar si tienen
+// pedidos o ingresos (FK). Mensajes claros en vez del error de Postgres.
+function errorMaestro(error) {
+  if (error?.code === '23505') return new Error('Ya existe uno con ese nombre (sin distinguir mayúsculas ni espacios).')
+  if (error?.code === '23503') return new Error('No se puede eliminar: tiene pedidos o ingresos cargados. Desactivalo en su lugar.')
+  return error
+}
+
 function crudEntidad(tabla, columnaOrden = 'nombre', filtroFijo = null) {
   return {
     async fetch({ soloActivos = false } = {}) {
@@ -37,13 +46,13 @@ function crudEntidad(tabla, columnaOrden = 'nombre', filtroFijo = null) {
 
     async crear(registro) {
       const { data, error } = await supabase.from(tabla).insert({ ...registro, ...filtroFijo }).select().single()
-      if (error) throw error
+      if (error) throw errorMaestro(error)
       return data
     },
 
     async actualizar(id, cambios) {
       const { data, error } = await supabase.from(tabla).update(cambios).eq('id', id).select().single()
-      if (error) throw error
+      if (error) throw errorMaestro(error)
       return data
     },
 
@@ -66,7 +75,7 @@ function crudEntidad(tabla, columnaOrden = 'nombre', filtroFijo = null) {
     // del usuario (mismas policies de RLS) y deja el motivo en la auditoría.
     async eliminar(id, motivo) {
       const { error } = await supabase.rpc('plantas_eliminar_maestro', { p_tabla: tabla, p_id: id, p_motivo: motivo })
-      if (error) throw error
+      if (error) throw errorMaestro(error)
     },
   }
 }
