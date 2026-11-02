@@ -5,6 +5,18 @@
 ### ▶▶▶ 02/11 (con Federico) — APLICADO Y PUBLICADO
 
 **▶ RETOMAR AQUÍ (próxima sesión):**
+0. **Migración 74 — clientes y proveedores por identificador (escrita, SIN
+   CORRER; ensayo con Federico).** `supabase/migrations/74_clientes_proveedores_por_id.sql`
+   + `supabase/scripts/dry_run_migracion_74.sql` (A–J, termina con
+   "DRYRUN 74 OK") + `supabase/scripts/revertir_migracion_74.sql`. Control
+   md5 de `plantas_trg_ingresos_normalizar` (9ec7ae00…). Une casos 1-5 de
+   clientes, da de alta 8 (5 nuevos + G Y C, HV-VIAL y COLEGIO MOORLANDS
+   separados), `cliente_id`/`proveedor_id` con FK, triggers que mantienen el
+   texto = nombre actual del maestro y corrigen todo al renombrar.
+   VIAL 8 / EDMANCAR y MOORLANDS: Federico confirma el 03/11.
+   **Frontend commiteado SIN publicar: NO publicar antes de aplicar la 74**
+   (selecciona `cliente_id`/`proveedor_id`, que no existen todavía).
+   Pendiente aparte: "Unir con otro" para admin (Federico: por ahora no).
 1. **Vuelta al login cuando vence la sesión** (postergada por Federico el
    02/11): escuchar SIGNED_OUT / refresh fallido en
    `auth.store.js#escucharCambiosAuth` y redirigir a /login. Con la 72, las
