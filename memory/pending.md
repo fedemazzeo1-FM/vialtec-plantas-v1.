@@ -30,18 +30,45 @@
   reaplicarlo recién al aplicar la 74.
 
 **▶ RETOMAR AQUÍ (próxima sesión):**
-0. **Migración 74 — clientes y proveedores por identificador (escrita, SIN
-   CORRER; ensayo con Federico).** `supabase/migrations/74_clientes_proveedores_por_id.sql`
-   + `supabase/scripts/dry_run_migracion_74.sql` (A–J, termina con
-   "DRYRUN 74 OK") + `supabase/scripts/revertir_migracion_74.sql`. Control
-   md5 de `plantas_trg_ingresos_normalizar` (9ec7ae00…). Une casos 1-5 de
-   clientes, da de alta 8 (5 nuevos + G Y C, HV-VIAL y COLEGIO MOORLANDS
-   separados), `cliente_id`/`proveedor_id` con FK, triggers que mantienen el
-   texto = nombre actual del maestro y corrigen todo al renombrar.
-   VIAL 8 / EDMANCAR y MOORLANDS: resueltos el 04/11 (ver arriba).
-   **Frontend en la rama `mig-74-frontend`: sumarlo a main y publicar SOLO
-   después de aplicar la 74** (selecciona `cliente_id`/`proveedor_id`).
-   Pendiente aparte: "Unir con otro" para admin (Federico: por ahora no).
+0. **Migración 74 — clientes y proveedores por identificador: ENSAYO OK y
+   VUELTA ATRÁS OK (04/11, con Federico), SIN APLICAR por decisión de
+   Federico ("lo dejamos para la próxima").** Commit `6928af8`.
+   - Archivos: `supabase/migrations/74_clientes_proveedores_por_id.sql`,
+     `supabase/scripts/dry_run_migracion_74.sql` (A–J; antes de la migración,
+     en la misma transacción, guardar la foto `ensayo74.pedidos/.despachado/
+     .ingresos` con set_config — ver cabecera del archivo),
+     `supabase/scripts/revertir_migracion_74.sql`. Control md5 de
+     `plantas_trg_ingresos_normalizar` (9ec7ae00…).
+   - Resultado del 04/11: DRYRUN 74 OK — 322 pedidos, 881 ingresos, 27.358,294
+     despachado sin cambio; renombrar cliente → 2 pedidos; renombrar
+     proveedor → 35 ingresos y 41 movimientos; rechazos OK; permisos OK.
+     Reversión: trigger 9ec7ae00 → 8dde61fe → 9ec7ae00, pedidos/cargas/
+     clientes/ingresos idénticos, sin columnas ni respaldo. Producción intacta.
+     **Si pasaron días, volver a correr el ensayo antes de aplicar** (entran
+     pedidos nuevos; la lista de conteos por cliente del control A es fija).
+   - Contenido: une casos 1-5 de clientes, 7 altas (5 nuevos + G Y C y
+     HV-VIAL), VIAL 8 / EDMANCAR separados; COLEGIO MOORLANDS = obra
+     Moorlands-Tortuguitas (P-0015 y P-0112 pasan a obra 28); P-0123 (venta
+     AUTOVIA MERCOSUR) sin la obra 28 cargada por error, pedido y carga
+     (remito 12519) — estaba sumando en Tortuguitas en el informe de julio y
+     en Obras (`plantas_v_despachos_camion` → `obras_remitos_plantas`).
+   - Pasos al retomar: (re)ensayo → OK de Federico → `apply_migration` →
+     sumar la rama `mig-74-frontend` (71b966b) a main → build → `npx vercel
+     --prod` → verificar. **No publicar main con ese frontend antes de la 74.**
+   - **PREGUNTA ABIERTA a Federico — 3 ventas con obra cargada (mismo patrón
+     que P-0123, sin tocar):**
+     · **P-0056** (01/06): asfalto 228,88 tn, venta a "Municipalidad
+       exaltacion de la cruz", obra cargada "Municipalidad de Exaltación de
+       la Cruz" (id 38). 7 vales de balanza.
+     · **P-0075** (17/06): hormigón 40 m³, venta a INMIX, obra "Fábrica
+       Milanesa de Soja" (id 20); sus 4 cargas también (remitos 12489-12492).
+     · **P-0076** (18/06): hormigón 4 m³, venta a INMIX, misma obra (id 20);
+       su carga también (remito 12493).
+     Hoy el informe/Excel/Resumen por obra los cuenta en esa obra (interno),
+     no en ventas externas, y Obras ve esos remitos/vales en esa obra. Si
+     son errores, sumarlos a la 74 como P-0123 (pedido + cargas; en P-0056
+     también `plantas_vales.obra_id`) con respaldo y reversión, y re-ensayar.
+   - Pendiente aparte: "Unir con otro" para admin (Federico: por ahora no).
 1. ~~Vuelta al login~~ HECHO y publicado el 04/11.
 2. Mirar el primer despacho real de asfalto con la 73 (cargas desde balanza:
    neto y patente del vale; "Carga sin vale de balanza" con motivo en
