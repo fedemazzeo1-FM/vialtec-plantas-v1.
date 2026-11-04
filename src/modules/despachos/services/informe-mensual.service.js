@@ -256,13 +256,9 @@ export async function fetchDetalleDestinoDelMes(destino, mes, formulasPorId) {
   // agrupar: una venta externa sin cliente_externo cargado se agrupa bajo
   // "Venta externa" — el filtro de acá tiene que usar el mismo fallback o
   // esos despachos quedan fuera del detalle aunque sí sumen en el resumen.
-  // Migración 74: la venta externa se filtra por cliente_id (el nombre puede
-  // haberse editado en Maestros); el nombre queda solo para lo anterior a la 74.
   const propias = destino.obraId
     ? filas
-    : destino.clienteId
-      ? filas.filter((f) => f.cliente_id === destino.clienteId)
-      : filas.filter((f) => (f.cliente_externo || 'Venta externa') === destino.clienteExterno)
+    : filas.filter((f) => (f.cliente_externo || 'Venta externa') === destino.clienteExterno)
 
   const resumen = propias
     .map((p) => ({

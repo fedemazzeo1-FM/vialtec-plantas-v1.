@@ -105,17 +105,6 @@ function claveProveedor(nombre) {
   return limpio || 'Sin especificar'
 }
 
-/**
- * Migración 74: los ingresos apuntan al proveedor por proveedor_id y
- * `proveedor` es siempre su nombre actual en Maestros. Se agrupa por el
- * identificador; el nombre (del maestro) es lo que se muestra.
- */
-function agruparPorProveedor(fila, nombres) {
-  const clave = fila.proveedor_id ?? claveProveedor(fila.proveedor)
-  if (!nombres.has(clave)) nombres.set(clave, fila.proveedor_id ? fila.proveedor : claveProveedor(fila.proveedor))
-  return clave
-}
-
 /** Mismo largo de período, inmediatamente anterior al [desde, hasta] dado. */
 function periodoAnterior(desde, hasta) {
   const duracionMs = hasta.getTime() - desde.getTime()
@@ -134,22 +123,19 @@ async function totalesPorProveedor(desde, hasta) {
   const filas = await fetchPaginado(() =>
     supabase
       .from('plantas_ingresos')
-      .select('proveedor_id, proveedor, cantidad, unidad')
+      .select('proveedor, cantidad, unidad')
       .eq('anulado', false)
       .gte('fecha_ingreso', desde.toISOString())
       .lte('fecha_ingreso', hasta.toISOString())
   )
 
-  // Clave = proveedor_id; el Map de salida va por nombre actual del maestro
-  // (es lo que muestra el Dashboard y une el período actual con el anterior).
-  const nombres = new Map()
-  const porId = new Map()
+  const totales = new Map()
   for (const fila of filas) {
     const tn = aTn(fila.cantidad, fila.unidad)
-    const clave = agruparPorProveedor(fila, nombres)
-    porId.set(clave, (porId.get(clave) ?? 0) + tn)
+    const proveedor = claveProveedor(fila.proveedor)
+    totales.set(proveedor, (totales.get(proveedor) ?? 0) + tn)
   }
-  return new Map(Array.from(porId, ([clave, tn]) => [nombres.get(clave), tn]))
+  return totales
 }
 
 /**
@@ -201,18 +187,17 @@ export async function fetchAnaliticaProveedoresDetalle(rangoFechas = {}) {
   const filas = await fetchPaginado(() =>
     supabase
       .from('plantas_ingresos')
-      .select('proveedor_id, proveedor, material, cantidad, unidad')
+      .select('proveedor, material, cantidad, unidad')
       .eq('anulado', false)
       .gte('fecha_ingreso', desde.toISOString())
       .lte('fecha_ingreso', hasta.toISOString())
   )
 
-  const nombres = new Map()
   const porProveedor = new Map()
   for (const fila of filas) {
-    const clave = agruparPorProveedor(fila, nombres)
-    if (!porProveedor.has(clave)) porProveedor.set(clave, new Map())
-    const porInsumo = porProveedor.get(clave)
+    const proveedor = claveProveedor(fila.proveedor)
+    if (!porProveedor.has(proveedor)) porProveedor.set(proveedor, new Map())
+    const porInsumo = porProveedor.get(proveedor)
     const material = fila.material || 'Sin especificar'
     if (!porInsumo.has(material)) porInsumo.set(material, { viajes: 0, toneladas: 0 })
     const acc = porInsumo.get(material)
@@ -221,8 +206,7 @@ export async function fetchAnaliticaProveedoresDetalle(rangoFechas = {}) {
   }
 
   return Array.from(porProveedor.entries())
-    .map(([clave, porInsumo]) => {
-      const proveedor = nombres.get(clave)
+    .map(([proveedor, porInsumo]) => {
       const insumos = Array.from(porInsumo.entries())
         .map(([material, { viajes, toneladas }]) => ({ material, viajes, toneladas }))
         .sort((a, b) => b.toneladas - a.toneladas)
