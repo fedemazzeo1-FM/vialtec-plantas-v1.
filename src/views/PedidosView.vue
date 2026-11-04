@@ -73,6 +73,7 @@ const {
   descartarToastWhatsapp,
   baseListo,
   modalNuevoAbierto,
+  borradorRecuperado,
   guardandoNuevo,
   formNuevo,
   pasoNuevo,
@@ -465,6 +466,9 @@ iniciar()
          En Desktop (`!esMobile`) todos los `v-if` de paso quedan true a la
          vez — mismo formulario de siempre, un solo scroll, sin pasos. -->
     <VModal :open="modalNuevoAbierto" title="Nuevo pedido" @update:open="modalNuevoAbierto = $event">
+      <p v-if="borradorRecuperado" class="mb-3 rounded-lg bg-success-light px-3 py-2 text-sm text-success">
+        Recuperamos el pedido que estabas cargando antes de que venciera la sesión. Revisalo y guardalo.
+      </p>
       <template v-if="esMobile">
         <div class="mb-3 flex items-center gap-1.5">
           <div v-for="n in 3" :key="n" class="h-1.5 flex-1 rounded-full" :class="n <= pasoNuevo ? 'bg-vialtec' : 'bg-gray-200'" />

@@ -37,6 +37,7 @@ import { useBreakpoint } from '@/composables/useBreakpoint'
 import DesktopLayout from '@/layouts/DesktopLayout.vue'
 import MobileLayout from '@/layouts/MobileLayout.vue'
 import LoginView from '@/views/LoginView.vue'
+import VSesionVencida from '@/components/shared/VSesionVencida.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -53,4 +54,5 @@ onMounted(() => {
   <div v-else-if="route.name === 'login'" class="flex min-h-screen items-center justify-center text-sm text-gray-400">Cargando…</div>
   <MobileLayout v-else-if="esMobile" />
   <DesktopLayout v-else />
+  <VSesionVencida />
 </template>

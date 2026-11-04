@@ -20,7 +20,8 @@
 // editan. "Carga sin vale de balanza" queda para cuando no se pesó: se
 // tipea, pide motivo y la base la audita con ese motivo.
 
-import { computed, reactive, ref } from 'vue'
+import { computed, onScopeDispose, reactive, ref } from 'vue'
+import { registrarBorrador } from '@/services/borradores-sesion'
 import { registrarCargaAsfalto, finalizarDespacho, fetchValesAsfaltoDelPedido } from '@/modules/pedidos/services/pedidos.service'
 import { useAvisoPisoStock, inicioVentanaRecortes } from '@/modules/stock/composables/useAvisoPisoStock'
 
@@ -40,6 +41,9 @@ export function useDespachoAsfalto(onGuardado) {
   const { revisarRecortesPorPiso } = useAvisoPisoStock()
   const error = ref(null)
   const abierto = ref(false)
+  // Sesión vencida con el despacho abierto (2026-11-04): solo se avisa que
+  // no se guardó (services/borradores-sesion.js).
+  onScopeDispose(registrarBorrador('despacho-asfalto', 'el despacho de asfalto que estabas registrando', () => abierto.value, { soloAviso: true }))
   const pedido = ref(null)
   const cargas = ref([])
   const dividirPedido = ref(false)

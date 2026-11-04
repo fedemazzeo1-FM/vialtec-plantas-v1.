@@ -14,4 +14,32 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Sesión vencida (2026-11-04): una lectura rechazada por falta de sesión
+// (401) avisa a quien escuche (auth.store.js), que verifica la sesión y,
+// si ya no existe, muestra "Tu sesión venció" y lleva al login. No hay
+// import del store acá (evita una dependencia circular): se registra con
+// alRechazarSesion().
+const escuchas401 = new Set()
+
+/** @param {() => void} fn @returns {() => void} */
+export function alRechazarSesion(fn) {
+  escuchas401.add(fn)
+  return () => escuchas401.delete(fn)
+}
+
+async function fetchConAvisoDeSesion(...args) {
+  const respuesta = await fetch(...args)
+  if (respuesta.status === 401) {
+    const url = String(args[0]?.url ?? args[0] ?? '')
+    if (url.includes('/rest/v1/')) {
+      // Fuera del flujo del pedido: el store consulta la sesión, y eso no
+      // tiene que bloquear ni demorar esta respuesta.
+      setTimeout(() => escuchas401.forEach((fn) => fn()), 0)
+    }
+  }
+  return respuesta
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: fetchConAvisoDeSesion },
+})

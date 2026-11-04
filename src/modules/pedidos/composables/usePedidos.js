@@ -6,7 +6,8 @@
 // y su propio ciclo de guardado. PedidosView.vue queda como template puro
 // (memory/conventions.md).
 
-import { computed, reactive, ref } from 'vue'
+import { computed, onScopeDispose, reactive, ref } from 'vue'
+import { registrarBorrador, tomarBorrador } from '@/services/borradores-sesion'
 import {
   fetchTodosLosPedidos,
   fetchResumenPeriodo,
@@ -375,7 +376,24 @@ export function usePedidos() {
     if (pasoNuevo.value > 1) pasoNuevo.value -= 1
   }
 
+  // Sesión vencida con el pedido a medio cargar (2026-11-04): se guarda y
+  // se reabre al volver a entrar (services/borradores-sesion.js).
+  const borradorRecuperado = ref(false)
+  onScopeDispose(
+    registrarBorrador('pedido-nuevo', 'el pedido que estabas cargando', () =>
+      modalNuevoAbierto.value ? { form: { ...formNuevo }, paso: pasoNuevo.value } : null
+    )
+  )
+  const borradorNuevo = tomarBorrador('pedido-nuevo', auth.user?.email)
+  if (borradorNuevo) {
+    Object.assign(formNuevo, formularioPedidoVacio(), borradorNuevo.form)
+    pasoNuevo.value = borradorNuevo.paso || 1
+    borradorRecuperado.value = true
+    modalNuevoAbierto.value = true
+  }
+
   function abrirNuevo() {
+    borradorRecuperado.value = false
     Object.assign(formNuevo, formularioPedidoVacio())
     // Responsable precargado con el usuario logueado (2026-09-17, pedido de
     // Federico) — sigue siendo editable a mano, esto es solo el valor por
@@ -711,6 +729,7 @@ export function usePedidos() {
     descartarToastWhatsapp,
     baseListo,
     modalNuevoAbierto,
+    borradorRecuperado,
     guardandoNuevo,
     formNuevo,
     pasoNuevo,

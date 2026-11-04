@@ -49,6 +49,7 @@ import {
   ordenarDestacadosBascula,
 } from '@/modules/maestros/services/maestros.service'
 import { useAuthStore } from '@/stores/auth.store'
+import { registrarBorrador, tomarBorrador } from '@/services/borradores-sesion'
 import { formatearCantidad, formatearCantidadHasta, formatearNumeroPedido } from '@/services/formato-numeros'
 // Excel con formato corporativo (2026-09-03, pedido de Federico: logo +
 // estilo de colores + pie institucional en todos los exports) — reemplaza
@@ -155,6 +156,25 @@ const slots = ref([])
  * bundle principal para TODOS los roles, rompiendo el code-splitting por
  * ruta que Báscula ya tenía. Ver el comentario en auth.store.js#logout().
  */
+// Sesión vencida con pesadas a medio cargar (2026-11-04): las puertas ya
+// sobreviven en memoria (mismo usuario, sin recargar la pestaña); además se
+// guardan en sessionStorage por si el navegador recarga la página (iPhone).
+// Si entra otro usuario, auth.store.js las descarta (resetPuertasBascula).
+registrarBorrador('bascula', 'las pesadas en curso de Báscula', () =>
+  slots.value.length
+    ? slots.value.map((s) => ({ id: s.id, tipo: s.tipo, form: { ...s.form }, colapsado: s.colapsado }))
+    : null
+)
+
+/** Recupera las puertas guardadas al vencer la sesión, si la pestaña se recargó y quedaron vacías. */
+function recuperarPuertas(email) {
+  const guardadas = tomarBorrador('bascula', email)
+  if (!guardadas?.length || slots.value.length) return false
+  slots.value = guardadas.map((s) => ({ ...s, form: reactive(s.form), guardando: false, avisoPedido: null }))
+  contadorSlot = Math.max(contadorSlot, ...guardadas.map((s) => s.id))
+  return true
+}
+
 export function resetPuertasBascula() {
   slots.value = []
   preguntaCierreAbierta.value = false
@@ -177,6 +197,7 @@ const mensajeCierre = ref(null)
 export function useBascula() {
   const error = ref(null)
   const auth = useAuthStore()
+  recuperarPuertas(auth.user?.email)
 
   // "Editar"/"Eliminar" del historial (migración 31, 2026-09-08). Desde la
   // migración 47 (2026-09-30, pedido de Federico: habilitar Editar a

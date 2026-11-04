@@ -35,7 +35,8 @@ const route = useRoute()
 const modo = ref('login') // 'login' | 'olvide' | 'recovery'
 const error = ref(null)
 
-const email = ref('')
+// Volviendo de una sesión vencida: el email ya cargado (auth.store.js#emailVencido).
+const email = ref(auth.emailVencido || '')
 const password = ref('')
 const enviando = ref(false)
 
@@ -161,6 +162,9 @@ async function confirmarNuevaPassword() {
 
       <div v-if="error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
+      </div>
+      <div v-else-if="auth.emailVencido" class="rounded-lg bg-panel px-3 py-2 text-sm text-text-mid">
+        Tu sesión venció. Volvé a entrar para seguir donde estabas.
       </div>
 
       <div>

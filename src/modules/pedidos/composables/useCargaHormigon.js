@@ -15,7 +15,8 @@
 // finalizarDespacho() al terminar de cargar (parcial o completo, con
 // opción de dividir pedido) — Logica sis. plantas v1.rtf §2.2, migración 11.
 
-import { computed, reactive, ref } from 'vue'
+import { computed, onScopeDispose, reactive, ref } from 'vue'
+import { registrarBorrador } from '@/services/borradores-sesion'
 import { registrarCargaHormigon, finalizarDespacho } from '@/modules/pedidos/services/pedidos.service'
 import { useAvisoPisoStock, inicioVentanaRecortes } from '@/modules/stock/composables/useAvisoPisoStock'
 import { hoyISO } from '@/services/fecha'
@@ -31,6 +32,9 @@ export function useCargaHormigon(onGuardado) {
   const { revisarRecortesPorPiso } = useAvisoPisoStock()
   const error = ref(null)
   const abierto = ref(false)
+  // Sesión vencida con el despacho abierto (2026-11-04): solo se avisa que
+  // no se guardó (services/borradores-sesion.js).
+  onScopeDispose(registrarBorrador('despacho-mixer', 'el despacho que estabas registrando', () => abierto.value, { soloAviso: true }))
   const pedido = ref(null)
   const cargas = ref([])
   const dividirPedido = ref(false)

@@ -7,7 +7,8 @@
 // memory/architecture.md).
 
 import { defineStore } from 'pinia'
-import { supabase } from '@/config/supabase'
+import { supabase, alRechazarSesion } from '@/config/supabase'
+import { guardarBorradores, descartarBorradores } from '@/services/borradores-sesion'
 
 // Fix 2026-09-01: App.vue (onMounted) y el guard de router/index.js llaman a
 // restaurarSesion() en el mismo arranque, ambos viendo `listo === false` en
@@ -43,6 +44,8 @@ const TAB_A_MODULO = {
 // puede en teoría llamarse de nuevo tras un logout/remount) — mismo criterio que
 // promesaRestaurarSesion de arriba, pero para algo que solo debe engancharse 1 vez.
 let escuchandoCambiosAuth = false
+// true mientras corre logout(): ese SIGNED_OUT no es un vencimiento.
+let cerrandoSesion = false
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -72,6 +75,16 @@ export const useAuthStore = defineStore('auth', {
     // estaLogueado dé true. Mismo patrón que vialtec-flota-v2 (2026-09-08, Federico pidió
     // clonar el login de Flota, que ya tenía este flujo — acá no existía todavía).
     isPasswordRecovery: false,
+    // Sesión vencida (2026-11-04, pedido de Federico): la app queda visible
+    // con el aviso "Tu sesión venció" (VSesionVencida.vue) hasta que el
+    // usuario toca "Volver a entrar"; recién ahí se va al login, que lo
+    // devuelve a `rutaVencida`. `emailVencido` sobrevive al $reset() para
+    // precargar el login y saber si vuelve el mismo usuario.
+    sesionVencida: false,
+    rutaVencida: null,
+    emailVencido: null,
+    borradoresGuardados: [],
+    borradoresPerdidos: [],
   }),
 
   getters: {
@@ -144,7 +157,12 @@ export const useAuthStore = defineStore('auth', {
 
       if (errorRol) throw errorRol
       if (!rolRow || !rolRow.activo) {
-        await supabase.auth.signOut()
+        cerrandoSesion = true
+        try {
+          await supabase.auth.signOut()
+        } finally {
+          cerrandoSesion = false
+        }
         throw new Error(
           'Tu usuario no tiene un rol asignado (o está inactivo) en VialTec Plantas. Pedile a un admin que te lo asigne.'
         )
@@ -187,13 +205,24 @@ export const useAuthStore = defineStore('auth', {
 
     async login(email, password) {
       this.cargando = true
+      const emailVencido = this.emailVencido
       try {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
         this.user = data.user
         await this._cargarPerfil(data.user.email)
+        // Volvió a entrar OTRO usuario tras un vencimiento: lo que había en
+        // curso es del anterior (Báscula es una terminal compartida) — mismo
+        // criterio que logout().
+        if (emailVencido && emailVencido.toLowerCase() !== data.user.email.toLowerCase()) {
+          descartarBorradores()
+          const { resetPuertasBascula } = await import('@/modules/bascula/composables/useBascula')
+          resetPuertasBascula()
+        }
+        this.emailVencido = null
       } catch (e) {
         this.$reset()
+        this.emailVencido = emailVencido
         throw e
       } finally {
         this.cargando = false
@@ -247,7 +276,43 @@ export const useAuthStore = defineStore('auth', {
       escuchandoCambiosAuth = true
       supabase.auth.onAuthStateChange((event) => {
         if (event === 'PASSWORD_RECOVERY') this.isPasswordRecovery = true
+        // SIGNED_OUT sin haber tocado "Cerrar sesión": Supabase no pudo
+        // renovar la sesión (vencida o cerrada desde otro lado).
+        if (event === 'SIGNED_OUT' && !cerrandoSesion) this.marcarSesionVencida()
       })
+      // Lectura rechazada por falta de sesión (401) sin que Supabase haya
+      // avisado: se confirma que no hay sesión antes de marcarla vencida.
+      alRechazarSesion(async () => {
+        if (!this.user || this.sesionVencida) return
+        const { data } = await supabase.auth.getSession()
+        if (!data.session) this.marcarSesionVencida()
+      })
+    },
+
+    /** Deja la pantalla como está y muestra el aviso; guarda lo que se estaba cargando. */
+    marcarSesionVencida() {
+      if (!this.user || this.sesionVencida || this.isPasswordRecovery) return
+      const email = this.user.email
+      const { guardados, sinGuardar } = guardarBorradores(email)
+      this.emailVencido = email
+      this.rutaVencida = window.location.pathname + window.location.search
+      this.borradoresGuardados = guardados
+      this.borradoresPerdidos = sinGuardar
+      this.sesionVencida = true
+    },
+
+    /**
+     * "Volver a entrar": limpia el estado (sin tocar las puertas de Báscula,
+     * que se descartan solo si entra otro usuario) y devuelve la ruta a la
+     * que hay que volver después del login.
+     */
+    cerrarPorVencimiento() {
+      const ruta = this.rutaVencida
+      const email = this.emailVencido
+      this.$reset()
+      this.listo = true
+      this.emailVencido = email
+      return ruta
     },
 
     // "¿Olvidaste tu contraseña?" (LoginView.vue) — redirectTo explícito para que el link
@@ -281,7 +346,13 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async logout() {
-      await supabase.auth.signOut()
+      cerrandoSesion = true
+      try {
+        await supabase.auth.signOut()
+      } finally {
+        cerrandoSesion = false
+      }
+      descartarBorradores()
       this.$reset()
       this.listo = true
       // Terminal compartida entre turnos/operadores en Báscula (2026-09-14,
