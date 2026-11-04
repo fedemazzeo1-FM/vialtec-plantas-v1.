@@ -2,7 +2,7 @@
 -- Reversión de la migración 74: vuelve al nombre como texto (estado del
 -- 02/11/2026). Restaura los textos de pedidos y los 2 nombres del maestro
 -- desde plantas_respaldo_mig74 (incluido P-0015/P-0112 de vuelta a venta a
--- COLEGIO MOORLANDS), borra las 7 altas de clientes si no se usan
+-- COLEGIO MOORLANDS y P-0123 con su carga de vuelta a la obra 28), borra las 7 altas de clientes si no se usan
 -- en otro lado, y deja plantas_trg_ingresos_normalizar como en la 63
 -- (md5 9ec7ae00fea65e98e09beaa9da18c413).
 -- OJO: un nombre editado en Maestros DESPUÉS de aplicar la 74 ya quedó
@@ -29,7 +29,10 @@ update plantas_pedidos p set tipo_pedido = r.valor_anterior
  where r.tabla = 'plantas_pedidos' and r.columna = 'tipo_pedido' and r.id = p.id;
 update plantas_pedidos p set obra_id = r.valor_anterior::bigint
   from plantas_respaldo_mig74 r
- where r.tabla = 'plantas_pedidos' and r.columna = 'obra_id' and r.id = p.id;
+ where r.tabla = 'plantas_pedidos' and r.columna in ('obra_id', 'obra_id_p0123') and r.id = p.id;
+update plantas_cargas_hormigon c set obra_id = r.valor_anterior::bigint
+  from plantas_respaldo_mig74 r
+ where r.tabla = 'plantas_cargas_hormigon' and r.columna = 'obra_id' and r.id = c.id;
 
 alter table plantas_pedidos drop column cliente_id;
 

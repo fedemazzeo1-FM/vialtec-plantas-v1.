@@ -4,6 +4,10 @@
 -- transacción (o los dos dentro de un solo DO con EXECUTE). Termina SIEMPRE
 -- con ERROR "DRYRUN 74 OK — …" (todo revertido). No consume numeración de
 -- pedidos (no crea pedidos).
+-- Antes de la migración, en la misma transacción, guardar la foto:
+--   select set_config('ensayo74.pedidos', (select count(*) from plantas_pedidos)::text, true),
+--          set_config('ensayo74.despachado', (select sum(cantidad_despachada) from plantas_pedidos)::text, true),
+--          set_config('ensayo74.ingresos', (select count(*) from plantas_ingresos)::text, true);
 -- ============================================================================
 do $dry$
 declare
@@ -15,12 +19,14 @@ declare
   v_pedido    uuid;
   v_ingreso   uuid;
   v_mov_viejo int;
+  v_ing_trans int;
   r           record;
 begin
   -- A. Unificación y totales intactos
-  if (select count(*) from plantas_pedidos) <> 318
-     or (select sum(cantidad_despachada) from plantas_pedidos) <> 27358.294 then
-    raise exception 'A: cambió la cantidad de pedidos o el total despachado';
+  if (select count(*) from plantas_pedidos) <> current_setting('ensayo74.pedidos')::int
+     or (select sum(cantidad_despachada) from plantas_pedidos) <> current_setting('ensayo74.despachado')::numeric
+     or (select count(*) from plantas_ingresos) <> current_setting('ensayo74.ingresos')::int then
+    raise exception 'A: cambió la cantidad de pedidos/ingresos o el total despachado';
   end if;
   if exists (select 1 from plantas_pedidos where tipo_pedido = 'venta' and cliente_id is null)
      or exists (select 1 from plantas_ingresos where proveedor_id is null) then
@@ -34,7 +40,7 @@ begin
     select * from (values
       ('AGGM CONTRUCCIONES', 4), ('G Y C CONSTRUCCIONES S.A', 5), ('HV-VIAL S.A', 6),
       ('Municipalidad de Exaltación de la Cruz', 4), ('EMISER S.A', 1),
-      ('VIAL 8 S.A', 21), ('VIAL 8 S.A (EDMANCAR)', 10),
+      ('VIAL 8 S.A', 21), ('VIAL 8 S.A (EDMANCAR)', 11),
       ('CORRALON FILIBERTI', 1), ('Corralon ramiro antonazzi', 1), ('INMIX', 2),
       ('Lucas Maldonado', 2), ('Vialmani', 2)
     ) t(nombre, esperado)
@@ -44,10 +50,15 @@ begin
   end loop;
   if exists (select 1 from plantas_clientes where nombre ilike '%moorland%')
      or (select count(*) from plantas_pedidos where numero in (15, 112) and tipo_pedido = 'obra' and obra_id = 28 and cliente_externo is null and cliente_id is null) <> 2
-     or (select count(*) from plantas_pedidos where obra_id = 28) <> 13 then
+     or (select count(*) from plantas_pedidos where obra_id = 28) <> 12
+     or exists (select 1 from plantas_pedidos where numero = 123 and obra_id is not null)
+     or exists (select 1 from plantas_cargas_hormigon c join plantas_pedidos p on p.id = c.pedido_id where p.numero = 123 and c.obra_id is not null)
+     or (select cliente_externo from plantas_pedidos where numero = 123) <> 'AUTOVIA MERCOSUR' then
     raise exception 'A: COLEGIO MOORLANDS no pasó a la obra Moorlands-Tortuguitas como se esperaba';
   end if;
-  v_ok := v_ok || 'A 318 pedidos y 27.358,294 despachado sin cambio; casos 1-5 unidos, VIAL 8/EDMANCAR separados, P-0015 y P-0112 a Moorlands-Tortuguitas, 865 ingresos con proveedor_id'::text;
+  v_ok := v_ok || ('A ' || current_setting('ensayo74.pedidos') || ' pedidos, ' || current_setting('ensayo74.ingresos')
+    || ' ingresos y ' || current_setting('ensayo74.despachado') || ' despachado sin cambio;')::text;
+  v_ok := v_ok || ' casos 1-5 unidos, VIAL 8/EDMANCAR separados, P-0015 y P-0112 a Moorlands-Tortuguitas, P-0123 y su carga sin obra, todos los ingresos con proveedor_id'::text;
 
   perform set_config('request.jwt.claims',
     json_build_object('sub', v_felix, 'email', 'felix.pereyra@vialtec.com.ar', 'role', 'authenticated')::text, true);
@@ -63,18 +74,19 @@ begin
   v_ok := v_ok || 'B renombrar cliente (Felix): sus 2 pedidos pasan al nombre nuevo, ninguno con el viejo'::text;
 
   -- C. Felix renombra un proveedor → ingresos y movimientos de stock cambian
+  select count(*) into v_ing_trans from plantas_ingresos where proveedor = 'TRANSARIDOS S.A';
   select count(*) into v_mov_viejo from plantas_stock_movimientos
    where tipo in ('ingreso_proveedor', 'recalculo_bascula') and origen = 'TRANSARIDOS S.A';
   set local role authenticated;
   update plantas_proveedores set nombre = 'TRANSARIDOS PRUEBA' where nombre = 'TRANSARIDOS S.A';
   reset role;
-  if (select count(*) from plantas_ingresos where proveedor = 'TRANSARIDOS PRUEBA') <> 33
+  if (select count(*) from plantas_ingresos where proveedor = 'TRANSARIDOS PRUEBA') <> v_ing_trans
      or exists (select 1 from plantas_ingresos where proveedor = 'TRANSARIDOS S.A')
      or (select count(*) from plantas_stock_movimientos where origen = 'TRANSARIDOS PRUEBA') <> v_mov_viejo
      or exists (select 1 from plantas_stock_movimientos where origen = 'TRANSARIDOS S.A') then
     raise exception 'C: renombrar el proveedor no corrigió ingresos/movimientos';
   end if;
-  v_ok := v_ok || ('C renombrar proveedor (Felix): 33 ingresos y ' || v_mov_viejo || ' movimientos con el nombre nuevo')::text;
+  v_ok := v_ok || ('C renombrar proveedor (Felix): ' || v_ing_trans || ' ingresos y ' || v_mov_viejo || ' movimientos con el nombre nuevo')::text;
 
   -- D. Pedido guardado con el nombre escrito distinto → queda vinculado y con el nombre del maestro
   select id into v_pedido from plantas_pedidos where cliente_externo = 'AUTOVIA MERCOSUR' limit 1;

@@ -20,6 +20,9 @@
 --      mismo cliente, dos órdenes distintas). COLEGIO MOORLANDS no es un
 --      cliente: es la obra propia Moorlands-Tortuguitas (Federico, 04/11) —
 --      P-0015 y P-0112 pasan a pedidos de esa obra (id 28).
+--      P-0123 (venta a AUTOVIA MERCOSUR, 28/07) tenía cargada por error la
+--      obra Moorlands-Tortuguitas (Federico, 04/11): se le saca, al pedido y
+--      a su carga de mixer (remito 12519), que es lo que lee Obras.
 --   3. plantas_pedidos.cliente_id → plantas_clientes y
 --      plantas_ingresos.proveedor_id → plantas_proveedores (FK, ON DELETE
 --      RESTRICT), completados para todo el historial. Venta sin cliente_id:
@@ -95,6 +98,24 @@ end;
 $mig$;
 update plantas_pedidos set tipo_pedido = 'obra', obra_id = 28, cliente_externo = null
  where id in ('7dde927e-189a-43e3-975d-009c2f9b82d1', 'd43fe4d0-1147-4bb9-9972-9fba5ce38aab');
+
+-- P-0123: venta a AUTOVIA MERCOSUR con la obra 28 cargada por error.
+insert into plantas_respaldo_mig74
+select 'plantas_pedidos', id, 'obra_id_p0123', obra_id::text from plantas_pedidos
+ where id = '9ca7b987-2d41-42ce-adc2-bd371d1b63e5' and tipo_pedido = 'venta' and obra_id = 28;
+insert into plantas_respaldo_mig74
+select 'plantas_cargas_hormigon', id, 'obra_id', obra_id::text from plantas_cargas_hormigon
+ where pedido_id = '9ca7b987-2d41-42ce-adc2-bd371d1b63e5' and obra_id = 28;
+do $mig$
+begin
+  if (select count(*) from plantas_respaldo_mig74 where columna = 'obra_id_p0123') <> 1
+     or (select count(*) from plantas_respaldo_mig74 where tabla = 'plantas_cargas_hormigon') <> 1 then
+    raise exception 'P-0123: el pedido o su carga no son los esperados';
+  end if;
+end;
+$mig$;
+update plantas_pedidos set obra_id = null where id = '9ca7b987-2d41-42ce-adc2-bd371d1b63e5';
+update plantas_cargas_hormigon set obra_id = null where pedido_id = '9ca7b987-2d41-42ce-adc2-bd371d1b63e5';
 
 -- Nombres del maestro con espacios de más (casos 4 y 5).
 insert into plantas_respaldo_mig74
@@ -303,5 +324,6 @@ select plantas_auditar('CORREGIR', 'maestros', 'cliente', 'migracion-74',
     'clientes_corregidos', (select count(*) from plantas_respaldo_mig74 where tabla = 'plantas_clientes'),
     'clientes_alta', 7,
     'pedidos_a_obra_moorlands_tortuguitas', jsonb_build_array('P-0015', 'P-0112'),
+    'obra_quitada_por_error', jsonb_build_array('P-0123 (y su carga, remito 12519)'),
     'pedidos_con_cliente_id', (select count(*) from plantas_pedidos where cliente_id is not null),
     'ingresos_con_proveedor_id', (select count(*) from plantas_ingresos where proveedor_id is not null)));
