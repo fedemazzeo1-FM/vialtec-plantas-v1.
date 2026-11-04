@@ -4,6 +4,31 @@
 
 ### ▶▶▶ 02/11 (con Federico) — APLICADO Y PUBLICADO
 
+### ▶▶▶ 04/11 — sesión vencida PUBLICADA; 74 lista para ensayar
+
+- **Vuelta al login PUBLICADA** (`be89897`, `dpl_9DtZYz7Jt3V9u34Mko7yn2ASaQuq`,
+  bundle `index-CNG5Fz7c.js`, verificado servido). Aviso "Tu sesión venció"
+  (VSesionVencida.vue) ante SIGNED_OUT no pedido o 401 sin sesión
+  (config/supabase.js), login con email precargado y ?redirect= a la misma
+  pantalla; borradores (services/borradores-sesion.js): pedido nuevo y puertas
+  de Báscula se guardan; despachos solo avisan. Otro usuario → se descartan.
+  Probado en local venciendo la sesión de verdad (refresh inválido → 400 →
+  SIGNED_OUT): aviso, login, vuelta a /pedidos con el pedido recuperado, sin
+  errores de consola, sin pedido creado.
+- Origen: 401 del 03/11 12:33 AR = iPhone de Federico, pestaña de Plantas con
+  sesión vieja tras entrar a Flota (cada sistema guarda su sesión).
+- **Flota/Obras (solo diagnóstico, sin tocar):** Flota limpia el store en
+  SIGNED_OUT pero no avisa ni redirige hasta navegar, ni detecta 401. Obras no
+  escucha nada; además los partes offline enviados con sesión vencida quedan
+  como "conflicto" y no se reintentan (`vialtec-obras/src/offline/cola.js:50-53`).
+- **74 ajustada (04/11, Federico):** VIAL 8 / EDMANCAR separados (mismo
+  cliente, dos órdenes); COLEGIO MOORLANDS = obra propia Moorlands-Tortuguitas
+  (id 28): P-0015 y P-0112 pasan a pedidos de esa obra (commit `c25798e`).
+  Pendiente de respuesta: P-0123 (venta AUTOVIA MERCOSUR con obra
+  Moorlands-Tortuguitas cargada) — se deja como está.
+- Frontend de la 74 en la rama `mig-74-frontend` (fuera de main, `091b49b`):
+  reaplicarlo recién al aplicar la 74.
+
 **▶ RETOMAR AQUÍ (próxima sesión):**
 0. **Migración 74 — clientes y proveedores por identificador (escrita, SIN
    CORRER; ensayo con Federico).** `supabase/migrations/74_clientes_proveedores_por_id.sql`
@@ -13,14 +38,11 @@
    clientes, da de alta 8 (5 nuevos + G Y C, HV-VIAL y COLEGIO MOORLANDS
    separados), `cliente_id`/`proveedor_id` con FK, triggers que mantienen el
    texto = nombre actual del maestro y corrigen todo al renombrar.
-   VIAL 8 / EDMANCAR y MOORLANDS: Federico confirma el 03/11.
-   **Frontend commiteado SIN publicar: NO publicar antes de aplicar la 74**
-   (selecciona `cliente_id`/`proveedor_id`, que no existen todavía).
+   VIAL 8 / EDMANCAR y MOORLANDS: resueltos el 04/11 (ver arriba).
+   **Frontend en la rama `mig-74-frontend`: sumarlo a main y publicar SOLO
+   después de aplicar la 74** (selecciona `cliente_id`/`proveedor_id`).
    Pendiente aparte: "Unir con otro" para admin (Federico: por ahora no).
-1. **Vuelta al login cuando vence la sesión** (postergada por Federico el
-   02/11): escuchar SIGNED_OUT / refresh fallido en
-   `auth.store.js#escucharCambiosAuth` y redirigir a /login. Con la 72, las
-   lecturas sin sesión dan 401.
+1. ~~Vuelta al login~~ HECHO y publicado el 04/11.
 2. Mirar el primer despacho real de asfalto con la 73 (cargas desde balanza:
    neto y patente del vale; "Carga sin vale de balanza" con motivo en
    Auditoría).
