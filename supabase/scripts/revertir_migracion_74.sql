@@ -1,7 +1,8 @@
 -- ============================================================================
 -- Reversión de la migración 74: vuelve al nombre como texto (estado del
 -- 02/11/2026). Restaura los textos de pedidos y los 2 nombres del maestro
--- desde plantas_respaldo_mig74, borra las 8 altas de clientes si no se usan
+-- desde plantas_respaldo_mig74 (incluido P-0015/P-0112 de vuelta a venta a
+-- COLEGIO MOORLANDS), borra las 7 altas de clientes si no se usan
 -- en otro lado, y deja plantas_trg_ingresos_normalizar como en la 63
 -- (md5 9ec7ae00fea65e98e09beaa9da18c413).
 -- OJO: un nombre editado en Maestros DESPUÉS de aplicar la 74 ya quedó
@@ -19,10 +20,16 @@ drop function plantas_trg_pedidos_cliente();
 
 alter table plantas_pedidos drop constraint plantas_pedidos_venta_con_cliente;
 
--- Textos de pedidos como estaban
+-- Pedidos como estaban (textos de cliente, y P-0015/P-0112 de vuelta a venta)
 update plantas_pedidos p set cliente_externo = r.valor_anterior
   from plantas_respaldo_mig74 r
  where r.tabla = 'plantas_pedidos' and r.columna = 'cliente_externo' and r.id = p.id;
+update plantas_pedidos p set tipo_pedido = r.valor_anterior
+  from plantas_respaldo_mig74 r
+ where r.tabla = 'plantas_pedidos' and r.columna = 'tipo_pedido' and r.id = p.id;
+update plantas_pedidos p set obra_id = r.valor_anterior::bigint
+  from plantas_respaldo_mig74 r
+ where r.tabla = 'plantas_pedidos' and r.columna = 'obra_id' and r.id = p.id;
 
 alter table plantas_pedidos drop column cliente_id;
 
@@ -70,7 +77,7 @@ update plantas_clientes c set nombre = r.valor_anterior
 select set_config('plantas.motivo_eliminacion', 'Reversión de la migración 74', true);
 delete from plantas_clientes where nombre in (
   'G Y C CONSTRUCCIONES S.A', 'HV-VIAL S.A', 'CORRALON FILIBERTI', 'Corralon ramiro antonazzi',
-  'INMIX', 'Lucas Maldonado', 'Vialmani', 'COLEGIO MOORLANDS');
+  'INMIX', 'Lucas Maldonado', 'Vialmani');
 
 drop table plantas_respaldo_mig74;
 drop function plantas_normalizar_nombre(text);

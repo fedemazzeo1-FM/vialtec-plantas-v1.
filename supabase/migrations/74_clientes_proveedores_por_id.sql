@@ -16,9 +16,10 @@
 --      se pueden crear dos con el mismo nombre escrito distinto.
 --   2. Unifica los clientes divididos (casos 1-5 aprobados por Federico el
 --      02/11) y da de alta los que tienen pedidos y no estaban en el maestro.
---      VIAL 8 S.A / VIAL 8 S.A (EDMANCAR) y COLEGIO MOORLANDS quedan
---      separados (Federico confirma el 03/11); MOORLANDS se da de alta para
---      que tenga identificador.
+--      VIAL 8 S.A y VIAL 8 S.A (EDMANCAR) quedan separados (Federico, 04/11:
+--      mismo cliente, dos órdenes distintas). COLEGIO MOORLANDS no es un
+--      cliente: es la obra propia Moorlands-Tortuguitas (Federico, 04/11) —
+--      P-0015 y P-0112 pasan a pedidos de esa obra (id 28).
 --   3. plantas_pedidos.cliente_id → plantas_clientes y
 --      plantas_ingresos.proveedor_id → plantas_proveedores (FK, ON DELETE
 --      RESTRICT), completados para todo el historial. Venta sin cliente_id:
@@ -76,6 +77,25 @@ alter table plantas_respaldo_mig74 enable row level security;
 revoke all on plantas_respaldo_mig74 from public, anon, authenticated;
 
 -- 2. Unificación de clientes -------------------------------------------------
+-- COLEGIO MOORLANDS = obra propia Moorlands-Tortuguitas (id 28). P-0112 ya
+-- tenía la obra cargada (y su carga de mixer también); P-0015 no tiene cargas.
+insert into plantas_respaldo_mig74
+select 'plantas_pedidos', p.id, c.columna, c.valor
+  from plantas_pedidos p
+  cross join lateral (values ('tipo_pedido', p.tipo_pedido), ('obra_id', p.obra_id::text), ('cliente_externo', p.cliente_externo)) c(columna, valor)
+ where p.id in ('7dde927e-189a-43e3-975d-009c2f9b82d1', 'd43fe4d0-1147-4bb9-9972-9fba5ce38aab')
+   and p.cliente_externo = 'COLEGIO MOORLANDS';
+do $mig$
+begin
+  if (select count(*) from plantas_respaldo_mig74 where columna = 'tipo_pedido') <> 2
+     or not exists (select 1 from flota_obras where id = 28 and nombre = 'Moorlands-Tortuguitas') then
+    raise exception 'COLEGIO MOORLANDS: P-0015/P-0112 u obra 28 no son los esperados';
+  end if;
+end;
+$mig$;
+update plantas_pedidos set tipo_pedido = 'obra', obra_id = 28, cliente_externo = null
+ where id in ('7dde927e-189a-43e3-975d-009c2f9b82d1', 'd43fe4d0-1147-4bb9-9972-9fba5ce38aab');
+
 -- Nombres del maestro con espacios de más (casos 4 y 5).
 insert into plantas_respaldo_mig74
 select 'plantas_clientes', id, 'nombre', nombre from plantas_clientes
@@ -91,8 +111,7 @@ insert into plantas_clientes (nombre, activo) values
   ('Corralon ramiro antonazzi', true),
   ('INMIX', true),
   ('Lucas Maldonado', true),
-  ('Vialmani', true),
-  ('COLEGIO MOORLANDS', true);
+  ('Vialmani', true);
 
 create unique index plantas_clientes_nombre_normalizado
   on plantas_clientes (plantas_normalizar_nombre(nombre));
@@ -280,8 +299,9 @@ select plantas_auditar('CORREGIR', 'maestros', 'cliente', 'migracion-74',
   'Migración 74: editar el nombre en Maestros ya no divide pedidos, ingresos ni informes',
   null,
   jsonb_build_object(
-    'pedidos_renombrados', (select count(*) from plantas_respaldo_mig74 where tabla = 'plantas_pedidos'),
+    'pedidos_renombrados', (select count(*) from plantas_respaldo_mig74 where tabla = 'plantas_pedidos' and columna = 'cliente_externo') - 2,
     'clientes_corregidos', (select count(*) from plantas_respaldo_mig74 where tabla = 'plantas_clientes'),
-    'clientes_alta', 8,
+    'clientes_alta', 7,
+    'pedidos_a_obra_moorlands_tortuguitas', jsonb_build_array('P-0015', 'P-0112'),
     'pedidos_con_cliente_id', (select count(*) from plantas_pedidos where cliente_id is not null),
     'ingresos_con_proveedor_id', (select count(*) from plantas_ingresos where proveedor_id is not null)));

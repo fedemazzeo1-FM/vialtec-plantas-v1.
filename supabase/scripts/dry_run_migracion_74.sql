@@ -34,7 +34,7 @@ begin
     select * from (values
       ('AGGM CONTRUCCIONES', 4), ('G Y C CONSTRUCCIONES S.A', 5), ('HV-VIAL S.A', 6),
       ('Municipalidad de Exaltación de la Cruz', 4), ('EMISER S.A', 1),
-      ('VIAL 8 S.A', 21), ('VIAL 8 S.A (EDMANCAR)', 10), ('COLEGIO MOORLANDS', 2),
+      ('VIAL 8 S.A', 21), ('VIAL 8 S.A (EDMANCAR)', 10),
       ('CORRALON FILIBERTI', 1), ('Corralon ramiro antonazzi', 1), ('INMIX', 2),
       ('Lucas Maldonado', 2), ('Vialmani', 2)
     ) t(nombre, esperado)
@@ -42,7 +42,12 @@ begin
     select count(*) into v_n from plantas_pedidos p join plantas_clientes c on c.id = p.cliente_id where c.nombre = r.nombre;
     if v_n <> r.esperado then raise exception 'A: % tiene % pedidos (se esperaban %)', r.nombre, v_n, r.esperado; end if;
   end loop;
-  v_ok := v_ok || 'A 318 pedidos y 27.358,294 despachado sin cambio; casos 1-5 unidos, VIAL 8/EDMANCAR y MOORLANDS separados, 865 ingresos con proveedor_id'::text;
+  if exists (select 1 from plantas_clientes where nombre ilike '%moorland%')
+     or (select count(*) from plantas_pedidos where numero in (15, 112) and tipo_pedido = 'obra' and obra_id = 28 and cliente_externo is null and cliente_id is null) <> 2
+     or (select count(*) from plantas_pedidos where obra_id = 28) <> 13 then
+    raise exception 'A: COLEGIO MOORLANDS no pasó a la obra Moorlands-Tortuguitas como se esperaba';
+  end if;
+  v_ok := v_ok || 'A 318 pedidos y 27.358,294 despachado sin cambio; casos 1-5 unidos, VIAL 8/EDMANCAR separados, P-0015 y P-0112 a Moorlands-Tortuguitas, 865 ingresos con proveedor_id'::text;
 
   perform set_config('request.jwt.claims',
     json_build_object('sub', v_felix, 'email', 'felix.pereyra@vialtec.com.ar', 'role', 'authenticated')::text, true);
