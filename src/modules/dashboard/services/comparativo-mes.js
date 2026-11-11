@@ -92,13 +92,33 @@ function formatearPorcentaje(pct) {
 }
 
 /**
+ * ¿El tramo anterior es el mes previo entero? (mes cerrado, o el mes en curso
+ * ya pasó el último día del previo: 31 vs. 30, 30 vs. 28).
+ */
+export function anteriorEsMesCompleto({ anterior }) {
+  return anterior.diaHasta === diasDelMes(anterior.anio, anterior.mes0)
+}
+
+/**
  * Una fila por tipo con producción en alguno de los dos tramos.
  * @param {Record<string, number>} totalesActual  ({ asfaltoTn, hormigonM3, … })
  * @param {Record<string, number>} totalesAnterior
+ * @param {Record<string, number>|null} [totalesMesAnteriorCompleto] el mes
+ *   anterior entero: cuando su tramo da 0, la etiqueta nombra esos días (no
+ *   "el mes anterior") y la frase agrega cómo cerró el mes (2026-11-11,
+ *   Federico: "dice que el mes pasado no despachamos hormigón").
  */
-export function filasComparativo(periodos, totalesActual, totalesAnterior) {
+export function filasComparativo(periodos, totalesActual, totalesAnterior, totalesMesAnteriorCompleto = null) {
   const mesActual = NOMBRES_MES[periodos.actual.mes0]
   const mesAnterior = NOMBRES_MES[periodos.anterior.mes0]
+  const mesCompleto = anteriorEsMesCompleto(periodos)
+  // "del 1 al 10 de octubre" / "el 1 de octubre" / "en octubre" (mes entero).
+  const conAnio = periodos.actual.anio !== periodos.anterior.anio
+  const tramoAnterior = mesCompleto
+    ? `en ${mesAnterior}`
+    : periodos.anterior.diaHasta === 1
+      ? `el ${tramo(periodos.anterior, conAnio)}`
+      : `del ${tramo(periodos.anterior, conAnio)}`
 
   return LISTA_TIPOS_PRODUCTO.map((tipo) => {
     const actual = Number(totalesActual?.[tipo.total]) || 0
@@ -123,7 +143,9 @@ export function filasComparativo(periodos, totalesActual, totalesAnterior) {
         ? `En ${mesActual} no hubo despachos de ${producto}; ${referencia} fueron ${cantidad(anterior)}.`
         : `En lo que va de ${mesActual} no hay despachos de ${producto}; ${referencia} llevábamos ${cantidad(anterior)}.`
     } else if (sinAnterior) {
-      frase = `${inicio}; ${referencia} no hubo producción.`
+      const totalMes = Number(totalesMesAnteriorCompleto?.[tipo.total]) || 0
+      const cierre = !mesCompleto && totalMes > 0 ? ` (${mesAnterior} cerró con ${cantidad(totalMes)})` : ''
+      frase = `${inicio}; ${tramoAnterior} no hubo producción${cierre}.`
     } else if (tendencia === 'igual') {
       frase = `${inicio}, lo mismo que ${referencia}.`
     } else {
@@ -148,7 +170,7 @@ export function filasComparativo(periodos, totalesActual, totalesAnterior) {
       anteriorTexto: cantidad(anterior),
       resumen: `${tipo.nombre}: ${cantidad(actual)}, ${comparacion}`,
       badge: sinAnterior
-        ? 'sin producción el mes anterior'
+        ? `sin producción ${tramoAnterior}`
         : `${tendencia === 'sube' ? '▲' : tendencia === 'baja' ? '▼' : '='} ${formatearPorcentaje(pct)} · ${signo}${cantidad(Math.abs(diferencia))}`,
     }
   }).filter(Boolean)
