@@ -2,6 +2,15 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 11/11 — comparativo del Home PUBLICADO (`08940a5`, `dpl_4uAppVXykhFdp3HMYnuEG5aJ8BUR`)
+
+- Reclamo: "dice que el mes pasado no despachamos hormigón". El dato era
+  correcto (tramo 1-10/10 = 0 m³; octubre completo 751,5 m³ en 20 pedidos,
+  el primero el 13/10); la etiqueta "sin producción el mes anterior" se leía
+  como el mes entero. Ahora: "sin producción del 1 al 10 de octubre" y la
+  frase agrega "(octubre cerró con 751,5 m³)". Solo pantalla, base sin tocar.
+  Verificado en local y en produccion.vialtec.app logueado.
+
 ### ▶▶▶ 02/11 (con Federico) — APLICADO Y PUBLICADO
 
 ### ▶▶▶ 04/11 — sesión vencida PUBLICADA; 74 lista para ensayar
