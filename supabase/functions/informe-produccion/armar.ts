@@ -64,8 +64,8 @@ export type Datos = {
 
 type Proveedor = { proveedor: string; viajes: number; totalTn: number; insumos: Array<{ material: string; viajes: number; toneladas: number }> }
 
-/** Ingresos de proveedores, como la pantalla Stock → Analítica de proveedores: totales, por proveedor, por material
- *  y una tabla por proveedor (material, viajes, toneladas). */
+/** Ingresos de proveedores, como la pantalla Stock → Analítica de proveedores: totales, por proveedor y por material.
+ *  El detalle de cada proveedor va solo al Excel (Federico, 16/11: el mail se acercaba al límite de Gmail, ~102 KB). */
 export function seccionesProveedores(lista: Proveedor[], mesNombre: string): { kpis: Kpi[]; secciones: Seccion[] } {
   const tn = lista.reduce((a, x) => a + x.totalTn, 0)
   const viajes = lista.reduce((a, x) => a + x.viajes, 0)
@@ -93,7 +93,7 @@ export function seccionesProveedores(lista: Proveedor[], mesNombre: string): { k
         columnas: columnas('Proveedor'),
         filas: lista.map((x) => [x.proveedor, numeroAR(x.viajes), numeroAR(x.totalTn, DECIMALES)]),
         total,
-        nota: `Ingresos de ${mesNombre} cargados en Plantas (báscula y manuales, sin anulados), en toneladas.`,
+        nota: `Ingresos de ${mesNombre} cargados en Plantas (báscula y manuales, sin anulados), en toneladas. El detalle de cada proveedor por material está en el Excel (hoja Analítica de Proveedores).`,
       },
       {
         titulo: 'Ingresos por material',
@@ -101,11 +101,6 @@ export function seccionesProveedores(lista: Proveedor[], mesNombre: string): { k
         filas: [...porMaterial.entries()].sort((a, b) => b[1].tn - a[1].tn).map(([m, x]) => [m, numeroAR(x.viajes), numeroAR(x.tn, DECIMALES)]),
         total,
       },
-      ...lista.map((x) => ({
-        titulo: `${x.proveedor} · ${numeroAR(x.viajes)} viajes · ${numeroAR(x.totalTn, DECIMALES)} tn`,
-        columnas: columnas('Material'),
-        filas: x.insumos.map((i) => [i.material, numeroAR(i.viajes), numeroAR(i.toneladas, DECIMALES)]),
-      })),
     ],
   }
 }
@@ -200,7 +195,7 @@ export function armarContenido(d: Datos, cid: { mensual: string }, medidas: { me
     imagenes: [{ cid: cid.mensual, alt: `Gráfico: producción por mes hasta ${mesLabel}, un panel por producto`, ancho: medidas.mensual[0], alto: medidas.mensual[1] }],
     secciones,
     accion: { texto: 'Abrir informe', url: URL_INFORME }, // la URL real (una por destinatario) la pone core_informe_publicar
-    nota: `Datos al ${d.generadoEl}. Se genera el día 1 de cada mes, con el mes anterior cerrado.`,
+    nota: `Datos al ${d.generadoEl}. Se genera el día 3 de cada mes, con el mes anterior cerrado.`,
     prueba: d.prueba,
   }
 }

@@ -17,7 +17,7 @@ import { svgAPng } from '../_shared/mail/rasterizar.ts'
 // Informe mensual de Plantas por la bandeja de avisos de VT360 (16/11/2026). Reemplaza a la versión vieja, que leía
 // las tablas del sistema anterior (pedidos, ingresos: vacías) y mandaba directo a Resend con un dominio sin verificar:
 // nunca llegó a nadie.
-// Lo llama pg_cron el día 1 a las 08:00 AR (job informe-produccion-vialtec) con el secreto de Vault
+// Lo llama pg_cron el día 3 a las 08:00 AR (Federico, 16/11; antes día 1) (job informe-produccion-vialtec) con el secreto de Vault
 // (core_secreto_llamada). Lee con el MISMO código que Despachos → "Descargar informe mensual" (plantas.bundle.js,
 // generado con scripts/armar-informe-mail.mjs), arma el contenido con la plantilla única (la dibuja
 // notificaciones-enviar), un gráfico PNG en el cuerpo (cid) y el MISMO Excel adjunto; guarda los archivos en
