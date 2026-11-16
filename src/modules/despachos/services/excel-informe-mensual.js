@@ -43,6 +43,10 @@ import { formatearCantidad } from '@/services/formato-numeros'
 // vista del resto (violeta) en la barra de hojas de Excel.
 const AMARILLO_TAB = 'FFFFEB3B'
 
+// Hora de Argentina también cuando el Excel se arma en el servidor (mail
+// del informe mensual, Edge Function en UTC).
+const ZONA_AR = 'America/Argentina/Buenos_Aires'
+
 const TN = (v) => (v ? `${formatearCantidad(v, 2)} tn` : '—')
 const M3 = (v) => (v ? `${formatearCantidad(v, 1)} m³` : '—')
 
@@ -113,7 +117,7 @@ function armarHojaResumenMensual(workbook, datos) {
   // Fecha de exportación (2026-09-03, pedido de Federico, extendido a todos
   // los Excel — ver excel-corporativo.js).
   ws.mergeCells('A3:E3')
-  ws.getCell('A3').value = `Fecha de exportación: ${new Date().toLocaleString('es-AR')}`
+  ws.getCell('A3').value = `Fecha de exportación: ${new Date().toLocaleString('es-AR', { timeZone: ZONA_AR })}`
   ws.getCell('A3').font = { italic: true, size: 9, color: { argb: GRIS_SUAVE } }
 
   let fila = 4
@@ -342,7 +346,7 @@ function generarImagenGraficoAnual(filas) {
 }
 
 /** Hoja "Resumen anual": acumulado mes a mes del año hasta el mes elegido. */
-async function armarHojaResumenAnual(workbook, datos) {
+async function armarHojaResumenAnual(workbook, datos, graficoAnual = generarImagenGraficoAnual) {
   const ws = workbook.addWorksheet('Resumen anual')
   ws.columns = [{ width: 20 }, { width: 18 }, { width: 18 }]
   ws.properties.defaultRowHeight = 18
@@ -393,7 +397,7 @@ async function armarHojaResumenAnual(workbook, datos) {
   // del informe se sigue generando igual, solo sin el gráfico — no vale la
   // pena que un problema puramente visual tire abajo todo el export.
   try {
-    const imagenGrafico = await generarImagenGraficoAnual(datos.resumenAnual.filas)
+    const imagenGrafico = await graficoAnual(datos.resumenAnual.filas)
     const imageId = workbook.addImage({ buffer: imagenGrafico, extension: 'png' })
     ws.addImage(imageId, { tl: { col: 0, row: fila + 1 }, ext: { width: 630, height: 266 } })
   } catch (e) {
@@ -646,8 +650,12 @@ function armarHojaDestino(workbook, nombre, mesLabel, filasResumen, filasPesadas
  * mensual.mjs, usado durante el desarrollo de esta función).
  * @param {Awaited<ReturnType<import('./informe-mensual.service').fetchDatosInformeMensual>>} datos
  * @param {ArrayBuffer} logoBuffer bytes del logo (PNG) ya leídos
+ * @param {{ graficoAnual?: (filas: Array) => Promise<ArrayBuffer|Uint8Array> }} [opciones]
+ *   graficoAnual: quien dibuja el gráfico de la hoja "Resumen anual". En el
+ *   navegador, canvas (por defecto); en el informe por mail (Edge Function
+ *   informe-produccion, 16/11/2026) no hay `document` y lo dibuja en SVG → PNG.
  */
-export async function construirWorkbookInformeMensual(datos, logoBuffer) {
+export async function construirWorkbookInformeMensual(datos, logoBuffer, { graficoAnual } = {}) {
   const { default: ExcelJS } = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'VialTec Plantas'
@@ -655,7 +663,7 @@ export async function construirWorkbookInformeMensual(datos, logoBuffer) {
 
   const hojaResumen = armarHojaResumenMensual(workbook, datos)
   agregarLogo(workbook, hojaResumen, logoBuffer)
-  await armarHojaResumenAnual(workbook, datos)
+  await armarHojaResumenAnual(workbook, datos, graficoAnual)
   armarHojaProveedores(workbook, datos)
 
   for (const destino of datos.hojasInternas) {
