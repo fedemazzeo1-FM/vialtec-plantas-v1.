@@ -2,6 +2,39 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 16/11 — MAILS DE PLANTAS (bandeja compartida de Flota). informe-produccion DESPLEGADO y PROBADO; 75 ENSAYADA SIN APLICAR
+
+Pedido de Federico: (1) informe mensual nuevo, día 1 08:00, mismos 7 destinatarios, prueba de octubre a
+fedemazzeo1@gmail.com ANTES DEL 1/12; (2) aviso inmediato de stock crítico a Félix, Daniel Natel, Alejandro y Federico.
+La guía `memory/avisos-por-mail.md` de Flota NO existe: se trabajó leyendo `vialtec-flota-v2/supabase/functions/`
+(informe-flota, _shared/mail/LEEME.md) y `scripts/migraciones/core_avisos_f1_base.sql`. La base compartida no se toca.
+- **Informe** (`supabase/functions/informe-produccion/`): mismo contrato que informe-flota (secreto de Vault,
+  `{mes, test_email, dry_run}`, una corrida real por mes, core_informe_publicar → link "Abrir informe" de
+  equipos2.vialtec.app/informe/). Datos y Excel = el MISMO código de Despachos → "Descargar informe mensual",
+  empaquetado con `node scripts/armar-informe-mail.mjs` → `plantas.bundle.js` + `logo.bundle.js` (volver a correrlo si
+  cambia cualquier service del informe). Único cambio de front: `construirWorkbookInformeMensual(datos, logo,
+  { graficoAnual })` (en el servidor el gráfico del Excel va por SVG) y hora AR en "Fecha de exportación".
+  Mail: tarjetas por tipo con variación vs mes anterior + pedidos despachados; gráfico "Producción por mes" con un
+  panel por tipo (nunca sumados); tablas total interno/externo, por obra, ventas externas, insumos top 10.
+  `_shared/mail/graficos.ts` y `rasterizar.ts` son COPIA de Flota (a5d402a).
+- **DESPLEGADO 16/11** (CLI, `npx supabase functions deploy informe-produccion --remote=ejitztewkpnmrckwmvny
+  --no-verify-jwt --use-api --yes`; Federico logueado en la CLI). Dry run octubre OK (2,4 s; 6.359,3 tn / 751,5 m³ /
+  172 tn / 92 pedidos = base; Excel 16 hojas). **Prueba enviada** a fedemazzeo1@gmail.com (core_notificaciones 195,
+  enviado, Resend 01a1e626…, 2 adjuntos): LLEGÓ a Gmail, bandeja principal, 16/11 17:57 AR. Falta que Federico la mire.
+- (histórico) Despliegue bloqueado por herramienta: el conector MCP exige pegar el contenido de cada archivo (bundle 52 KB +
+  logo base64) → usar CLI: `npx supabase login` (Federico) y `npx supabase functions deploy informe-produccion
+  --project-ref ejitztewkpnmrckwmvny --no-verify-jwt --use-api`. Después: dry_run octubre y prueba
+  `{test_email: fedemazzeo1@gmail.com, mes: 2026-10}` por net.http_post con `core_secreto_llamada()`.
+  Mientras no se aplique la 75, el cron manda el secreto viejo → 401 (hoy tampoco llega nada).
+- **Migración 75** (`75_avisos_por_mail_plantas.sql`, ensayo `dry_run_migracion_75.sql`, vuelta atrás
+  `revertir_migracion_75.sql`): eventos informe_plantas_mensual (7) y plantas_stock_critico (4), cron con Vault,
+  aviso de stock por trigger de sentencia (solo ROJO, actual o proyectado con confirmados de la semana; un mail por
+  cambio de estado; si falla deja WARNING y no frena). **DRYRUN 75 OK 16/11 (A–I)**, producción intacta.
+  Falta OK de Federico para `apply_migration`.
+- **Stock: NINGÚN material tiene mínimo cargado** → todo verde, el aviso no sale nunca hasta que se carguen
+  (Maestros → Materiales). Pendiente de Federico: quién los carga / si quiere una propuesta.
+- Sin commit todavía (Federico no lo pidió).
+
 ### ▶▶▶ 11/11 — comparativo del Home PUBLICADO (`08940a5`, `dpl_4uAppVXykhFdp3HMYnuEG5aJ8BUR`)
 
 - Reclamo: "dice que el mes pasado no despachamos hormigón". El dato era
