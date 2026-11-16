@@ -318,12 +318,13 @@ function aTn(valor, unidad) {
   const n = Number(valor) || 0;
   return unidad === "kg" ? n / 1e3 : n;
 }
+var OFFSET_AR = "-03:00";
 function normalizarRango({ desde, hasta } = {}) {
   const hoy = /* @__PURE__ */ new Date();
   const inicioMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   return {
-    desde: desde ? /* @__PURE__ */ new Date(`${desde}T00:00:00`) : inicioMesActual,
-    hasta: hasta ? /* @__PURE__ */ new Date(`${hasta}T23:59:59`) : hoy
+    desde: desde ? /* @__PURE__ */ new Date(`${desde}T00:00:00${OFFSET_AR}`) : inicioMesActual,
+    hasta: hasta ? /* @__PURE__ */ new Date(`${hasta}T23:59:59.999${OFFSET_AR}`) : hoy
   };
 }
 function claveProveedor(nombre) {

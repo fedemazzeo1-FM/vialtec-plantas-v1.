@@ -79,6 +79,8 @@ export async function fetchResumenGeneral({ mes } = {}) {
 // Analítica de proveedores (CAMBIO 7)
 // ---------------------------------------------------------------------------
 
+const OFFSET_AR = '-03:00'
+
 function normalizarRango({ desde, hasta } = {}) {
   const hoy = new Date()
   const inicioMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
@@ -88,9 +90,12 @@ function normalizarRango({ desde, hasta } = {}) {
   // (que ya agregaba 'T23:59:59' y por eso quedaba bien). Se alinea el
   // criterio: siempre parsear con hora explícita para que el motor use el
   // timezone local del navegador.
+  // 16/11/2026: hora de Argentina explícita (UTC-3 fijo, sin horario de
+  // verano). En el navegador da lo mismo que antes; en el servidor (informe
+  // por mail, Edge Function en UTC) el mes se corría 3 horas.
   return {
-    desde: desde ? new Date(`${desde}T00:00:00`) : inicioMesActual,
-    hasta: hasta ? new Date(`${hasta}T23:59:59`) : hoy,
+    desde: desde ? new Date(`${desde}T00:00:00${OFFSET_AR}`) : inicioMesActual,
+    hasta: hasta ? new Date(`${hasta}T23:59:59.999${OFFSET_AR}`) : hoy,
   }
 }
 

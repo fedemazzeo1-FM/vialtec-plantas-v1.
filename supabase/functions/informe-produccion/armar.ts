@@ -27,6 +27,7 @@ export type Contenido = {
   accion?: { texto: string; url: string }
   nota?: string
   prueba?: boolean
+  sistema?: 'plantas'
 }
 
 export const URL_INFORME = 'https://equipos2.vialtec.app/informe/' // página "Abrir informe" de VT360 (vive en Flota)
@@ -54,32 +55,58 @@ export type Datos = {
   despachosAnterior: number // pedidos despachados del mes anterior
   serie: Array<J> // últimos 12 meses (filas de fetchResumenAnual: { mes: 'Octubre 2026', asfaltoTn, … })
   tipos: J[] // LISTA_TIPOS_PRODUCTO
+  // fetchAnaliticaProveedoresDetalle del mes (Stock → Analítica de proveedores). Sin comparar con el mes anterior
+  // (Federico, 16/11).
+  proveedores: Proveedor[]
   generadoEl: string
   prueba: boolean
 }
 
-const cant = (v: unknown, tipo: J) => `${numeroAR(Number(v) || 0, DECIMALES)} ${tipo.unidadLabel}`
-const cantO = (v: unknown, tipo: J) => ((Number(v) || 0) > 0 ? cant(v, tipo) : '—')
-const hay = (totales: J, tipo: J) => (Number(totales?.[tipo.total]) || 0) > 0
+type Proveedor = { proveedor: string; viajes: number; totalTn: number; insumos: Array<{ material: string; viajes: number; toneladas: number }> }
 
-function listaNatural(partes: string[]): string {
-  if (partes.length <= 1) return partes[0] ?? ''
-  return `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`
-}
+/** Ingresos de proveedores, como la pantalla Stock → Analítica de proveedores: totales, por proveedor, por material
+ *  y una tabla por proveedor (material, viajes, toneladas). */
+export function seccionesProveedores(lista: Proveedor[], mesNombre: string): { kpis: Kpi[]; secciones: Seccion[] } {
+  const tn = lista.reduce((a, x) => a + x.totalTn, 0)
+  const viajes = lista.reduce((a, x) => a + x.viajes, 0)
+  const kpis: Kpi[] = [
+    { etiqueta: 'Ingresos de proveedores', valor: numeroAR(tn, DECIMALES), unidad: 'tn', comparacion: `${numeroAR(lista.length)} proveedores` },
+    { etiqueta: 'Viajes de proveedores', valor: numeroAR(viajes), comparacion: `en ${mesNombre}` },
+  ]
+  if (!lista.length)
+    return { kpis, secciones: [{ titulo: 'Ingresos de proveedores', texto: `No hubo ingresos de proveedores en ${mesNombre}.` }] }
 
-/** Tabla de destinos (obras o clientes): una columna por tipo con algo en la tabla. */
-function tablaDestinos(titulo: string, filas: J[], subtotal: J, tipos: J[], encabezado: string, nota?: string): Seccion {
-  const conDatos = tipos.filter((t) => hay(subtotal, t))
+  const porMaterial = new Map<string, { viajes: number; tn: number }>()
+  for (const x of lista) for (const i of x.insumos) {
+    const acc = porMaterial.get(i.material) ?? { viajes: 0, tn: 0 }
+    acc.viajes += i.viajes
+    acc.tn += i.toneladas
+    porMaterial.set(i.material, acc)
+  }
+  const columnas = (primera: string) => [{ texto: primera }, { texto: 'Viajes', derecha: true }, { texto: 'Toneladas', derecha: true }]
+  const total = ['Total', numeroAR(viajes), numeroAR(tn, DECIMALES)]
   return {
-    titulo,
-    columnas: [{ texto: encabezado }, { texto: 'Desp.', derecha: true }, ...conDatos.map((t) => ({ texto: `${t.nombre} (${t.unidadLabel})`, derecha: true }))],
-    filas: filas.map((r) => [
-      r.nombre,
-      String(r.cantidadDespachos),
-      ...conDatos.map((t) => (hay(r, t) ? numeroAR(Number(r[t.total]), DECIMALES) : '—')),
-    ]),
-    total: ['Total', String(subtotal.despachos), ...conDatos.map((t) => numeroAR(Number(subtotal[t.total]) || 0, DECIMALES))],
-    nota,
+    kpis,
+    secciones: [
+      {
+        titulo: 'Ingresos por proveedor',
+        columnas: columnas('Proveedor'),
+        filas: lista.map((x) => [x.proveedor, numeroAR(x.viajes), numeroAR(x.totalTn, DECIMALES)]),
+        total,
+        nota: `Ingresos de ${mesNombre} cargados en Plantas (báscula y manuales, sin anulados), en toneladas.`,
+      },
+      {
+        titulo: 'Ingresos por material',
+        columnas: columnas('Material'),
+        filas: [...porMaterial.entries()].sort((a, b) => b[1].tn - a[1].tn).map(([m, x]) => [m, numeroAR(x.viajes), numeroAR(x.tn, DECIMALES)]),
+        total,
+      },
+      ...lista.map((x) => ({
+        titulo: `${x.proveedor} · ${numeroAR(x.viajes)} viajes · ${numeroAR(x.totalTn, DECIMALES)} tn`,
+        columnas: columnas('Material'),
+        filas: x.insumos.map((i) => [i.material, numeroAR(i.viajes), numeroAR(i.toneladas, DECIMALES)]),
+      })),
+    ],
   }
 }
 
@@ -130,13 +157,18 @@ export function armarContenido(d: Datos, cid: { mensual: string }, medidas: { me
     })
   }
 
+  const prov = seccionesProveedores(d.proveedores, mesNombre)
+  kpis.push(...prov.kpis)
+  secciones.push(...prov.secciones)
+
   const resumenTipos = listaNatural(tiposMes.map((t) => `${cant(total[t.total], t)} de ${t.nombre.toLowerCase()}`))
   return {
     tono: 'principal',
-    etiqueta: 'Informe mensual de Plantas',
+    sistema: 'plantas', // color, ícono y nombre de Plantas en la plantilla (16/11/2026)
+    etiqueta: 'Informe mensual',
     titulo: mesLabel,
     mensaje: tiposMes.length
-      ? `${mayuscula(mesNombre)} cerró con ${resumenTipos} en ${numeroAR(total.despachos)} pedidos despachados. El detalle por obra, pesadas, insumos y proveedores está en el Excel adjunto.`
+      ? `${mayuscula(mesNombre)} cerró con ${resumenTipos} en ${numeroAR(total.despachos)} pedidos despachados. El detalle por obra y las pesadas están en el Excel adjunto.`
       : `En ${mesNombre} no hubo despachos.`,
     preencabezado: tiposMes.map((t) => `${cant(total[t.total], t)} de ${t.nombre.toLowerCase()}`).join(' · ') || 'Sin despachos en el mes',
     kpis,

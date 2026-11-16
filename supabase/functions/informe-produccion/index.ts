@@ -93,6 +93,7 @@ Deno.serve(async (req: Request) => {
     const datos = {
       anio: periodo.anio, mes: periodo.mes, informe, comparativo, serie, generadoEl,
       despachosAnterior: anteriorPorObra.totalGeneral.despachos,
+      proveedores: informe.analiticaProveedores,
       tipos: LISTA_TIPOS_PRODUCTO,
       prueba: !!testEmail,
     }

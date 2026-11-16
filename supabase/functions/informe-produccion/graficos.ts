@@ -1,6 +1,6 @@
 // Gráficos del informe mensual de Plantas por mail (16/11/2026). SVG → PNG con ../_shared/mail/rasterizar.ts.
 // Mismo estilo que los de Flota (../_shared/mail/graficos.ts: tamaño 1072 px mostrado a 536, Manrope, marco
-// redondeado, paleta violeta de marca), pero REGLA DE PLANTAS: asfalto, hormigón y mezcla cemento nunca se suman ni
+// redondeado), con el azul petróleo de Plantas, pero REGLA DE PLANTAS: asfalto, hormigón y mezcla cemento nunca se suman ni
 // comparten barra. Por eso un panel por tipo, cada uno con su escala y su unidad (no barras apiladas).
 
 import { numeroAR } from '../_shared/mail/graficos.ts'
@@ -12,8 +12,9 @@ const C = {
   suave: '#6E6C70',
   grilla: '#ECEAEE',
   eje: '#C9C6CC',
-  marca: '#7B3A8E',
-  lavanda: '#B07ACC',
+  // Azul petróleo de Plantas (16/11/2026, el mismo acento que la plantilla le da a los mails de Plantas) y su claro.
+  marca: '#0F5F7A',
+  lavanda: '#8EC1D1',
 }
 const F = 'font-family="Manrope"'
 const esc = (t: unknown) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
