@@ -2,7 +2,7 @@
 
 ## ▶ RETOMAR AQUÍ
 
-### ▶▶▶ 16/11 — MAILS DE PLANTAS (bandeja compartida de Flota). informe-produccion DESPLEGADO y PROBADO; 75 ENSAYADA SIN APLICAR
+### ▶▶▶ 16/11 — MAILS DE PLANTAS (bandeja compartida de Flota). informe-produccion DESPLEGADO y PROBADO; 75 APLICADA 16/11
 
 Pedido de Federico: (1) informe mensual nuevo, día 1 08:00, mismos 7 destinatarios, prueba de octubre a
 fedemazzeo1@gmail.com ANTES DEL 1/12; (2) aviso inmediato de stock crítico a Félix, Daniel Natel, Alejandro y Federico.
@@ -30,7 +30,8 @@ La guía `memory/avisos-por-mail.md` de Flota NO existe: se trabajó leyendo `vi
   `revertir_migracion_75.sql`): eventos informe_plantas_mensual (7) y plantas_stock_critico (4), cron con Vault,
   aviso de stock por trigger de sentencia (solo ROJO, actual o proyectado con confirmados de la semana; un mail por
   cambio de estado; si falla deja WARNING y no frena). **DRYRUN 75 OK 16/11 (A–I)**, producción intacta.
-  Falta OK de Federico para `apply_migration`.
+  **APLICADA 16/11 (OK de Federico)** con apply_migration y verificada: 2 eventos, reglas 7 + 4, cron 0 11 1 * * con
+  Vault (sin el secreto viejo), respaldo 1, 17 materiales sin crítico, 4 triggers, 0 mails, permisos cerrados.
 - **Stock: NINGÚN material tiene mínimo cargado** → todo verde, el aviso no sale nunca hasta que se carguen
   (Maestros → Materiales). Pendiente de Federico: quién los carga / si quiere una propuesta.
 - Sin commit todavía (Federico no lo pidió).
