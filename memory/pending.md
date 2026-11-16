@@ -2,6 +2,52 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 16/11 (cierre) — MAILS DE PLANTAS: estado y lo que queda
+
+**Hecho y desplegado:** 75 aplicada; informe-produccion con analítica de proveedores (tarjetas tn/viajes, por
+proveedor, por material y detalle por proveedor; sin comparar con el mes anterior, pedido de Federico) y la identidad
+de Plantas: azul petróleo #0F5F7A (franja, etiqueta, mensaje, filete de tarjetas, títulos, botón, gráficos) + ícono
+y "PLANTAS" junto al logo. La plantilla es de Flota (`vialtec-flota-v2/supabase/functions/_shared/mail/plantilla.ts`,
+commit 8838f98, `Contenido.sistema`, opcional: sin él el HTML de Flota sale idéntico, verificado byte a byte);
+notificaciones-enviar redesplegado desde el repo de Flota (sus avisos siguieron saliendo bien después). Prueba final
+de octubre a federico.mazzeo@vialtec.com.ar: fila 198, enviado (Resend 01a1e636…). Imágenes de Despachos sacadas
+(3294723). Sesión de Flota avisada (acordó: archivos por nombre, pull --rebase; ella redespliega informe-flota encima).
+**Falta:**
+1. **Ícono:** `public/mail/plantas-icono.png` está commiteado pero el front NO se desplegó (falta OK de Federico para
+   `npx vercel --prod`) → hasta entonces el ícono de produccion.vialtec.app/mail/plantas-icono.png da 404 (en la
+   prueba se ve el hueco). Desplegar ANTES del 1/12. El deploy también lleva: analítica de proveedores en hora AR
+   explícita y Despachos sin imágenes.
+2. **Peso del mail:** octubre ≈ 92 KB de HTML (Gmail corta a ~102 KB → "Mensaje recortado"); proveedores suman ~45 KB
+   (las 8 tablas de detalle). Propuesta a Federico: dejar en el cuerpo tarjetas + "por proveedor" + "por material" y
+   pasar el detalle proveedor × material al Excel (ya está en la hoja "Analítica de Proveedores") o a UNA sola tabla
+   proveedor/material (~10 KB). Decidir antes del 1/12.
+3. **Push:** el modo automático bloqueó `git push` (Plantas y Flota); commits locales listos.
+4. **Aviso de stock con la marca de Plantas:** plantas_avisos_stock_revisar no manda `sistema: 'plantas'` (necesita
+   una migración chica con ensayo y OK).
+5. **Mínimos de stock — PROPUESTA para revisar con Félix (sin cargar).** Consumo real = fórmula × despachado,
+   01/08–15/11 (71 días de trabajo). Áridos y agua sin aviso.
+   | Material | tn por día de uso (alto p90) | Días con uso | Stock 16/11 | Mínimo propuesto |
+   |---|---|---|---|---|
+   | CEMENTO | 12,4 (30,4) | 44 | 111,8 | 50 tn ≈ 4 días (≈ 1,5 a ritmo alto) |
+   | ASFALTO CA30 | 6,4 (13,6) | 59 | 26,4 | 25 tn ≈ 4 días (≈ 2 a ritmo alto) |
+   | AM3 AUTOVIA | 15,3 (26,5) | 28 | 0 | 30 tn ≈ 2 días — es por obra: ¿aviso solo con trabajo de Autovía? |
+   | ASFALTO AM3 | 6,9 (9,5) | 11 | 0 | 15 tn ≈ 2 días — o sin aviso (se pide por trabajo) |
+   | FILLER | 11,7 (17,8) | 10 | 48,9 | 25 tn ≈ 2 días — ¿lo tratan como árido? |
+   | ADITIVO | 0,1 (0,2) | 42 | 10,1 | 1 tn ≈ 10 días |
+   | FUEL OIL | — (no está en fórmulas: el stock no baja con despachos) | 0 | 34,5 | sin aviso hasta que se registre su consumo |
+   Máximo vacío → amarillo a mínimo + 20 % (sin mail). OJO: AM3 AUTOVIA y ASFALTO AM3 quedaron en 0 por ajustes
+   manuales del 16/11 16:58; si se les carga mínimo, el aviso sale en el acto.
+6. **Despachos — propuesta de orden (sin codear, esperando OK):** hoy, de arriba abajo: botón informe; KPIs del mes +
+   "Total hormigón acumulado"; "Producción de asfalto 2026" (3 cards, iguales a Home); filtros (tipo, fórmula, obra,
+   cliente, desde/hasta + Filtrar/Limpiar); "Totales del filtro" + Exportar; "Resumen por obra" con SU PROPIO mes y
+   un segundo botón de informe ("📧 Exportar informe mensual", duplicado del de arriba); remitos manuales (colapsable);
+   recién al final la tabla. Propuesta: encabezado con "Descargar informe mensual" y "Generar remito manual";
+   3 pestañas — **Despachos** (filtros en una barra: período con atajos Este mes / Mes anterior / Rango, tipo,
+   destino = obra o cliente en un solo selector, fórmula; se aplican solos; totales del período pegados a la tabla +
+   Exportar a Excel; tabla con "Real" y la diferencia como marca, acciones Detalle + menú Corregir/Vale),
+   **Resumen por obra** (usa el período de los filtros, sin segundo selector de mes), **Remitos manuales**. Se van:
+   KPIs del mes, acumulado y producción de asfalto 2026 (están en Home) y el botón de informe duplicado.
+
 ### ▶▶▶ 16/11 — MAILS DE PLANTAS (bandeja compartida de Flota). informe-produccion DESPLEGADO y PROBADO; 75 APLICADA 16/11
 
 Pedido de Federico: (1) informe mensual nuevo, día 1 08:00, mismos 7 destinatarios, prueba de octubre a

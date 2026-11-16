@@ -110,6 +110,31 @@ export function seccionesProveedores(lista: Proveedor[], mesNombre: string): { k
   }
 }
 
+const cant = (v: unknown, tipo: J) => `${numeroAR(Number(v) || 0, DECIMALES)} ${tipo.unidadLabel}`
+const cantO = (v: unknown, tipo: J) => ((Number(v) || 0) > 0 ? cant(v, tipo) : '—')
+const hay = (totales: J, tipo: J) => (Number(totales?.[tipo.total]) || 0) > 0
+
+function listaNatural(partes: string[]): string {
+  if (partes.length <= 1) return partes[0] ?? ''
+  return `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`
+}
+
+/** Tabla de destinos (obras o clientes): una columna por tipo con algo en la tabla. */
+function tablaDestinos(titulo: string, filas: J[], subtotal: J, tipos: J[], encabezado: string, nota?: string): Seccion {
+  const conDatos = tipos.filter((t) => hay(subtotal, t))
+  return {
+    titulo,
+    columnas: [{ texto: encabezado }, { texto: 'Desp.', derecha: true }, ...conDatos.map((t) => ({ texto: `${t.nombre} (${t.unidadLabel})`, derecha: true }))],
+    filas: filas.map((r) => [
+      r.nombre,
+      String(r.cantidadDespachos),
+      ...conDatos.map((t) => (hay(r, t) ? numeroAR(Number(r[t.total]), DECIMALES) : '—')),
+    ]),
+    total: ['Total', String(subtotal.despachos), ...conDatos.map((t) => numeroAR(Number(subtotal[t.total]) || 0, DECIMALES))],
+    nota,
+  }
+}
+
 export function armarContenido(d: Datos, cid: { mensual: string }, medidas: { mensual: [number, number] }): Contenido {
   const { mesLabel, mesNombre, anteriorNombre } = nombresMes(d.anio, d.mes)
   const dp = d.informe.despachosPorObra
