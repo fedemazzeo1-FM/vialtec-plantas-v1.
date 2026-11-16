@@ -18,8 +18,6 @@ import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 import { formatearNumeroRemito, formatearNumeroPedido, formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
 import { ref } from 'vue'
-import ReporteEjecutivoMensual from '@/modules/despachos/components/ReporteEjecutivoMensual.vue'
-import { useReporteEjecutivo } from '@/modules/despachos/composables/useReporteEjecutivo'
 import {
   LISTA_TIPOS_PRODUCTO,
   esCircuitoBascula,
@@ -74,7 +72,6 @@ const {
   modalInformeAbierto,
   mesInforme,
   abrirModalInforme,
-  usarMesInforme,
   descargarInformeDelMes,
   modalDetalleAbierto,
   pedidoDetalle,
@@ -125,21 +122,7 @@ const {
 
 iniciar()
 
-const reporte = useReporteEjecutivo()
-
 const unidadDe = unidadLabelTipoProducto
-
-// "Imágenes para email" desde el modal de informe mensual: mismo flujo que el
-// botón de Resumen por obra, con el mes elegido en el modal.
-async function imagenesDelMesInforme() {
-  try {
-    await usarMesInforme()
-    modalInformeAbierto.value = false
-    await reporte.generar(mesResumen.value, resumenObras.value)
-  } catch (e) {
-    error.value = e.message
-  }
-}
 
 // Tipos sin KPI fijo arriba (los que no son `siempreVisible` en
 // config/tipos-producto.js, hoy mezcla cemento): se muestran solo si tienen algo.
@@ -366,20 +349,8 @@ async function descargarPdfVale() {
             <VButton size="sm" :disabled="exportandoInforme" @click="exportarInformeMensual">
               {{ exportandoInforme ? 'Generando…' : '📧 Exportar informe mensual' }}
             </VButton>
-            <!-- Reporte ejecutivo para el cuerpo del mail (2026-10-01, pedido
-                 de Federico): las 3 imágenes que antes se pegaban como
-                 capturas de pantalla, del mismo mes elegido arriba. -->
-            <VButton
-              size="sm"
-              variant="secondary"
-              :disabled="reporte.generando || cargandoResumen"
-              @click="reporte.generar(mesResumen, resumenObras)"
-            >
-              {{ reporte.generando ? 'Generando…' : '🖼 Imágenes para email' }}
-            </VButton>
           </div>
         </div>
-        <p v-if="reporte.error && !reporte.abierto" class="mb-2 text-sm text-danger">{{ reporte.error }}</p>
         <p v-if="cargandoResumen" class="text-sm text-text-soft">Cargando…</p>
         <div v-else-if="resumenObras.length" class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <VCard v-for="r in resumenObras" :key="r.obraId ?? r.nombre">
@@ -751,18 +722,6 @@ async function descargarPdfVale() {
         </div>
       </VModal>
     </Teleport>
-      <!-- Reporte ejecutivo: se monta fuera de pantalla solo mientras se
-         rasteriza (useReporteEjecutivo.js). `fixed` + left negativo y no
-         `display: none`: html2canvas necesita que esté renderizado. -->
-    <div
-      v-if="reporte.datos"
-      :ref="reporte.registrarContenedor"
-      class="pointer-events-none fixed top-0"
-      style="left: -99999px"
-      aria-hidden="true"
-    >
-      <ReporteEjecutivoMensual v-bind="reporte.datos" />
-    </div>
 
     <VModal :open="modalInformeAbierto" title="Descargar informe mensual" @update:open="modalInformeAbierto = $event">
       <label class="mb-1 block text-sm font-semibold text-text-mid">Mes *</label>
@@ -772,59 +731,18 @@ async function descargarPdfVale() {
         class="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
       />
       <p class="mt-1 text-xs text-text-soft">
-        El Excel del informe (resumen, una hoja por obra, consumo de insumos, resumen anual y proveedores) o las
-        imágenes para el cuerpo del mail.
+        El Excel del informe: resumen, una hoja por obra, consumo de insumos, resumen anual y proveedores. Es el
+        mismo que va adjunto en el informe que sale por mail el día 1.
       </p>
       <div class="mt-5 flex flex-wrap justify-end gap-2">
-        <VButton variant="secondary" :disabled="exportandoInforme || reporte.generando" @click="modalInformeAbierto = false">
+        <VButton variant="secondary" :disabled="exportandoInforme" @click="modalInformeAbierto = false">
           Cancelar
         </VButton>
-        <VButton variant="secondary" :disabled="exportandoInforme || reporte.generando" @click="imagenesDelMesInforme">
-          🖼 Imágenes para email
-        </VButton>
-        <VButton :disabled="exportandoInforme || reporte.generando" @click="descargarInformeDelMes">
+        <VButton :disabled="exportandoInforme" @click="descargarInformeDelMes">
           {{ exportandoInforme ? 'Generando…' : '⬇ Descargar Excel' }}
         </VButton>
       </div>
     </VModal>
 
-    <VModal
-      :open="reporte.abierto"
-      :title="`Imágenes para email — ${reporte.mesLabel}`"
-      size="xl"
-      @update:open="reporte.abierto = $event"
-    >
-      <div class="space-y-5">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p class="text-sm text-text-mid">
-            {{ reporte.puedeCopiar ? 'Copiá cada imagen y pegala directo en el cuerpo del mail.' : 'Descargá las imágenes y adjuntalas o insertalas en el mail.' }}
-          </p>
-          <div class="flex flex-wrap gap-2">
-            <VButton v-if="reporte.puedeCopiar" size="sm" @click="reporte.copiarTodas()">
-              {{ reporte.copiadasTodas ? '✓ Copiadas las 3' : 'Copiar las 3 juntas' }}
-            </VButton>
-            <VButton size="sm" variant="secondary" @click="reporte.descargarTodas()">⬇ Descargar las 3 (PNG)</VButton>
-            <VButton size="sm" variant="secondary" :disabled="reporte.generandoPdf" @click="reporte.descargarPdf()">
-              {{ reporte.generandoPdf ? 'Generando…' : '⬇ Descargar PDF' }}
-            </VButton>
-          </div>
-        </div>
-        <div v-if="reporte.error" class="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
-          {{ reporte.error }}
-        </div>
-        <div v-for="pieza in reporte.piezas" :key="pieza.id">
-          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p class="text-sm font-bold text-text">{{ pieza.titulo }}</p>
-            <div class="flex gap-2">
-              <VButton v-if="reporte.puedeCopiar" size="sm" @click="reporte.copiar(pieza)">
-                {{ pieza.copiada ? '✓ Copiada' : 'Copiar imagen' }}
-              </VButton>
-              <VButton size="sm" variant="secondary" @click="reporte.descargar(pieza)">Descargar PNG</VButton>
-            </div>
-          </div>
-          <img :src="pieza.url" :alt="pieza.titulo" class="w-full rounded-lg border border-border" />
-        </div>
-      </div>
-    </VModal>
   </div>
 </template>
