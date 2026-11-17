@@ -2,6 +2,16 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 17/11 — decisiones de Federico aplicadas
+- Informe: detalle de cada proveedor solo en el Excel (b330b99, desplegado). Sale el **día 3 a las 08:00** (76).
+- **76 APLICADA 17/11 (OK de Federico)**: cron `0 11 3 * *`; aviso de stock con sistema 'plantas' (etiqueta
+  "Stock crítico"); mínimos CEMENTO 50 tn, ASFALTO CA30 25 tn, ADITIVO 1 tn. Al aplicar, CA30 (18,5 tn, semana
+  13,4 tn) entró en crítico: 4 avisos reales enviados 17/11 12:02 AR (filas 217–220). AM3, AM3 AUTOVIA, FILLER y
+  FUEL OIL sin mínimo hasta que Federico lo revise con Félix. Vuelta atrás: `revertir_migracion_76.sql`.
+- **Front publicado** 17/11 (`dpl_C6782SBUyEYNjtFX8ojWTYnBJMKo`, bundle index-DS2tpITA.js): ícono
+  produccion.vialtec.app/mail/plantas-icono.png sirve 200; Despachos sin imágenes; analítica en hora AR.
+- SIGUE: orden de Despachos (propuesta aprobada, abajo, punto 6 del 16/11) → deploy → prueba final.
+
 ### ▶▶▶ 16/11 (cierre) — MAILS DE PLANTAS: estado y lo que queda
 
 **Hecho y desplegado:** 75 aplicada; informe-produccion con analítica de proveedores (tarjetas tn/viajes, por
