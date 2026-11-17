@@ -17,6 +17,9 @@
   (número real usado en la prueba), anulado "Prueba del sistema". Sin movimientos de stock ni vales de báscula.
 - **Publicado 17/11** con OK de Federico (`dpl_DMFbn1iDp6Cv7Mkakmj8dQPz9NQj`), junto con el Despachos reordenado de
   abajo (ya no está pendiente de publicar). Chunk DespachosView-CgzKI1if.js con "Generar vale manual".
+- Remito: "PARQUE INDUSTRIAL RUTA 6" / "RUTA N°6" en mayúsculas (43b7565), publicado 17/11
+  (`dpl_EVGbNGxqvHbPJRmex1mgQEP7o4zS`). Rechequeo 17/11: plantas_vales_manuales solo la leen sus 3 RPC y su pestaña;
+  sin vistas ni triggers; 0 movimientos de stock, pedidos o vales de báscula desde la 77.
 
 ### ▶▶▶ 17/11 — decisiones de Federico aplicadas
 - Informe: detalle de cada proveedor solo en el Excel (b330b99, desplegado). Sale el **día 3 a las 08:00** (76).
