@@ -3,7 +3,7 @@
 // maneja la pestaña "Vales manuales": listado, alta, anulación con motivo e impresión del vale y de su
 // remito (los mismos componentes que Báscula: ValeImprimible.vue y RemitoImprimible.vue).
 
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import {
   anularValeManual,
   fetchValesManuales,
@@ -83,6 +83,17 @@ export function useValesManuales({ formulas, patentes }) {
     if (bruto == null || tara == null || Number.isNaN(bruto) || Number.isNaN(tara)) return null
     return Math.round((bruto - tara) * 1000) / 1000
   })
+
+  // Igual que Báscula (useBascula.js#completarDesdePatente): al elegir una patente del catálogo se completan
+  // solos la tara y el chofer habitual; después se pueden cambiar a mano.
+  function alCambiarPatente() {
+    const encontrada = patentes.value.find((p) => p.patente === form.patente.trim())
+    if (!encontrada) return
+    if (encontrada.tara != null) form.tara = String(encontrada.tara).replace('.', ',')
+    if (encontrada.chofer_habitual) form.chofer = encontrada.chofer_habitual
+  }
+  // Al tipear o al elegir de la lista: se completa en cuanto coincide exacto con una patente del catálogo.
+  watch(() => form.patente, alCambiarPatente)
 
   function abrirNuevo() {
     Object.assign(form, formVacio())
@@ -283,6 +294,7 @@ export function useValesManuales({ formulas, patentes }) {
     guardando,
     errorForm,
     abrirNuevo,
+    alCambiarPatente,
     guardar,
     valeParaImprimir,
     valeImprimible,
