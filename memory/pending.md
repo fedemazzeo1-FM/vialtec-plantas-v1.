@@ -18,7 +18,10 @@
   filtrado (sin segundo selector de mes); columna "Despachado" con "de X pedido · faltó Y"; acciones Cargas /
   Corregir / Vale (sin menú: no hay componente compartido de menú); fuera KPIs del mes, acumulado y producción de
   asfalto 2026 (están en Home) y el segundo botón de informe. Cambio de comportamiento: por defecto muestra el mes en
-  curso (antes, todo el historial). Build OK. **Falta: probarlo logueado en local (localhost:5179) y `npx vercel --prod`.**
+  curso (antes, todo el historial). Build OK. **Probado logueado en local 17/11** (Federico logueado): Este mes = noviembre; Mes anterior = 6.359,3 tn /
+  751,5 m³ / 172,0 tn / 92 despachos (= base y mail); Resumen por obra = mismas cifras por obra que el mail;
+  Remitos manuales OK; sin errores de consola. **Falta `npx vercel --prod`** (el modo automático lo bloqueó: lo
+  corre Federico con `! npx vercel --prod` y después se verifica en produccion.vialtec.app/despachos).
 
 ### ▶▶▶ 16/11 (cierre) — MAILS DE PLANTAS: estado y lo que queda
 
