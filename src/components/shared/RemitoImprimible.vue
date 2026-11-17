@@ -50,7 +50,7 @@ const filasBlanco = computed(() => Math.max(1, 5 - props.items.length))
 
 const EMPRESA = {
   nombre: 'VIAL-TEC S.A.',
-  direccion1: 'Parque Industrial Ruta 6',
+  direccion1: 'PARQUE INDUSTRIAL RUTA 6',
   direccion3: 'Cardales - Exaltación de la Cruz (2814)',
   telefono: '(011) 3986-3446',
   condicionIva: 'I.V.A.: Responsable Inscripto',
@@ -58,7 +58,7 @@ const EMPRESA = {
   ieric: '87754-8',
   iibb: '901-904193-7',
   inicioActividad: '01/03/1998',
-  deposito: 'Parque Industrial Ruta N°6',
+  deposito: 'PARQUE INDUSTRIAL RUTA N°6',
 }
 
 const fechaLabel = computed(() => {
