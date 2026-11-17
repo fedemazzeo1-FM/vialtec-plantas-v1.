@@ -2,6 +2,21 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 17/11 (tarde) — Vales manuales: CODEADO, 77 APLICADA, SIN PUBLICAR
+- Pedido de Federico: vale con el formato del de balanza para retiros sin pesar. Decisiones suyas: **son
+  simulaciones**; bruto y tara a mano; **no descuentan stock; no suman a producción ni despachos**; sin pedido.
+- **77 aplicada 17/11 con su OK** (ensayo OK 8 puntos; `dry_run_migracion_77.sql`, `revertir_migracion_77.sql`):
+  tabla propia `plantas_vales_manuales` (nadie la lee para totales), N° M-00001 propio, destino obra o cliente
+  externo, mezcla de asfalto; RPC generar_vale_manual / generar_remito_vale_manual (N° de la numeración común de
+  remitos, una sola vez) / anular_vale_manual (motivo obligatorio, no se borra); permiso despachos/aprobar;
+  auditoría despachos/vale_manual.
+- Front: botón "+ Generar vale manual" y pestaña "Vales manuales" en Despachos (ValesManuales.vue +
+  useValesManuales.js); vale = ValeImprimible ("Original · Manual"); remito = RemitoImprimible ("S/Vale manual N°
+  M-…"); anulados no se imprimen. Auditoría con frase propia.
+- **Probado logueado en local 17/11:** M-00001 (PRUEBA OBRAS – NO USAR, 38,5 − 14,2 = 24,3 tn), remito **00169**
+  (número real usado en la prueba), anulado "Prueba del sistema". Sin movimientos de stock ni vales de báscula.
+- **Falta publicar** (`npx vercel --prod`, lo corre Federico), junto con el Despachos reordenado de abajo.
+
 ### ▶▶▶ 17/11 — decisiones de Federico aplicadas
 - Informe: detalle de cada proveedor solo en el Excel (b330b99, desplegado). Sale el **día 3 a las 08:00** (76).
 - **76 APLICADA 17/11 (OK de Federico)**: cron `0 11 3 * *`; aviso de stock con sistema 'plantas' (etiqueta

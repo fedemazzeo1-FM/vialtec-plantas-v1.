@@ -469,6 +469,19 @@ const ENTIDADES = {
     },
   },
 
+  // Vales manuales de Despachos (migración 77): simulaciones, no tocan producción ni stock.
+  vale_manual: {
+    principales: ['fecha_pesada', 'peso_bruto', 'tara', 'peso_neto', 'patente', 'chofer', 'numero_remito', 'observaciones'],
+    frase: (row, verbo) => {
+      const [, ...resto] = partesEtiqueta(row)
+      const sujeto = conDetalle(`el vale manual ${row.entidad_ref ?? ''}`.trim(), resto.filter((p) => !/^remito /.test(p)))
+      if (row.tipo_accion === 'EDITAR' && row.valores_despues?.numero_remito != null) {
+        return `generó el remito ${String(row.valores_despues.numero_remito).padStart(5, '0')} de ${sujeto}`
+      }
+      return `${verbo({ CREAR: 'generó', ANULAR: 'anuló' })} ${sujeto}`
+    },
+  },
+
   formula: {
     principales: ['nombre', 'tipo', 'activo', 'descripcion'],
     frase: (row, verbo) => {
