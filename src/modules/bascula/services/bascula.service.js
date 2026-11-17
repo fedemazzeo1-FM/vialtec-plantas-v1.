@@ -108,6 +108,8 @@ export function formatearNumeroValeArido(numero) {
  */
 export function formatearNumeroDeVale(vale) {
   if (!vale) return '—'
+  // Vale manual de Despachos (migración 77): "M-00001".
+  if (vale.numero_vale_manual != null) return `M-${String(vale.numero_vale_manual).padStart(5, '0')}`
   return vale.numero_vale_arido != null
     ? formatearNumeroValeArido(vale.numero_vale_arido)
     : formatearNumeroVale(vale.numero_vale)

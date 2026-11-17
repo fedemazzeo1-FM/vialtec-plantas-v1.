@@ -99,7 +99,10 @@ const copiasVale = [
         <img :src="logoVialtec" alt="VIAL-TEC S.A." class="h-14 w-auto" />
         <div class="text-right">
           <p class="text-2xl font-bold">Vale de pesaje N° {{ formatearNumeroDeVale(vale) }}</p>
-          <p class="text-sm font-semibold uppercase tracking-wide text-gray-400">{{ copia.titulo }}</p>
+          <!-- Vale manual de Despachos (migración 77): mismo formato, con su N° M-xxxxx y la marca "Manual". -->
+          <p class="text-sm font-semibold uppercase tracking-wide text-gray-400">
+            {{ copia.titulo }}<span v-if="vale.numero_vale_manual != null"> · Manual</span>
+          </p>
           <p class="text-[11px] leading-tight text-gray-400">{{ BALANZA_CERT_CALIBRACION }}</p>
         </div>
       </div>

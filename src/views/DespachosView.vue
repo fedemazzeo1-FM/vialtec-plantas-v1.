@@ -20,7 +20,8 @@ import { useDespachos, PERIODOS } from '@/modules/despachos/composables/useDespa
 import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 import { formatearNumeroRemito, formatearNumeroPedido, formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
+import ValesManuales from '@/modules/despachos/components/ValesManuales.vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   LISTA_TIPOS_PRODUCTO,
@@ -42,7 +43,16 @@ const TABS = [
   { valor: 'despachos', label: 'Despachos' },
   { valor: 'obras', label: 'Resumen por obra' },
   { valor: 'remitos', label: 'Remitos manuales' },
+  { valor: 'vales', label: 'Vales manuales' },
 ]
+// Vales manuales (migración 77): simulaciones, viven en su propio componente; el botón del encabezado
+// abre la pestaña y su formulario.
+const refValesManuales = ref(null)
+async function abrirValeManual() {
+  tabActiva.value = 'vales'
+  await nextTick()
+  refValesManuales.value?.abrirNuevo()
+}
 // La pestaña vive en ?tab= (mismo patrón que Stock y Maestros): F5 y "atrás" vuelven a la misma.
 const route = useRoute()
 const router = useRouter()
@@ -177,6 +187,7 @@ async function descargarPdfVale() {
       <!-- Acciones de la pantalla, arriba (el informe es el mismo Excel que va adjunto al mail del día 3). -->
       <div class="mb-4 flex flex-wrap justify-end gap-2">
         <VButton variant="secondary" @click="tabActiva = 'remitos'; abrirRemitoManual()">+ Generar remito manual</VButton>
+        <VButton variant="secondary" @click="abrirValeManual">+ Generar vale manual</VButton>
         <VButton @click="abrirModalInforme">
           <svg
             viewBox="0 0 24 24"
@@ -214,7 +225,7 @@ async function descargarPdfVale() {
       </div>
 
       <!-- Filtros: período, tipo, destino y mezcla. Se aplican solos y valen para Despachos y Resumen por obra. -->
-      <VCard v-if="tabActiva !== 'remitos'" class="mb-4">
+      <VCard v-if="tabActiva === 'despachos' || tabActiva === 'obras'" class="mb-4">
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div class="flex flex-wrap gap-1.5">
             <VButton
@@ -365,6 +376,15 @@ async function descargarPdfVale() {
 
       <!-- Pestaña Remitos manuales (2026-09-09): remito oficial sin pedido asociado, para envío de materiales a
            obra u otro movimiento interno — N° automático, misma numeración que los remitos de asfalto. -->
+      <ValesManuales
+        v-if="tabActiva === 'vales'"
+        ref="refValesManuales"
+        :obras="obras"
+        :clientes="clientes"
+        :formulas="formulas"
+        :patentes="patentes"
+      />
+
       <VCard v-if="tabActiva === 'remitos'">
           <p v-if="cargandoRemitosManuales" class="text-sm text-text-soft">Cargando…</p>
           <div v-else-if="remitosManuales.length" class="overflow-x-auto">
@@ -656,7 +676,7 @@ async function descargarPdfVale() {
       />
       <p class="mt-1 text-xs text-text-soft">
         El Excel del informe: resumen, una hoja por obra, consumo de insumos, resumen anual y proveedores. Es el
-        mismo que va adjunto en el informe que sale por mail el día 1.
+        mismo que va adjunto en el informe que sale por mail el día 3.
       </p>
       <div class="mt-5 flex flex-wrap justify-end gap-2">
         <VButton variant="secondary" :disabled="exportandoInforme" @click="modalInformeAbierto = false">
