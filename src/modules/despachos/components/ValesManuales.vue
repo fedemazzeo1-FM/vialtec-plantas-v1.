@@ -37,6 +37,7 @@ const {
   guardar,
   valeParaImprimir,
   valeImprimible,
+  acumuladoParaImprimir,
   modalValeAbierto,
   modalRemitoAbierto,
   generandoRemito,
@@ -241,7 +242,7 @@ defineExpose({ abrirNuevo })
           :obra-nombre="destinoDe(valeParaImprimir)"
           :mezcla-nombre="mezclaDe(valeParaImprimir)"
           :cliente-externo="!!valeParaImprimir.cliente_externo"
-          :acumulado-tn="Number(valeParaImprimir.peso_neto)"
+          :acumulado-tn="acumuladoParaImprimir"
         />
       </div>
       <div class="mt-4 flex flex-wrap justify-end gap-2">

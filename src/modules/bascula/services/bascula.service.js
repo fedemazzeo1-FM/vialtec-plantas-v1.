@@ -68,7 +68,9 @@ const MAX_LARGO_LEYENDA_VALES = 300
  * @param {Array<number|null>} numeros N° de vale, en cualquier orden.
  * @returns {string|null} null si no hay ningún vale.
  */
-export function leyendaValesRemito(numeros) {
+export function leyendaValesRemito(numeros, { singular = 'Vale de báscula', plural = 'Vales de báscula', formato = formatearNumeroVale } = {}) {
+  // singular/plural/formato: los vales manuales de Despachos (migración 78) usan la misma leyenda con
+  // "Vale(s) manual(es)" y su N° M-00001; Báscula llama sin opciones y queda igual que siempre.
   const vales = [...new Set((numeros ?? []).filter((n) => n != null).map(Number))].sort((a, b) => a - b)
   if (!vales.length) return null
 
@@ -80,18 +82,18 @@ export function leyendaValesRemito(numeros) {
     else tramos.push([n, n])
   }
   const textoTramo = ([desde, hasta]) =>
-    desde === hasta ? formatearNumeroVale(desde) : `${formatearNumeroVale(desde)} al ${formatearNumeroVale(hasta)}`
+    desde === hasta ? formato(desde) : `${formato(desde)} al ${formato(hasta)}`
   const pesadas = `${vales.length} pesada${vales.length === 1 ? '' : 's'}`
 
   if (tramos.length === 1) {
-    return `S/Vale de báscula N° ${textoTramo(tramos[0])} (correlativos — ${pesadas})`
+    return `S/${singular} N° ${textoTramo(tramos[0])} (correlativos — ${pesadas})`
   }
-  const porTramos = `S/Vales de báscula N° ${tramos.map(textoTramo).join(', ')} (${pesadas})`
+  const porTramos = `S/${plural} N° ${tramos.map(textoTramo).join(', ')} (${pesadas})`
   if (porTramos.length <= MAX_LARGO_LEYENDA_VALES) return porTramos
 
-  const primero = formatearNumeroVale(vales[0])
-  const ultimo = formatearNumeroVale(vales[vales.length - 1])
-  return `S/Vales de báscula entre N° ${primero} y N° ${ultimo} (${pesadas} no correlativas)`
+  const primero = formato(vales[0])
+  const ultimo = formato(vales[vales.length - 1])
+  return `S/${plural} entre N° ${primero} y N° ${ultimo} (${pesadas} no correlativas)`
 }
 
 // Ingreso y egreso de áridos comparten una numeración propia, separada de la

@@ -12,6 +12,25 @@ import {
   generarValeManual,
 } from '@/modules/despachos/services/vales-manuales.service'
 import { formatearCantidad } from '@/services/formato-numeros'
+import { leyendaValesRemito } from '@/modules/bascula/services/bascula.service'
+
+const ZONA_AR = 'America/Argentina/Buenos_Aires'
+
+/**
+ * Grupo de un vale manual (migración 78, gemela de plantas_grupo_vale_manual): mismo destino y mismo día de
+ * Argentina — igual que Báscula sin pedido (por obra y día). Los vales del grupo comparten remito.
+ */
+function grupoDe(v) {
+  const destino = v.obra_id != null ? `obra:${v.obra_id}` : `cliente:${String(v.cliente_externo ?? '').toLowerCase()}`
+  return `${destino}|${new Date(v.fecha_pesada).toLocaleDateString('en-CA', { timeZone: ZONA_AR })}`
+}
+
+/** Orden de pesada: fecha y, a igual fecha, número. */
+const antesOIgual = (a, b) => {
+  const ta = new Date(a.fecha_pesada).getTime()
+  const tb = new Date(b.fecha_pesada).getTime()
+  return ta < tb || (ta === tb && a.numero <= b.numero)
+}
 
 /** '38,5' → 38.5; vacío → null. */
 function aNumero(valor) {
@@ -43,6 +62,20 @@ export function useValesManuales({ formulas, patentes }) {
       error.value = e.message
     } finally {
       cargando.value = false
+    }
+  }
+
+  /**
+   * Como Báscula al imprimir (obtenerAcumuladoHastaFecha): los vales no anulados del grupo hasta este vale
+   * inclusive → acumulado en tn y N° para la leyenda del remito.
+   */
+  function resumenGrupoHasta(v) {
+    const grupo = grupoDe(v)
+    const delGrupo = vales.value.filter((x) => !x.anulado && grupoDe(x) === grupo && antesOIgual(x, v))
+    if (!delGrupo.some((x) => x.id === v.id) && !v.anulado) delGrupo.push(v)
+    return {
+      acumuladoTn: delGrupo.reduce((t, x) => t + Number(x.peso_neto), 0),
+      numeros: delGrupo.map((x) => x.numero),
     }
   }
 
@@ -170,6 +203,10 @@ export function useValesManuales({ formulas, patentes }) {
     }
   })
 
+  const acumuladoParaImprimir = computed(() =>
+    valeParaImprimir.value ? resumenGrupoHasta(valeParaImprimir.value).acumuladoTn : null
+  )
+
   function verVale(v) {
     valeParaImprimir.value = v
     modalValeAbierto.value = true
@@ -180,15 +217,21 @@ export function useValesManuales({ formulas, patentes }) {
     const v = valeParaImprimir.value
     if (!v || v.numero_remito == null) return null
     const patenteCatalogo = patentes.value.find((p) => p.patente === v.patente)
+    const { acumuladoTn, numeros } = resumenGrupoHasta(v)
     return {
       numeroRemito: v.numero_remito,
       fecha: v.fecha_pesada,
       destino: destinoDe(v),
       items: [
         {
-          cantidad: `${formatearCantidad(Number(v.peso_neto), 2)} tn`,
+          // Igual que el remito de Báscula: el acumulado del grupo hasta este vale y la leyenda de sus vales.
+          cantidad: `${formatearCantidad(acumuladoTn, 2)} tn`,
           detalle: 'MEZCLA ASFÁLTICA',
-          subtexto: `S/Vale manual N° ${formatearNumeroValeManual(v.numero)}`,
+          subtexto: leyendaValesRemito(numeros, {
+            singular: 'Vale manual',
+            plural: 'Vales manuales',
+            formato: formatearNumeroValeManual,
+          }),
         },
       ],
       transporte: patenteCatalogo ? (patenteCatalogo.es_externa ? 'Tercero' : 'Propio') : null,
@@ -298,6 +341,7 @@ export function useValesManuales({ formulas, patentes }) {
     guardar,
     valeParaImprimir,
     valeImprimible,
+    acumuladoParaImprimir,
     modalValeAbierto,
     modalRemitoAbierto,
     generandoRemito,
