@@ -1,7 +1,13 @@
-// Composable de Despachos: listado paginado + filtros, KPIs (mes + acumulado
-// histórico), resumen por obra, modal de detalle de cargas, corrección
-// post-despacho y remito imprimible. DespachosView.vue queda como template
-// puro (memory/conventions.md).
+// Composable de Despachos: listado paginado + filtros, resumen por obra,
+// modal de detalle de cargas, corrección post-despacho y remito imprimible.
+// DespachosView.vue queda como template puro (memory/conventions.md).
+//
+// Orden del 17/11/2026 (propuesta aprobada por Federico): un solo período
+// (atajos Este mes / Mes anterior / Todo / Rango) y un solo selector de
+// destino (obra o cliente) que gobiernan la tabla, sus totales y el Resumen
+// por obra; los filtros se aplican solos. Se fueron los KPIs del mes, el
+// acumulado histórico y la producción de asfalto del año (están en Home) y el
+// segundo selector de mes del Resumen por obra.
 //
 // Despachos es una vista SOBRE plantas_pedidos (estado='despachado'), no una
 // entidad propia — memory/relevamiento-sistema-viejo.md §3 / Logica sist
@@ -10,13 +16,11 @@
 // Pedidos) — memory/business-rules.md, "Fuente de verdad según el tipo de
 // transacción".
 
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import {
   fetchDespachos,
   fetchTodosLosDespachosFiltrados,
-  fetchAcumuladoHistorico,
-  fetchTotalesMes,
-  fetchResumenPorObra,
+  rangoDelMes,
   fetchCargasDelPedido,
   fetchValesDelPedido,
   fetchValeCompleto,
@@ -29,12 +33,7 @@ import { fetchFormulas } from '@/modules/maestros/services/formulas.service'
 // pedido por Federico) — mismo catálogo que ya usa el <select> de Pedidos
 // (migración 35), no se duplica la query.
 import { clientesService } from '@/modules/maestros/services/maestros.service'
-// Reuso de Home (memory/conventions.md: no duplicar lógica compartida entre
-// módulos) — 2026-09-06, pedido de Federico: las cards de producción anual
-// de asfalto de Despachos tienen que mostrar exactamente lo mismo que las
-// 3 cards de Home (Total año / Ammann 140 / Marini 180), mismo cálculo.
-import { fetchProduccionAnualAsfalto } from '@/modules/dashboard/services/dashboard.service'
-import { LISTA_TIPOS_PRODUCTO, nombreTipoProducto, sumarEnTotal, totalesVacios } from '@/config/tipos-producto'
+import { LISTA_TIPOS_PRODUCTO, magnitudTotales, nombreTipoProducto, sumarEnTotal, totalesVacios } from '@/config/tipos-producto'
 import { patentesService } from '@/modules/maestros/services/maestros.service'
 // Reuso de Báscula (memory/conventions.md: no duplicar lógica compartida
 // entre módulos) — el acumulado dinámico del día y el formato de N° de vale
@@ -50,10 +49,20 @@ import {
 
 const TAMANO_PAGINA = 20
 
-function mesActual() {
+/** 'YYYY-MM' del mes actual (desplazamiento 0) o del anterior (-1), en hora local. */
+function claveMes(desplazamiento = 0) {
   const hoy = new Date()
-  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
+  const d = new Date(hoy.getFullYear(), hoy.getMonth() + desplazamiento, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
+
+/** Atajos de período (17/11/2026). `rango` deja editar desde/hasta a mano. */
+export const PERIODOS = [
+  { valor: 'mes', label: 'Este mes' },
+  { valor: 'anterior', label: 'Mes anterior' },
+  { valor: 'todo', label: 'Todo' },
+  { valor: 'rango', label: 'Rango' },
+]
 
 export function useDespachos() {
   const { revisarRecortesPorPiso } = useAvisoPisoStock()
@@ -108,43 +117,6 @@ export function useDespachos() {
   }
 
   // -------------------------------------------------------------------------
-  // KPIs
-  // -------------------------------------------------------------------------
-
-  const kpisMes = ref(totalesVacios())
-  const kpisHistorico = ref(totalesVacios())
-
-  async function cargarKpis() {
-    try {
-      const [mes, historico] = await Promise.all([fetchTotalesMes(mesActual()), fetchAcumuladoHistorico()])
-      kpisMes.value = mes
-      kpisHistorico.value = historico
-    } catch (e) {
-      error.value = e.message
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Producción anual de asfalto por planta — mismas 3 cards que Home
-  // (Total año 2026 / Ammann 140 / Marini 180), ver dashboard.service.js.
-  // -------------------------------------------------------------------------
-
-  const cargandoProduccionAnual = ref(false)
-  const produccionAnual = reactive({ ammannTn: 0, mariniTn: 0, totalTn: 0 })
-
-  async function cargarProduccionAnual() {
-    cargandoProduccionAnual.value = true
-    error.value = null
-    try {
-      Object.assign(produccionAnual, await fetchProduccionAnualAsfalto())
-    } catch (e) {
-      error.value = e.message
-    } finally {
-      cargandoProduccionAnual.value = false
-    }
-  }
-
-  // -------------------------------------------------------------------------
   // Listado + filtros + paginación
   // -------------------------------------------------------------------------
 
@@ -153,6 +125,34 @@ export function useDespachos() {
   const paginaActual = ref(1)
   const cargando = ref(false)
   const filtros = reactive({ tipo: '', obraId: '', formulaId: '', clienteExterno: '', desde: '', hasta: '' })
+
+  // Período: por defecto, el mes en curso. Los atajos completan desde/hasta;
+  // "Rango" los deja como estén para editarlos.
+  const periodo = ref('mes')
+
+  function fechasDelPeriodo(valor) {
+    if (valor === 'mes') return rangoDelMes(claveMes(0))
+    if (valor === 'anterior') return rangoDelMes(claveMes(-1))
+    if (valor === 'todo') return { desde: '', hasta: '' }
+    return null
+  }
+
+  function elegirPeriodo(valor) {
+    periodo.value = valor
+    const fechas = fechasDelPeriodo(valor)
+    if (fechas) Object.assign(filtros, fechas)
+  }
+  elegirPeriodo('mes')
+
+  // Destino: un solo selector para obra propia o cliente de venta externa
+  // (antes eran dos). Valor 'obra:<id>' o 'cliente:<nombre>'; '' = todos.
+  const destino = computed({
+    get: () => (filtros.obraId ? `obra:${filtros.obraId}` : filtros.clienteExterno ? `cliente:${filtros.clienteExterno}` : ''),
+    set: (valor) => {
+      filtros.obraId = valor.startsWith('obra:') ? valor.slice(5) : ''
+      filtros.clienteExterno = valor.startsWith('cliente:') ? valor.slice(8) : ''
+    },
+  })
 
   function enriquecerFila(p) {
     return {
@@ -279,14 +279,25 @@ export function useDespachos() {
     cargarDespachos()
   }
 
+  // Los filtros se aplican solos (sin botón "Filtrar"). Pausa corta para no
+  // pedir datos con cada tecla de una fecha a medio escribir.
+  let pausa = null
+  let filtrosListos = false
+  watch(
+    () => ({ ...filtros }),
+    () => {
+      if (!filtrosListos) return
+      clearTimeout(pausa)
+      pausa = setTimeout(aplicarFiltros, 300)
+    },
+  )
+
   function limpiarFiltros() {
     filtros.tipo = ''
     filtros.obraId = ''
     filtros.formulaId = ''
     filtros.clienteExterno = ''
-    filtros.desde = ''
-    filtros.hasta = ''
-    aplicarFiltros()
+    elegirPeriodo('mes')
   }
 
   function cambiarPagina(pagina) {
@@ -295,47 +306,48 @@ export function useDespachos() {
   }
 
   // -------------------------------------------------------------------------
-  // Resumen por obra (selector de mes + grid de cards)
+  // Resumen por obra: el mismo universo que la tabla y sus totales (período,
+  // tipo, destino y mezcla de los filtros), agrupado por obra o cliente —
+  // mismo agrupamiento que fetchResumenPorObra (despachos.service.js), sin un
+  // segundo selector de mes ni otra consulta.
   // -------------------------------------------------------------------------
 
-  const mesResumen = ref(mesActual())
-  const resumenObras = ref([])
-  const cargandoResumen = ref(false)
-
-  async function cargarResumenPorObra() {
-    cargandoResumen.value = true
-    error.value = null
-    try {
-      const resumen = await fetchResumenPorObra(mesResumen.value)
-      resumenObras.value = resumen.map((r) => ({
-        ...r,
-        nombre: r.obraId ? obrasPorId.value[r.obraId]?.nombre || `Obra #${r.obraId}` : r.clienteExterno,
-      }))
-    } catch (e) {
-      error.value = e.message
-    } finally {
-      cargandoResumen.value = false
+  const resumenObras = computed(() => {
+    const porDestino = new Map()
+    for (const p of todosFiltrados.value) {
+      const clave = p.obra_id ?? `venta:${p.cliente_externo || 'sin nombre'}`
+      if (!porDestino.has(clave)) {
+        porDestino.set(clave, {
+          obraId: p.obra_id,
+          nombre: p.obra_id ? obrasPorId.value[p.obra_id]?.nombre || `Obra #${p.obra_id}` : p.cliente_externo || 'Venta externa',
+          ...totalesVacios(),
+          cantidadDespachos: 0,
+        })
+      }
+      const acc = porDestino.get(clave)
+      sumarEnTotal(acc, p.tipo, p.cantidad_despachada)
+      acc.cantidadDespachos += 1
     }
-  }
+    return Array.from(porDestino.values()).sort((a, b) => magnitudTotales(b) - magnitudTotales(a))
+  })
 
   // -------------------------------------------------------------------------
-  // "Exportar informe mensual" (2026-09-02, pedido de Federico — botón
-  // EXPORTAR INFORME MENSUAL en Resumen por obra): arma el .xlsx completo
-  // (Resumen mensual + Resumen anual + una hoja por obra/cliente) para el
-  // mismo `mesResumen` que ya está seleccionado en esta sección — el
-  // informe sigue al selector de mes que ya existía, no uno nuevo.
+  // Informe mensual en Excel (2026-09-02; desde el 17/11/2026 solo desde el
+  // botón "Descargar informe mensual" de arriba, con su propio mes): .xlsx
+  // completo (Resumen mensual + Resumen anual + una hoja por obra/cliente),
+  // el mismo que va adjunto en el informe por mail.
   // Import dinámico de exceljs (misma razón que xlsx en Báscula/Stock: no
   // inflar el chunk de Despachos con una librería pesada que no todos usan).
   // -------------------------------------------------------------------------
 
   const exportandoInforme = ref(false)
 
-  async function exportarInformeMensual() {
+  async function exportarInformeMensual(mes) {
     exportandoInforme.value = true
     error.value = null
     try {
       const [datos, { generarInformeMensualExcel }] = await Promise.all([
-        fetchDatosInformeMensual(mesResumen.value),
+        fetchDatosInformeMensual(mes),
         import('@/modules/despachos/services/excel-informe-mensual'),
       ])
       await generarInformeMensualExcel(datos)
@@ -349,36 +361,24 @@ export function useDespachos() {
   // -------------------------------------------------------------------------
   // "Descargar informe mensual" (2026-11-02, pedido de Federico: botón arriba
   // de todo, igual al de Combustible en Flota). Mes por defecto: el anterior
-  // (el último cerrado). Lleva el Resumen por obra a ese mes y reusa el
-  // mismo Excel/imágenes de esa sección.
+  // (el último cerrado).
   // -------------------------------------------------------------------------
 
   const modalInformeAbierto = ref(false)
   const mesInforme = ref('')
 
   function abrirModalInforme() {
-    const hoy = new Date()
-    const anterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
-    mesInforme.value = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, '0')}`
+    mesInforme.value = claveMes(-1)
     modalInformeAbierto.value = true
   }
 
-  /** Pone el Resumen por obra en el mes elegido en el modal. */
-  async function usarMesInforme() {
-    if (!mesInforme.value) throw new Error('Elegí el mes del informe.')
-    mesResumen.value = mesInforme.value
-    await cargarResumenPorObra()
-    if (error.value) throw new Error(error.value)
-  }
-
   async function descargarInformeDelMes() {
-    try {
-      await usarMesInforme()
-      await exportarInformeMensual()
-      if (!error.value) modalInformeAbierto.value = false
-    } catch (e) {
-      error.value = e.message
+    if (!mesInforme.value) {
+      error.value = 'Elegí el mes del informe.'
+      return
     }
+    await exportarInformeMensual(mesInforme.value)
+    if (!error.value) modalInformeAbierto.value = false
   }
 
   // -------------------------------------------------------------------------
@@ -508,18 +508,10 @@ export function useDespachos() {
   // que usa el resto del sistema, ver DespachoImprimible.vue).
   // -------------------------------------------------------------------------
 
+  // Desde el 17/11/2026 tienen su propia pestaña (antes, card plegable arriba
+  // de la tabla).
   const remitosManuales = ref([])
   const cargandoRemitosManuales = ref(false)
-  // Plegado por defecto (2026-09-14, pedido de Federico): la card ocupaba
-  // espacio arriba de la tabla principal de Despachos aunque no se necesite
-  // ver el listado a cada rato — mismo patrón de toggle que las puertas de
-  // Báscula (useBascula.js#toggleColapso), acá para una sola card en vez de
-  // por-slot.
-  const remitosManualesColapsado = ref(true)
-
-  function toggleRemitosManualesColapsado() {
-    remitosManualesColapsado.value = !remitosManualesColapsado.value
-  }
 
   async function cargarRemitosManuales() {
     cargandoRemitosManuales.value = true
@@ -728,10 +720,8 @@ export function useDespachos() {
   function iniciar() {
     cargarBase().then(() => {
       cargarDespachos()
-      cargarResumenPorObra()
+      filtrosListos = true
     })
-    cargarKpis()
-    cargarProduccionAnual()
     cargarRemitosManuales()
   }
 
@@ -743,15 +733,14 @@ export function useDespachos() {
     clientes,
     obrasPorId,
     formulasPorId,
-    kpisMes,
-    kpisHistorico,
-    cargandoProduccionAnual,
-    produccionAnual,
     filas: filasConNombres,
     totalDespachos,
     paginaActual,
     cargando,
     filtros,
+    periodo,
+    elegirPeriodo,
+    destino,
     TAMANO_PAGINA,
     aplicarFiltros,
     limpiarFiltros,
@@ -763,16 +752,12 @@ export function useDespachos() {
     exportandoFiltro,
     exportarFiltroExcel,
     resumenFiltrosLabel,
-    mesResumen,
     resumenObras,
-    cargandoResumen,
-    cargarResumenPorObra,
     exportandoInforme,
     exportarInformeMensual,
     modalInformeAbierto,
     mesInforme,
     abrirModalInforme,
-    usarMesInforme,
     descargarInformeDelMes,
     modalDetalleAbierto,
     pedidoDetalle,
@@ -791,8 +776,6 @@ export function useDespachos() {
     remitosManuales,
     unidadesRemitoManual: UNIDADES_REMITO_MANUAL,
     cargandoRemitosManuales,
-    remitosManualesColapsado,
-    toggleRemitosManualesColapsado,
     cargarRemitosManuales,
     modalRemitoManualAbierto,
     formRemitoManual,

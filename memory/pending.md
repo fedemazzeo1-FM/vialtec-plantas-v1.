@@ -10,7 +10,15 @@
   FUEL OIL sin mínimo hasta que Federico lo revise con Félix. Vuelta atrás: `revertir_migracion_76.sql`.
 - **Front publicado** 17/11 (`dpl_C6782SBUyEYNjtFX8ojWTYnBJMKo`, bundle index-DS2tpITA.js): ícono
   produccion.vialtec.app/mail/plantas-icono.png sirve 200; Despachos sin imágenes; analítica en hora AR.
-- SIGUE: orden de Despachos (propuesta aprobada, abajo, punto 6 del 16/11) → deploy → prueba final.
+- **Prueba final** del informe de octubre a federico.mazzeo@vialtec.com.ar 17/11: fila 221, enviado (Resend 01a1ea0b…),
+  6 secciones (sin detalle por proveedor), sistema plantas, ícono publicado, nota "día 3".
+- **Despachos reordenado — CODEADO, commiteado, SIN PUBLICAR:** pestañas Despachos / Resumen por obra / Remitos
+  manuales; filtros que se aplican solos (período Este mes · Mes anterior · Todo · Rango, tipo, Destino = obra o
+  cliente, Mezcla); totales del período pegados a la tabla + Exportar a Excel; Resumen por obra calculado sobre lo
+  filtrado (sin segundo selector de mes); columna "Despachado" con "de X pedido · faltó Y"; acciones Cargas /
+  Corregir / Vale (sin menú: no hay componente compartido de menú); fuera KPIs del mes, acumulado y producción de
+  asfalto 2026 (están en Home) y el segundo botón de informe. Cambio de comportamiento: por defecto muestra el mes en
+  curso (antes, todo el historial). Build OK. **Falta: probarlo logueado en local (localhost:5179) y `npx vercel --prod`.**
 
 ### ▶▶▶ 16/11 (cierre) — MAILS DE PLANTAS: estado y lo que queda
 

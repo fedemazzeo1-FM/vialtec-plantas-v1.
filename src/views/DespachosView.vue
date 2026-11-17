@@ -1,7 +1,10 @@
 <script setup>
-// Vista de Despachos: historial de pedidos despachados con KPIs, resumen por
-// obra, filtros, detalle de cargas por camión, corrección post-despacho y
-// remito imprimible. Toda la lógica de negocio vive en useDespachos()
+// Vista de Despachos (orden del 17/11/2026, aprobado por Federico): arriba
+// "Descargar informe mensual" y "Generar remito manual"; una barra de filtros
+// (período con atajos, tipo, destino = obra o cliente, mezcla) que se aplica
+// sola y gobierna las pestañas Despachos (totales + tabla) y Resumen por obra;
+// pestaña Remitos manuales aparte. Detalle de cargas por camión, corrección
+// post-despacho y remito/vale imprimible en modales. Toda la lógica de negocio vive en useDespachos()
 // (memory/conventions.md: esta vista es template puro).
 //
 // Despachos es una vista SOBRE plantas_pedidos (estado='despachado'), no una
@@ -13,11 +16,12 @@ import VModal from '@/components/shared/VModal.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
 import VKpiCard from '@/components/shared/VKpiCard.vue'
-import { useDespachos } from '@/modules/despachos/composables/useDespachos'
+import { useDespachos, PERIODOS } from '@/modules/despachos/composables/useDespachos'
 import RemitoImprimible from '@/components/shared/RemitoImprimible.vue'
 import ValeImprimible from '@/modules/bascula/components/ValeImprimible.vue'
 import { formatearNumeroRemito, formatearNumeroPedido, formatearCantidad, formatearCantidadHasta } from '@/services/formato-numeros'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   LISTA_TIPOS_PRODUCTO,
   esCircuitoBascula,
@@ -25,19 +29,25 @@ import {
   unidadLabelTipoProducto,
 } from '@/config/tipos-producto'
 
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-const mesActualLabel = MESES[new Date().getMonth()]
-
 const columnas = [
   { key: 'numero', label: 'N°' },
   { key: 'fecha_programada', label: 'Fecha' },
-  { key: 'destino', label: 'Obra' },
+  { key: 'destino', label: 'Destino' },
   { key: 'formulaNombre', label: 'Mezcla' },
-  { key: 'cantidad_solicitada', label: 'Pedido' },
-  { key: 'cantidad_despachada', label: 'Real' },
-  { key: 'diferencia', label: 'Diferencia' },
+  { key: 'cantidad_despachada', label: 'Despachado' },
   { key: 'acciones', label: '' },
 ]
+
+const TABS = [
+  { valor: 'despachos', label: 'Despachos' },
+  { valor: 'obras', label: 'Resumen por obra' },
+  { valor: 'remitos', label: 'Remitos manuales' },
+]
+// La pestaña vive en ?tab= (mismo patrón que Stock y Maestros): F5 y "atrás" vuelven a la misma.
+const route = useRoute()
+const router = useRouter()
+const tabActiva = ref(TABS.some((t) => t.valor === route.query.tab) ? route.query.tab : 'despachos')
+watch(tabActiva, (tab) => router.replace({ query: { ...route.query, tab } }))
 
 const {
   error,
@@ -45,17 +55,15 @@ const {
   formulas,
   patentes,
   clientes,
-  kpisMes,
-  kpisHistorico,
-  cargandoProduccionAnual,
-  produccionAnual,
   filas,
   totalDespachos,
   paginaActual,
   cargando,
   filtros,
+  periodo,
+  elegirPeriodo,
+  destino,
   TAMANO_PAGINA,
-  aplicarFiltros,
   limpiarFiltros,
   cambiarPagina,
   totalesFiltro,
@@ -63,12 +71,8 @@ const {
   cargandoTotalesFiltro,
   exportandoFiltro,
   exportarFiltroExcel,
-  mesResumen,
   resumenObras,
-  cargandoResumen,
-  cargarResumenPorObra,
   exportandoInforme,
-  exportarInformeMensual,
   modalInformeAbierto,
   mesInforme,
   abrirModalInforme,
@@ -90,8 +94,6 @@ const {
   remitosManuales,
   unidadesRemitoManual,
   cargandoRemitosManuales,
-  remitosManualesColapsado,
-  toggleRemitosManualesColapsado,
   modalRemitoManualAbierto,
   formRemitoManual,
   generandoRemitoManual,
@@ -123,14 +125,6 @@ const {
 iniciar()
 
 const unidadDe = unidadLabelTipoProducto
-
-// Tipos sin KPI fijo arriba (los que no son `siempreVisible` en
-// config/tipos-producto.js, hoy mezcla cemento): se muestran solo si tienen algo.
-const tiposSinKpiFijo = LISTA_TIPOS_PRODUCTO.filter((t) => !t.siempreVisible)
-
-function formatearTn(valor) {
-  return valor.toLocaleString('es-AR', { maximumFractionDigits: 1 })
-}
 
 // "Descargar PDF" (2026-09-14, pedido de Federico: al lado de "Imprimir" en
 // los 3 modales de vista previa del sistema) — mismo elemento ".imprimible"
@@ -180,9 +174,9 @@ async function descargarPdfVale() {
 <template>
   <div>
     <VSection title="Despachos">
-      <!-- Informe mensual como acción principal, arriba (2026-11-02, pedido
-           de Federico: igual que "Descargar informe mensual" de Combustible). -->
-      <div class="mb-4 flex justify-end">
+      <!-- Acciones de la pantalla, arriba (el informe es el mismo Excel que va adjunto al mail del día 3). -->
+      <div class="mb-4 flex flex-wrap justify-end gap-2">
+        <VButton variant="secondary" @click="tabActiva = 'remitos'; abrirRemitoManual()">+ Generar remito manual</VButton>
         <VButton @click="abrirModalInforme">
           <svg
             viewBox="0 0 24 24"
@@ -206,60 +200,68 @@ async function descargarPdfVale() {
         {{ error }}
       </div>
 
-      <!-- KPIs: mes en curso + acumulado histórico completo -->
-      <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-        <VKpiCard :label="`Asfalto ${mesActualLabel}`" :value="formatearCantidad(kpisMes.asfaltoTn)" unidad="tn" />
-        <VKpiCard :label="`Hormigón ${mesActualLabel}`" :value="formatearCantidad(kpisMes.hormigonM3)" unidad="m³" />
-        <VKpiCard label="Total hormigón acumulado" :value="formatearCantidad(kpisHistorico.hormigonM3)" unidad="m³" />
-        <template v-for="t in tiposSinKpiFijo" :key="t.id">
-          <VKpiCard v-if="kpisMes[t.total] > 0" :label="`${t.nombre} ${mesActualLabel}`" :value="formatearCantidad(kpisMes[t.total])" :unidad="t.unidadLabel" />
-          <VKpiCard v-if="kpisHistorico[t.total] > 0" :label="`Total ${t.nombre.toLowerCase()} acumulado`" :value="formatearCantidad(kpisHistorico[t.total])" :unidad="t.unidadLabel" />
-        </template>
+      <div class="mb-4 flex gap-1 overflow-x-auto border-b border-border">
+        <button
+          v-for="tab in TABS"
+          :key="tab.valor"
+          type="button"
+          class="shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition-colors duration-150"
+          :class="tab.valor === tabActiva ? 'border-vialtec text-vialtec' : 'border-transparent text-text-soft hover:text-text-mid'"
+          @click="tabActiva = tab.valor"
+        >
+          {{ tab.label }}
+        </button>
       </div>
 
-      <!-- Producción de asfalto — año 2026 (2026-09-06, pedido de Federico:
-           mismas 3 cards que Home, mismo cálculo — reemplaza acá el antiguo
-           KPI "Total asfalto acumulado", que quedaba redundante con este
-           desglose por planta Ammann 140 / Marini 180). -->
-      <div class="mb-4">
-        <h3 class="mb-2 text-sm font-bold text-text">Producción de asfalto — año 2026</h3>
-        <p v-if="cargandoProduccionAnual" class="text-sm text-text-soft">Cargando…</p>
-        <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <VCard>
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Total acumulado en el año</p>
-            <p class="mt-2 text-2xl font-extrabold text-text">{{ formatearTn(produccionAnual.totalTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
-            <p class="text-xs text-text-soft">Ammann 140 (ene-abr) + Marini 180 (mayo en adelante)</p>
-          </VCard>
-          <VCard>
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Planta asfáltica Ammann 140</p>
-            <p class="mt-2 text-2xl font-extrabold text-[#2a78d6]">{{ formatearTn(produccionAnual.ammannTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
-            <p class="text-xs text-text-soft">Enero — abril 2026 (histórico, planilla manual)</p>
-          </VCard>
-          <VCard>
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-text-soft">Planta asfáltica Marini 180</p>
-            <p class="mt-2 text-2xl font-extrabold text-[#eb6834]">{{ formatearTn(produccionAnual.mariniTn) }} <span class="text-base font-semibold text-text-soft">tn</span></p>
-            <p class="text-xs text-text-soft">Mayo 2026 en adelante (en uso — este sistema)</p>
-          </VCard>
+      <!-- Filtros: período, tipo, destino y mezcla. Se aplican solos y valen para Despachos y Resumen por obra. -->
+      <VCard v-if="tabActiva !== 'remitos'" class="mb-4">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div class="flex flex-wrap gap-1.5">
+            <VButton
+              v-for="p in PERIODOS"
+              :key="p.valor"
+              size="sm"
+              :variant="periodo === p.valor ? 'primary' : 'secondary'"
+              @click="elegirPeriodo(p.valor)"
+            >
+              {{ p.label }}
+            </VButton>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <VButton size="sm" :variant="filtros.tipo === '' ? 'primary' : 'secondary'" @click="filtros.tipo = ''">Todos</VButton>
+            <VButton
+              v-for="t in LISTA_TIPOS_PRODUCTO"
+              :key="t.id"
+              size="sm"
+              :variant="filtros.tipo === t.id ? 'primary' : 'secondary'"
+              @click="filtros.tipo = t.id"
+            >
+              {{ t.nombre }}
+            </VButton>
+          </div>
         </div>
-      </div>
-
-      <!-- Filtros -->
-      <VCard class="mb-4">
-        <div class="flex flex-wrap gap-1.5">
-          <VButton size="sm" :variant="filtros.tipo === '' ? 'primary' : 'secondary'" @click="filtros.tipo = ''; aplicarFiltros()">
-            Todos
-          </VButton>
-          <VButton
-            v-for="t in LISTA_TIPOS_PRODUCTO"
-            :key="t.id"
-            size="sm"
-            :variant="filtros.tipo === t.id ? 'primary' : 'secondary'"
-            @click="filtros.tipo = t.id; aplicarFiltros()"
-          >
-            {{ t.nombre }}
-          </VButton>
-        </div>
-        <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div class="mt-3 grid grid-cols-2 gap-3" :class="periodo === 'rango' ? 'md:grid-cols-4' : 'md:grid-cols-2'">
+          <label v-if="periodo === 'rango'" class="text-sm text-text-mid">
+            Desde
+            <input v-model="filtros.desde" type="date" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
+          </label>
+          <label v-if="periodo === 'rango'" class="text-sm text-text-mid">
+            Hasta
+            <input v-model="filtros.hasta" type="date" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
+          </label>
+          <!-- Destino: obra propia o cliente de venta externa en un solo selector (antes, dos). -->
+          <label class="text-sm text-text-mid">
+            Destino
+            <select v-model="destino" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
+              <option value="">Todos</option>
+              <optgroup label="Obras">
+                <option v-for="o in obras" :key="o.id" :value="`obra:${o.id}`">{{ o.nombre }}</option>
+              </optgroup>
+              <optgroup label="Ventas externas">
+                <option v-for="c in clientes" :key="c.id" :value="`cliente:${c.nombre}`">{{ c.nombre }}</option>
+              </optgroup>
+            </select>
+          </label>
           <label class="text-sm text-text-mid">
             Mezcla
             <select v-model="filtros.formulaId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
@@ -267,91 +269,88 @@ async function descargarPdfVale() {
               <option v-for="f in formulas" :key="f.id" :value="f.id">{{ f.nombre }}</option>
             </select>
           </label>
-          <label class="text-sm text-text-mid">
-            Obra
-            <select v-model="filtros.obraId" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
-              <option value="">Todas</option>
-              <option v-for="o in obras" :key="o.id" :value="o.id">{{ o.nombre }}</option>
-            </select>
-          </label>
-          <!-- Cliente externo (2026-09-14, pedido de Federico): filtra ventas
-               externas (tipo_pedido='venta') por el mismo catálogo que usa
-               el <select> de Pedidos (plantas_clientes, migración 35) — no
-               interfiere con el filtro de Obra, un pedido tiene uno u otro
-               según tipo_pedido, nunca los dos. -->
-          <label class="text-sm text-text-mid">
-            Cliente externo
-            <select v-model="filtros.clienteExterno" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none">
-              <option value="">Todos</option>
-              <option v-for="c in clientes" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
-            </select>
-          </label>
-          <label class="text-sm text-text-mid">
-            Desde
-            <input v-model="filtros.desde" type="date" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
-          </label>
-          <label class="text-sm text-text-mid">
-            Hasta
-            <input v-model="filtros.hasta" type="date" class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none" />
-          </label>
         </div>
-        <div class="mt-3 flex gap-2">
-          <VButton size="sm" @click="aplicarFiltros">Filtrar</VButton>
-          <VButton variant="ghost" size="sm" @click="limpiarFiltros">Limpiar</VButton>
+        <div class="mt-2 flex justify-end">
+          <VButton variant="ghost" size="sm" @click="limpiarFiltros">Limpiar filtros</VButton>
         </div>
       </VCard>
 
-      <!-- Totales consolidados del filtro + "Exportar filtro a Excel"
-           (2026-09-22, pedido explícito de Federico): se recalcula cada vez
-           que se aplica un filtro (useDespachos.js#cargarTotalesFiltro),
-           sobre el universo COMPLETO que matchea — no solo la página visible
-           de la tabla de abajo. Asfalto (tn) y Hormigón (m³) nunca se suman
-           entre sí (unidades distintas), se muestran en paralelo como en el
-           resto de la app. -->
-      <VCard class="mb-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p class="text-sm font-bold text-text">Totales del filtro aplicado</p>
-          <VButton size="sm" :disabled="exportandoFiltro || !totalesFiltro.cantidadDespachos" @click="exportarFiltroExcel">
-            {{ exportandoFiltro ? 'Generando…' : '⬇ Exportar filtro a Excel' }}
+      <!-- Pestaña Despachos: totales del período (universo completo, no la página) pegados a la tabla.
+           Asfalto, hormigón y mezcla nunca se suman entre sí. -->
+      <template v-if="tabActiva === 'despachos'">
+        <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <p v-if="cargandoTotalesFiltro" class="text-sm text-text-soft">Calculando…</p>
+          <div v-else class="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4">
+            <VKpiCard
+              v-for="t in tiposTotalesFiltro"
+              :key="t.id"
+              :label="`${t.nombre} despachado`"
+              :value="formatearCantidad(totalesFiltro[t.total])"
+              :unidad="t.unidadLabel"
+            />
+            <VKpiCard label="Despachos" :value="totalesFiltro.cantidadDespachos" unidad="" />
+          </div>
+          <VButton size="sm" variant="secondary" :disabled="exportandoFiltro || !totalesFiltro.cantidadDespachos" @click="exportarFiltroExcel">
+            {{ exportandoFiltro ? 'Generando…' : '⬇ Exportar a Excel' }}
           </VButton>
         </div>
-        <p v-if="cargandoTotalesFiltro" class="mt-2 text-sm text-text-soft">Calculando…</p>
-        <div v-else class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <VKpiCard
-            v-for="t in tiposTotalesFiltro"
-            :key="t.id"
-            :label="`${t.nombre} despachado`"
-            :value="formatearCantidad(totalesFiltro[t.total])"
-            :unidad="t.unidadLabel"
-          />
-          <VKpiCard label="Despachos" :value="totalesFiltro.cantidadDespachos" unidad="" />
-        </div>
-      </VCard>
 
-      <!-- Resumen por obra -->
-      <VCard class="mb-4">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <p class="text-sm font-bold text-text">Resumen por obra</p>
-          <div class="flex flex-wrap items-center gap-3">
-            <label class="text-sm text-text-mid">
-              Mes
-              <input
-                v-model="mesResumen"
-                type="month"
-                class="ml-2 rounded-lg border border-border px-2 py-1 text-sm focus:border-vialtec focus:outline-none"
-                @change="cargarResumenPorObra"
-              />
-            </label>
-            <!-- Informe mensual (2026-09-02, pedido de Federico): arma el
-                 .xlsx completo del mes elegido arriba — Resumen mensual +
-                 Resumen anual + una hoja por obra/cliente, mismo formato
-                 que el Excel de referencia que compartió. -->
-            <VButton size="sm" :disabled="exportandoInforme" @click="exportarInformeMensual">
-              {{ exportandoInforme ? 'Generando…' : '📧 Exportar informe mensual' }}
-            </VButton>
-          </div>
-        </div>
-        <p v-if="cargandoResumen" class="text-sm text-text-soft">Cargando…</p>
+        <VCard>
+          <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
+          <VTable
+            v-else
+            :columns="columnas"
+            :rows="filas"
+            :page="paginaActual"
+            :page-size="TAMANO_PAGINA"
+            :total="totalDespachos"
+            @update:page="cambiarPagina"
+          >
+            <template #cell-numero="{ row }">
+              <span class="whitespace-nowrap text-text-soft">{{ formatearNumeroPedido(row.numero) }}</span>
+            </template>
+            <template #cell-fecha_programada="{ row }">
+              <p>{{ row.fecha_programada }}</p>
+              <!-- Solicitante junto a la fecha (2026-09-02, réplica del legado:
+                   memory/relevamiento-sistema-viejo.md §3 muestra "👤 <nombre>"
+                   debajo de la fecha) — plantas_pedidos.encargado ya existía en
+                   el schema, solo faltaba mostrarlo acá. -->
+              <p v-if="row.encargado" class="text-xs text-text-soft">👤 {{ row.encargado }}</p>
+            </template>
+            <!-- Despachado y, debajo, lo pedido; si faltó, la diferencia en ámbar
+                 (antes, tres columnas Pedido / Real / Diferencia). -->
+            <template #cell-cantidad_despachada="{ row }">
+              <p class="whitespace-nowrap font-semibold text-text">{{ formatearCantidadHasta(row.cantidad_despachada) }} {{ unidadDe(row.tipo) }}</p>
+              <p class="whitespace-nowrap text-xs text-text-soft">
+                de {{ formatearCantidadHasta(row.cantidad_solicitada) }} pedido<span v-if="row.diferencia > 0" class="font-semibold text-warning"> · faltó {{ formatearCantidad(row.diferencia, 2) }}</span>
+              </p>
+            </template>
+            <template #cell-acciones="{ row }">
+              <div class="flex flex-wrap gap-1.5">
+                <VButton variant="secondary" size="sm" @click="abrirDetalle(row)">🚛 Cargas</VButton>
+                <VButton variant="secondary" size="sm" @click="abrirCorreccion(row)">Corregir</VButton>
+                <!-- Botón "Remito" removido de acá (2026-09-14, pedido de
+                     Federico): la impresión de remito de un despacho queda
+                     únicamente en Báscula (abrirImpresionRemito, sobre un vale
+                     ya pesado) — Despachos ya no ofrece un segundo camino para
+                     el mismo documento. "Remito Manual" (más arriba, sin
+                     pedido asociado) es una funcionalidad distinta, no se
+                     toca. -->
+                <VButton v-if="esCircuitoBascula(row.tipo)" variant="ghost" size="sm" @click="abrirImpresionVale(row)">
+                  🖨 Vale
+                </VButton>
+              </div>
+            </template>
+          </VTable>
+          <p v-if="!cargando && !filas.length" class="py-4 text-center text-sm text-text-soft">
+            No hay despachos con estos filtros.
+          </p>
+        </VCard>
+      </template>
+
+      <!-- Pestaña Resumen por obra: el mismo período y filtros, agrupado por obra o cliente. -->
+      <template v-if="tabActiva === 'obras'">
+        <p v-if="cargandoTotalesFiltro" class="text-sm text-text-soft">Cargando…</p>
         <div v-else-if="resumenObras.length" class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <VCard v-for="r in resumenObras" :key="r.obraId ?? r.nombre">
             <p class="truncate text-sm font-semibold text-text">{{ r.nombre }}</p>
@@ -361,28 +360,12 @@ async function descargarPdfVale() {
             <p class="mt-1 text-xs text-text-soft">{{ r.cantidadDespachos }} despacho{{ r.cantidadDespachos === 1 ? '' : 's' }}</p>
           </VCard>
         </div>
-        <p v-else class="text-sm text-text-soft">No hay despachos en el mes seleccionado.</p>
-      </VCard>
+        <p v-else class="text-sm text-text-soft">No hay despachos con estos filtros.</p>
+      </template>
 
-      <!-- Remitos manuales/en blanco (2026-09-09, pedido de Federico): remito
-           oficial sin pedido asociado, para envío de materiales a obra u
-           otro movimiento interno — N° automático, misma numeración que los
-           remitos de asfalto (memory/pending.md). -->
-      <VCard class="mb-4">
-        <div class="flex flex-wrap items-center justify-between gap-3" :class="remitosManualesColapsado ? '' : 'mb-3'">
-          <button
-            type="button"
-            class="flex items-center gap-1.5 text-sm font-bold text-text"
-            :title="remitosManualesColapsado ? 'Expandir' : 'Colapsar'"
-            @click="toggleRemitosManualesColapsado"
-          >
-            <span class="text-xs text-text-soft">{{ remitosManualesColapsado ? '▼' : '▲' }}</span>
-            Remitos manuales
-            <span v-if="remitosManualesColapsado && remitosManuales.length" class="font-normal text-text-soft">({{ remitosManuales.length }})</span>
-          </button>
-          <VButton size="sm" @click="abrirRemitoManual">+ Generar remito manual</VButton>
-        </div>
-        <template v-if="!remitosManualesColapsado">
+      <!-- Pestaña Remitos manuales (2026-09-09): remito oficial sin pedido asociado, para envío de materiales a
+           obra u otro movimiento interno — N° automático, misma numeración que los remitos de asfalto. -->
+      <VCard v-if="tabActiva === 'remitos'">
           <p v-if="cargandoRemitosManuales" class="text-sm text-text-soft">Cargando…</p>
           <div v-else-if="remitosManuales.length" class="overflow-x-auto">
             <table class="w-full text-left text-sm">
@@ -395,7 +378,7 @@ async function descargarPdfVale() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="r in remitosManuales.slice(0, 10)" :key="r.id" class="border-b border-border/60">
+                <tr v-for="r in remitosManuales" :key="r.id" class="border-b border-border/60">
                   <td class="py-1.5 pr-3 font-semibold text-text">{{ formatearNumeroRemito(r.numero_remito) }}</td>
                   <td class="py-1.5 pr-3">{{ r.fecha }}</td>
                   <td class="py-1.5 pr-3 text-text-soft">{{ r.destino || '—' }}</td>
@@ -405,67 +388,8 @@ async function descargarPdfVale() {
                 </tr>
               </tbody>
             </table>
-            <p v-if="remitosManuales.length > 10" class="mt-2 text-xs text-text-soft">
-              Mostrando los 10 más recientes de {{ remitosManuales.length }}.
-            </p>
           </div>
           <p v-else class="text-sm text-text-soft">Todavía no se generó ningún remito manual.</p>
-        </template>
-      </VCard>
-
-      <VCard>
-        <p v-if="cargando" class="text-sm text-text-soft">Cargando…</p>
-        <VTable
-          v-else
-          :columns="columnas"
-          :rows="filas"
-          :page="paginaActual"
-          :page-size="TAMANO_PAGINA"
-          :total="totalDespachos"
-          @update:page="cambiarPagina"
-        >
-          <template #cell-numero="{ row }">
-            <span class="whitespace-nowrap text-text-soft">{{ formatearNumeroPedido(row.numero) }}</span>
-          </template>
-          <template #cell-fecha_programada="{ row }">
-            <p>{{ row.fecha_programada }}</p>
-            <!-- Solicitante junto a la fecha (2026-09-02, réplica del legado:
-                 memory/relevamiento-sistema-viejo.md §3 muestra "👤 <nombre>"
-                 debajo de la fecha) — plantas_pedidos.encargado ya existía en
-                 el schema, solo faltaba mostrarlo acá. -->
-            <p v-if="row.encargado" class="text-xs text-text-soft">👤 {{ row.encargado }}</p>
-          </template>
-          <template #cell-cantidad_solicitada="{ row }">
-            {{ formatearCantidadHasta(row.cantidad_solicitada) }} {{ unidadDe(row.tipo) }}
-          </template>
-          <template #cell-cantidad_despachada="{ row }">
-            {{ formatearCantidadHasta(row.cantidad_despachada) }} {{ unidadDe(row.tipo) }}
-          </template>
-          <template #cell-diferencia="{ row }">
-            <span :class="row.diferencia > 0 ? 'text-warning' : 'text-text-soft'">
-              {{ formatearCantidad(row.diferencia, 2) }} {{ unidadDe(row.tipo) }}
-            </span>
-          </template>
-          <template #cell-acciones="{ row }">
-            <div class="flex flex-wrap gap-1.5">
-              <VButton variant="secondary" size="sm" @click="abrirDetalle(row)">🚛 Detalle de cargas</VButton>
-              <VButton variant="secondary" size="sm" @click="abrirCorreccion(row)">Corregir</VButton>
-              <!-- Botón "Remito" removido de acá (2026-09-14, pedido de
-                   Federico): la impresión de remito de un despacho queda
-                   únicamente en Báscula (abrirImpresionRemito, sobre un vale
-                   ya pesado) — Despachos ya no ofrece un segundo camino para
-                   el mismo documento. "Remito Manual" (más arriba, sin
-                   pedido asociado) es una funcionalidad distinta, no se
-                   toca. -->
-              <VButton v-if="esCircuitoBascula(row.tipo)" variant="ghost" size="sm" @click="abrirImpresionVale(row)">
-                🖨 Vale
-              </VButton>
-            </div>
-          </template>
-        </VTable>
-        <p v-if="!cargando && !filas.length" class="py-4 text-center text-sm text-text-soft">
-          No hay despachos que coincidan con el filtro.
-        </p>
       </VCard>
     </VSection>
 
