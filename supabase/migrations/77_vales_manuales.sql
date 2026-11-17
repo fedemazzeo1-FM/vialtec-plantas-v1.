@@ -265,7 +265,7 @@ end;
 $$;
 
 comment on function anular_vale_manual is
-  'Anula un vale manual con motivo obligatorio (no se borra). Si ya tenía remito, el número queda usado y el remito se reimprime marcado ANULADO. Permiso despachos/aprobar. Migración 77.';
+  'Anula un vale manual con motivo obligatorio (no se borra). Si ya tenía remito, ese número queda usado; un vale anulado no se vuelve a imprimir. Permiso despachos/aprobar. Migración 77.';
 
 -- Permisos de ejecución: solo authenticated (nunca anon ni public).
 revoke execute on function generar_vale_manual(timestamptz, uuid, numeric, numeric, bigint, text, text, text, numeric, text) from public, anon;
