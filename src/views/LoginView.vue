@@ -45,6 +45,8 @@ async function enviar() {
   enviando.value = true
   try {
     await auth.login(email.value.trim(), password.value)
+    // Sin acceso a Plantas: App.vue ya muestra "No tenés acceso a este sistema".
+    if (auth.sinAcceso) return
     // Ruta de aterrizaje: respeta un ?redirect= explícito (deep link) por
     // sobre todo; si no hay, en mobile prioriza Pedidos sobre Home
     // (2026-09-16, ver auth.store.js#rutaInicioSesion).

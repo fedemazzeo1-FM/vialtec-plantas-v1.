@@ -38,6 +38,7 @@ import DesktopLayout from '@/layouts/DesktopLayout.vue'
 import MobileLayout from '@/layouts/MobileLayout.vue'
 import LoginView from '@/views/LoginView.vue'
 import VSesionVencida from '@/components/shared/VSesionVencida.vue'
+import SinAccesoView from '@/views/SinAccesoView.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -50,6 +51,7 @@ onMounted(() => {
 
 <template>
   <div v-if="!auth.listo" class="flex min-h-screen items-center justify-center text-sm text-gray-400">Cargando…</div>
+  <SinAccesoView v-else-if="auth.sinAcceso && !auth.isPasswordRecovery" />
   <LoginView v-else-if="!auth.estaLogueado || auth.isPasswordRecovery" />
   <div v-else-if="route.name === 'login'" class="flex min-h-screen items-center justify-center text-sm text-gray-400">Cargando…</div>
   <MobileLayout v-else-if="esMobile" />

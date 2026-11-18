@@ -85,6 +85,11 @@ export const useAuthStore = defineStore('auth', {
     emailVencido: null,
     borradoresGuardados: [],
     borradoresPerdidos: [],
+    // Login único VT360 (2026-11-18, sesión Portal): sesión válida de Supabase Auth pero sin acceso a
+    // Plantas (sin fila en plantas_usuarios_roles, inactiva, o no se pudo leer). NO se cierra la sesión:
+    // es la misma persona de Flota y Obras. App.vue muestra SinAccesoView.
+    // null | { motivo: 'sin_ficha' | 'suspendido' | 'error', email }
+    sinAcceso: null,
   }),
 
   getters: {
@@ -155,19 +160,14 @@ export const useAuthStore = defineStore('auth', {
         supabase.from('flota_usuarios_email').select('nombre').eq('email', email).maybeSingle(),
       ])
 
-      if (errorRol) throw errorRol
-      if (!rolRow || !rolRow.activo) {
-        cerrandoSesion = true
-        try {
-          await supabase.auth.signOut()
-        } finally {
-          cerrandoSesion = false
-        }
-        throw new Error(
-          'Tu usuario no tiene un rol asignado (o está inactivo) en VialTec Plantas. Pedile a un admin que te lo asigne.'
-        )
-      }
+      // Sin acceso a Plantas: la sesión queda abierta (login único VT360) y App.vue muestra
+      // "No tenés acceso a este sistema". Antes se cerraba la sesión, y eso la cerraba también
+      // en Flota y Obras.
+      if (errorRol) return this._marcarSinAcceso('error', email)
+      if (!rolRow) return this._marcarSinAcceso('sin_ficha', email)
+      if (!rolRow.activo) return this._marcarSinAcceso('suspendido', email)
 
+      this.sinAcceso = null
       this.rol = rolRow.rol
       this.verTodasObras = rolRow.ver_todas_obras
       this.verVentas = rolRow.ver_ventas
@@ -201,6 +201,25 @@ export const useAuthStore = defineStore('auth', {
       // El nombre cargado en plantas (migración 68) tiene prioridad sobre el
       // de flota.
       this.nombre = rolRow.nombre ?? perfilFlota?.nombre ?? email
+    },
+
+    _marcarSinAcceso(motivo, email) {
+      this.user = null
+      this.rol = null
+      this.sinAcceso = { motivo, email: email ?? null }
+    },
+
+    // "Entrar con otra cuenta" desde SinAccesoView: cierra solo en este navegador (scope local),
+    // sin revocar las sesiones de la persona en sus otros dispositivos.
+    async salirDeEstaCuenta() {
+      cerrandoSesion = true
+      try {
+        await supabase.auth.signOut({ scope: 'local' })
+      } finally {
+        cerrandoSesion = false
+      }
+      this.$reset()
+      this.listo = true
     },
 
     async login(email, password) {
@@ -279,6 +298,7 @@ export const useAuthStore = defineStore('auth', {
         // SIGNED_OUT sin haber tocado "Cerrar sesión": Supabase no pudo
         // renovar la sesión (vencida o cerrada desde otro lado).
         if (event === 'SIGNED_OUT' && !cerrandoSesion) this.marcarSesionVencida()
+        if (event === 'SIGNED_OUT') this.sinAcceso = null
       })
       // Lectura rechazada por falta de sesión (401) sin que Supabase haya
       // avisado: se confirma que no hay sesión antes de marcarla vencida.

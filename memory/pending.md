@@ -2,6 +2,14 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 18/11 — LOGIN ÚNICO VT360: lo toca SOLO la sesión Portal (vialtec-portal)
+Ingreso, sesión, usuarios y roles de Plantas los cambia únicamente la sesión Portal mientras dure el login único
+(`vialtec-portal/memory/contrato-login.md`). **"Sin acceso" sin cerrar sesión — COMMITEADO, SIN DEPLOY:**
+`_cargarPerfil` ya no hace `signOut()` sin fila en `plantas_usuarios_roles`, con fila inactiva o con error de
+lectura: marca `sinAcceso` y `App.vue` muestra `SinAccesoView.vue` ("No tenés acceso a este sistema", "Volver al
+portal VT360", "Entrar con otra cuenta" con cierre solo local). Ensayo: `vialtec-portal/ensayos/etapa1-sin-acceso`
+(6/6). Deploy (`npx vercel --prod`): con OK de Federico.
+
 ### ▶▶▶ 17/11 (tarde) — Vales manuales: 77 APLICADA y PUBLICADO
 - Pedido de Federico: vale con el formato del de balanza para retiros sin pesar. Decisiones suyas: **son
   simulaciones**; bruto y tara a mano; **no descuentan stock; no suman a producción ni despachos**; sin pedido.
