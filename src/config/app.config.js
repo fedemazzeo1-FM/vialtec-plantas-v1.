@@ -3,7 +3,9 @@
 export const appConfig = {
   nombre: 'VialTec Plantas',
   // Portal VT360 (login único, sesión Portal 2026-11-18): adonde vuelve "Volver al portal".
-  portalUrl: 'https://vialtec.app',
+  // null = el portal todavía no existe y el botón no se muestra (Federico, 18/11). Se activa con
+  // 'https://vialtec.app' cuando el portal esté publicado.
+  portalUrl: null,
   // Los vales de báscula del sistema anterior siguen una secuencia nativa que
   // empieza en 9579 (ver memory/business-rules.md). Este valor documenta el
   // punto de partida para la migración del historial, no un contador en vivo.

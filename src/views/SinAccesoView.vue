@@ -63,6 +63,7 @@ async function entrarConOtraCuenta() {
           Probar de nuevo
         </button>
         <a
+          v-if="appConfig.portalUrl"
           :href="appConfig.portalUrl"
           class="inline-flex w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold"
           :class="motivo === 'error' ? 'border border-border text-text-mid hover:bg-gray-50' : 'bg-vialtec text-white hover:opacity-90'"
@@ -72,7 +73,11 @@ async function entrarConOtraCuenta() {
         </a>
         <button
           type="button"
-          class="w-full text-center text-xs font-medium text-vialtec hover:underline disabled:opacity-50"
+          class="w-full disabled:opacity-50"
+          :class="appConfig.portalUrl || motivo === 'error'
+            ? 'text-center text-xs font-medium text-vialtec hover:underline'
+            : 'rounded-lg bg-vialtec px-4 py-2 text-sm font-semibold text-white hover:opacity-90'"
+          :style="appConfig.portalUrl || motivo === 'error' ? '' : 'min-height: 44px'"
           :disabled="saliendo"
           @click="entrarConOtraCuenta"
         >
