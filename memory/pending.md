@@ -9,6 +9,7 @@ Ingreso, sesión, usuarios y roles de Plantas los cambia únicamente la sesión 
 lectura: marca `sinAcceso` y `App.vue` muestra `SinAccesoView.vue` ("No tenés acceso a este sistema", "Volver al
 portal VT360", "Entrar con otra cuenta" con cierre solo local). Ensayo: `vialtec-portal/ensayos/etapa1-sin-acceso`
 (6/6). Deploy (`npx vercel --prod`): con OK de Federico.
+- 18/11 (sesión Portal): **publicado**; migración `portal_02_accesos_vt360` aplicada: columna nueva `persona_id` (vacía) en las tablas de usuarios y tablas `core_accesos*`. No cambia cómo se entra. Detalle: `vialtec-portal/memory/pending.md`.
 
 ### ▶▶▶ 17/11 (tarde) — Vales manuales: 77 APLICADA y PUBLICADO
 - Pedido de Federico: vale con el formato del de balanza para retiros sin pesar. Decisiones suyas: **son
