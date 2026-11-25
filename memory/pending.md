@@ -2,6 +2,30 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 25/11 — Ingreso contra pedido de Flota: 79 ENSAYADA, SIN APLICAR; front SIN COMMIT NI DEPLOY
+- Decisiones de Federico: campo OPCIONAL "Pedido de Flota" en la puerta Ingreso Áridos; al guardar suma en Flota
+  (vínculo `flota_pedido_item_ingresos_planta`, `camiones_recibidos` +1, `cantidad_real` + neto en la unidad del ítem).
+  Plantas NO cierra (Alejandro sigue cerrando). Stock como siempre (remito). Sin foto, sin avisos. Fuel oil se pedirá en
+  kg/tn (sin densidad): FUEL OIL figura en `L` en Maestros → Materiales; hasta cambiarlo, sus ítems no se ofrecen.
+- 25/11 (2ª vuelta) se sumó la propuesta de Flota "vincular después" (aceptada por Federico) a la MISMA 79:
+  `vincular_pesada_pedido_flota(p_ingreso_id, p_flota_item_id)` (única función que suma; la usa la balanza y Flota),
+  `pesadas_sin_pedido_flota(p_flota_item_id, p_dias=7)`, `desvincular_pesada_pedido_flota(p_ingreso_id, p_motivo)`
+  (motivo obligatorio, pedido en_compras/parcialmente_abierto), trigger que resta al anular la pesada,
+  `registrar_ingreso_pedido_flota` devuelve `{vale_id, vinculado, aviso}` (ítem ya recibido → pesada sin pedido, aviso).
+  En la tabla de Flota: + `cantidad_sumada` y UNIQUE(ingreso_id). Permiso: rol Plantas admin/plantista/balancero o
+  `fn_flota_es_usuario()`. Auditoría: entidad bascula/vinculo_flota. **DRYRUN 79 OK 25/11 (A–L, incluye la vuelta
+  atrás)**, producción intacta. No modifica registrar_pesada_bascula / anular / corregir (md5 controlados).
+- Front: `bascula.service.js`, `useBascula.js`, `CamposPesada.vue` (slot `pedido-flota`), `BasculaView.vue` (aviso
+  "guardada SIN pedido"). Si la 79 no está aplicada, el campo no aparece (carga aparte con catch). Build OK.
+- **⚠ Limitación aceptada por Federico (25/11): si se corrige el neto de un vale ya vinculado (Editar vale en
+  Báscula), Flota NO se actualiza** — `cantidad_real` del ítem queda con el neto viejo. Al desvincular o anular se resta
+  `cantidad_sumada` (lo que se sumó), así que no queda descuadre al deshacer. Si hace falta, se corrige desvinculando y
+  volviendo a vincular la pesada desde Flota.
+- **ESPERANDO a la sesión de Flota** (su parte: que la recepción no pise camiones/cantidad en ítems con pesadas
+  vinculadas + pantalla de vincular/desvincular). Recién con eso: re-ensayar 79 → OK de Federico → aplicar → deploy.
+- Fuel oil: Federico lo confirma con una factura; no se tocó nada.
+- Pasos: OK de Federico → aviso a la sesión de Flota (texto entregado 25/11) → apply_migration → commit → deploy con OK.
+
 ### ▶▶▶ 18/11 — LOGIN ÚNICO VT360: lo toca SOLO la sesión Portal (vialtec-portal)
 Ingreso, sesión, usuarios y roles de Plantas los cambia únicamente la sesión Portal mientras dure el login único
 (`vialtec-portal/memory/contrato-login.md`). **"Sin acceso" sin cerrar sesión — COMMITEADO, SIN DEPLOY:**
