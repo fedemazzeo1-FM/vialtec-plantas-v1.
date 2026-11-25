@@ -24,6 +24,8 @@ import {
   fetchHistorialVales,
   fetchTodosLosVales,
   registrarPesada,
+  fetchPedidosFlotaPendientes,
+  registrarIngresoPedidoFlota,
   corregirValeBascula,
   reasignarValeBascula,
   anularValeBascula,
@@ -300,6 +302,45 @@ export function useBascula() {
     } finally {
       cargandoBase.value = false
     }
+    await cargarPedidosFlota()
+  }
+
+  // -------------------------------------------------------------------------
+  // Pedidos de Flota para la puerta de Ingreso (migración 79, campo opcional).
+  // Se cargan aparte: si fallan (o la 79 no está aplicada), la puerta sigue
+  // andando sin el campo, como siempre.
+  // -------------------------------------------------------------------------
+
+  const pedidosFlota = ref([])
+  const avisoIngresoFlota = ref(null)
+  const pedidosFlotaPorItem = computed(() => Object.fromEntries(pedidosFlota.value.map((p) => [p.item_id, p])))
+
+  async function cargarPedidosFlota() {
+    try {
+      pedidosFlota.value = await fetchPedidosFlotaPendientes()
+    } catch {
+      pedidosFlota.value = []
+    }
+  }
+
+  /** "PED-0528 · CEMENTO — 2 camiones · recibido: 1 camión, 28 TN" */
+  function etiquetaPedidoFlota(p) {
+    const pedido = p.pedido_por === 'camion'
+      ? `${p.camiones} ${p.camiones === 1 ? 'camión' : 'camiones'}`
+      : `${formatearCantidadHasta(p.cantidad, 3)} ${p.unidad}`
+    const recibido = p.ingresos_balanza > 0
+      ? ` · recibido: ${p.camiones_recibidos ?? 0} ${p.camiones_recibidos === 1 ? 'camión' : 'camiones'}, ${formatearCantidadHasta(p.cantidad_real ?? 0, 3)} ${p.unidad}`
+      : ''
+    return `${p.pedido_numero} · ${p.material} — ${pedido}${recibido}`
+  }
+
+  // Al elegir el pedido se completan el material y, si coincide con el
+  // maestro, el proveedor que cargó Compras.
+  function alCambiarPedidoFlota(slot) {
+    const p = pedidosFlotaPorItem.value[slot.form.flota_item_id]
+    if (!p) return
+    slot.form.material = p.material
+    if (p.proveedor && proveedores.value.some((pr) => pr.nombre === p.proveedor)) slot.form.proveedor = p.proveedor
   }
 
   // -------------------------------------------------------------------------
@@ -350,6 +391,8 @@ export function useBascula() {
       // Sin chofer: el legado no lo pide para ingreso de áridos, solo para
       // Vale Asfalto (memory/relevamiento-sistema-viejo.md Etapa 3).
       return reactive({
+        // Opcional (migración 79): ítem de un pedido Plantas de Flota.
+        flota_item_id: '',
         material: '',
         proveedor: '',
         numero_remito: '',
@@ -495,6 +538,11 @@ export function useBascula() {
         error.value = fueraDeRango
         return
       }
+      const pedidoFlota = form.flota_item_id ? pedidosFlotaPorItem.value[form.flota_item_id] : null
+      if (pedidoFlota && pedidoFlota.material !== form.material) {
+        error.value = `El pedido ${pedidoFlota.pedido_numero} es de ${pedidoFlota.material}, no de ${form.material}. Cambiá el material o sacá el pedido.`
+        return
+      }
     }
     if (slot.tipo === 'egreso_arido') {
       if (!form.material) {
@@ -512,8 +560,10 @@ export function useBascula() {
     slot.guardando = true
     error.value = null
     try {
-      const valeGuardado = await registrarPesada({
+      const conPedidoFlota = slot.tipo === 'ingreso_arido' && !!form.flota_item_id
+      const valeGuardado = await (conPedidoFlota ? registrarIngresoPedidoFlota : registrarPesada)({
         tipo_vale: slot.tipo,
+        ...(conPedidoFlota ? { flota_item_id: form.flota_item_id } : {}),
         pedido_id: slot.tipo === 'asfalto' ? form.pedido_id : null,
         obra_id: slot.tipo === 'egreso_arido' ? form.obra_id : (pedido?.obra_id ?? null),
         patente: form.patente || null,
@@ -532,6 +582,8 @@ export function useBascula() {
           : {}),
         ...(slot.tipo === 'egreso_arido' ? { material: form.material } : {}),
       })
+      // Migración 79: si Compras ya recibió el ítem, la pesada queda sin pedido (la base avisa).
+      avisoIngresoFlota.value = conPedidoFlota && valeGuardado?.vinculado === false ? valeGuardado.aviso : null
       // Al confirmar, la puerta se cierra (misma semántica que el sistema legado).
       cerrarSlot(slot.id)
       await Promise.all([cargarHistorial(), cargarBase(), cargarProximoNumero()])
@@ -1273,6 +1325,10 @@ export function useBascula() {
     pedidosParaPesada,
     nombreDestinoPedido,
     etiquetaPedidoPesada,
+    pedidosFlota,
+    avisoIngresoFlota,
+    etiquetaPedidoFlota,
+    alCambiarPedidoFlota,
     proximoNumeroVale,
     proximoNumeroValeArido,
     puertasAbiertas,

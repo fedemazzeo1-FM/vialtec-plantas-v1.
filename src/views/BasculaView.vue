@@ -48,6 +48,10 @@ const {
   pedidosParaPesada,
   nombreDestinoPedido,
   etiquetaPedidoPesada,
+  pedidosFlota,
+  avisoIngresoFlota,
+  etiquetaPedidoFlota,
+  alCambiarPedidoFlota,
   proximoNumeroVale,
   proximoNumeroValeArido,
   puertasAbiertas,
@@ -226,6 +230,10 @@ watch(
       <div v-if="error" class="mb-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger">
         {{ error }}
       </div>
+      <div v-if="avisoIngresoFlota" class="mb-3 flex items-start justify-between gap-3 rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-sm text-warning">
+        <span>{{ avisoIngresoFlota }}</span>
+        <button type="button" class="text-warning/70 hover:text-warning" aria-label="Cerrar aviso" @click="avisoIngresoFlota = null">✕</button>
+      </div>
       <div v-if="mensajeCierre" class="mb-3 flex items-start justify-between gap-3 rounded-lg border border-success/20 bg-success-light px-3 py-2 text-sm text-success">
         <span>{{ mensajeCierre }}</span>
         <button type="button" class="text-success/70 hover:text-success" aria-label="Cerrar aviso" @click="mensajeCierre = null">✕</button>
@@ -307,6 +315,24 @@ watch(
                   <p v-if="slot.avisoPedido" class="mt-1 rounded-lg border border-warning/30 bg-warning-light px-3 py-2 text-xs text-warning">
                     {{ slot.avisoPedido }}
                   </p>
+                </label>
+              </template>
+              <template #pedido-flota>
+                <label v-if="pedidosFlota.length" class="text-sm text-text-mid col-span-2">
+                  Pedido de Flota (opcional)
+                  <select
+                    v-model="slot.form.flota_item_id"
+                    class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
+                    @change="alCambiarPedidoFlota(slot)"
+                  >
+                    <option value="">Sin pedido</option>
+                    <option v-for="p in pedidosFlota" :key="p.item_id" :value="p.item_id">
+                      {{ etiquetaPedidoFlota(p) }}
+                    </option>
+                  </select>
+                  <span v-if="slot.form.flota_item_id" class="mt-1 block text-xs text-text-soft">
+                    El neto pesado se suma al pedido en Flota. El stock se actualiza igual que siempre (cantidad del remito).
+                  </span>
                 </label>
               </template>
             </CamposPesada>

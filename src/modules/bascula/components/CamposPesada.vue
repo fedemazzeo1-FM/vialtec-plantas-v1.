@@ -29,6 +29,8 @@ defineEmits(['cambio-patente'])
 <template>
   <div class="grid grid-cols-2 gap-3">
     <template v-if="tipo === 'ingreso_arido'">
+      <!-- Solo la puerta lo usa (migración 79): "Pedido de Flota", opcional. -->
+      <slot name="pedido-flota" />
       <label class="text-sm text-text-mid">
         Material
         <!-- 2026-09-09 (pedido de Federico): antes texto libre, ahora

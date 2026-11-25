@@ -371,6 +371,40 @@ export async function registrarPesada(valeData) {
 }
 
 // ---------------------------------------------------------------------------
+// Ingreso contra un pedido de Flota (migración 79). Opcional: sin pedido, el
+// ingreso va por registrarPesada() como siempre. Con pedido, la base hace la
+// misma pesada y además suma en Flota (vínculo + camiones_recibidos +
+// cantidad_real). Plantas no cierra nada: el pedido lo cierra Alejandro.
+// ---------------------------------------------------------------------------
+
+/** Ítems de pedidos Plantas de Flota pendientes de recibir (en TN o KG). Lista corta: no pagina. */
+export async function fetchPedidosFlotaPendientes() {
+  const { data, error } = await supabase.rpc('plantas_pedidos_flota_pendientes')
+  if (error) throw error
+  return data ?? []
+}
+
+/** Misma pesada de ingreso que registrarPesada(), contra el ítem `flota_item_id`. Devuelve { vale_id, vinculado, aviso }: si Compras ya recibió el ítem, la pesada queda sin pedido. */
+export async function registrarIngresoPedidoFlota(valeData) {
+  const fechaPesada = valeData.fecha_pesada ? new Date(valeData.fecha_pesada) : new Date()
+  const { data, error } = await supabase.rpc('registrar_ingreso_pedido_flota', {
+    p_flota_item_id: valeData.flota_item_id,
+    p_peso_bruto: Number(valeData.peso_bruto),
+    p_tara: Number(valeData.tara),
+    p_material: valeData.material,
+    p_proveedor: valeData.proveedor,
+    p_numero_remito: valeData.numero_remito,
+    p_cantidad_remito: valeData.cantidad_remito,
+    p_patente: valeData.patente ?? null,
+    p_unidad: valeData.unidad || 'tn',
+    p_observaciones: valeData.observaciones ?? null,
+    p_fecha_pesada: fechaPesada.toISOString(),
+  })
+  if (error) throw error
+  return data
+}
+
+// ---------------------------------------------------------------------------
 // Editar / Anular un vale ya guardado (migración 31, requiere aplicarla
 // antes de deployar este archivo — memory/pending.md).
 //
