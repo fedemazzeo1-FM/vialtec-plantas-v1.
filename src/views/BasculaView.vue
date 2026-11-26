@@ -9,6 +9,7 @@ import VCard from '@/components/shared/VCard.vue'
 import VTable from '@/components/shared/VTable.vue'
 import VModal from '@/components/shared/VModal.vue'
 import CamposPesada from '@/modules/bascula/components/CamposPesada.vue'
+import SelectorPedidoFlota from '@/modules/bascula/components/SelectorPedidoFlota.vue'
 import VBadge from '@/components/shared/VBadge.vue'
 import VSection from '@/components/shared/VSection.vue'
 import VButton from '@/components/shared/VButton.vue'
@@ -318,22 +319,19 @@ watch(
                 </label>
               </template>
               <template #pedido-flota>
-                <label v-if="pedidosFlota.length" class="text-sm text-text-mid col-span-2">
+                <div v-if="pedidosFlota.length" class="text-sm text-text-mid col-span-2">
                   Pedido de Flota (opcional)
-                  <select
+                  <SelectorPedidoFlota
                     v-model="slot.form.flota_item_id"
-                    class="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vialtec focus:outline-none"
-                    @change="alCambiarPedidoFlota(slot)"
-                  >
-                    <option value="">Sin pedido</option>
-                    <option v-for="p in pedidosFlota" :key="p.item_id" :value="p.item_id">
-                      {{ etiquetaPedidoFlota(p) }}
-                    </option>
-                  </select>
+                    :pedidos="pedidosFlota"
+                    :etiqueta="etiquetaPedidoFlota"
+                    :automatico="slot.pedidoFlotaAuto"
+                    @elegido="alCambiarPedidoFlota(slot)"
+                  />
                   <span v-if="slot.form.flota_item_id" class="mt-1 block text-xs text-text-soft">
                     El neto pesado se suma al pedido en Flota. El stock se actualiza igual que siempre (cantidad del remito).
                   </span>
-                </label>
+                </div>
               </template>
             </CamposPesada>
 

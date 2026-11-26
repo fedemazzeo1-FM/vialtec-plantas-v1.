@@ -18,7 +18,7 @@
 // automáticamente el modal de impresión (Logica sis. plantas v1.rtf §2.4,
 // paso 5: "se imprime automáticamente").
 
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import {
   fetchPedidosAsfaltoParaPesada,
   fetchHistorialVales,
@@ -323,25 +323,70 @@ export function useBascula() {
     }
   }
 
-  /** "PED-0528 · CEMENTO — 2 camiones · recibido: 1 camión, 28 TN" */
+  // Desplegable pensado para el balancero (Federico, 26/11): material,
+  // proveedor y cuánto falta adelante; el N° de pedido chico al final. Un
+  // pedido ya completo no llega acá (migración 80 lo saca de la lista).
+  // Sin proveedor cargado por Compras, en su lugar va la fecha del pedido.
+  /** { texto: "CA30 · Dacsur · falta 1 de 2" | "CA30 · falta 1 de 2 · pedido del 20/11", numero: "PED-0536" } */
   function etiquetaPedidoFlota(p) {
-    const pedido = p.pedido_por === 'camion'
-      ? `${p.camiones} ${p.camiones === 1 ? 'camión' : 'camiones'}`
-      : `${formatearCantidadHasta(p.cantidad, 3)} ${p.unidad}`
-    const recibido = p.ingresos_balanza > 0
-      ? ` · recibido: ${p.camiones_recibidos ?? 0} ${p.camiones_recibidos === 1 ? 'camión' : 'camiones'}, ${formatearCantidadHasta(p.cantidad_real ?? 0, 3)} ${p.unidad}`
-      : ''
-    return `${p.pedido_numero} · ${p.material} — ${pedido}${recibido}`
+    const material = String(p.material ?? '').replace(/^ASFALTO\s+/i, '')
+    let falta
+    if (p.pedido_por === 'camion') {
+      const resta = Math.max((p.camiones ?? 0) - (p.camiones_recibidos ?? 0), 0)
+      falta = `${resta === 1 ? 'falta' : 'faltan'} ${resta} de ${p.camiones}`
+    } else {
+      const resta = Math.max((p.cantidad ?? 0) - (p.cantidad_real ?? 0), 0)
+      falta = `faltan ${formatearCantidadHasta(resta, 3)} de ${formatearCantidadHasta(p.cantidad, 3)} ${p.unidad}`
+    }
+    if (p.proveedor) return { texto: `${material} · ${p.proveedor} · ${falta}`, numero: p.pedido_numero }
+    const [, mes, dia] = String(p.pedido_fecha ?? '').split('-')
+    const fecha = dia && mes ? ` · pedido del ${dia.slice(0, 2)}/${mes}` : ''
+    return { texto: `${material} · ${falta}${fecha}`, numero: p.pedido_numero }
   }
 
   // Al elegir el pedido se completan el material y, si coincide con el
-  // maestro, el proveedor que cargó Compras.
+  // maestro, el proveedor que cargó Compras. Elegido a mano (incluso "Sin
+  // pedido"), la elección automática de abajo ya no lo toca.
   function alCambiarPedidoFlota(slot) {
+    slot.pedidoFlotaManual = true
+    slot.pedidoFlotaAuto = false
     const p = pedidosFlotaPorItem.value[slot.form.flota_item_id]
     if (!p) return
     slot.form.material = p.material
     if (p.proveedor && proveedores.value.some((pr) => pr.nombre === p.proveedor)) slot.form.proveedor = p.proveedor
   }
+
+  // Elección automática (Federico, 26/11): si hay UN solo pedido pendiente
+  // de ese material que le sirve, queda elegido (se puede cambiar). Le sirve
+  // si no tiene proveedor cargado o si es el proveedor elegido; si varios
+  // sirven pero uno solo es de ese proveedor, va ese.
+  const normalizar = (t) => String(t ?? '').trim().toUpperCase()
+  function pedidoFlotaUnicoPara(material, proveedor) {
+    if (!material) return null
+    const mismoProveedor = (p) => !!proveedor && !!p.proveedor && normalizar(p.proveedor) === normalizar(proveedor)
+    const sirven = pedidosFlota.value.filter((p) => p.material === material && (!p.proveedor || mismoProveedor(p)))
+    if (sirven.length === 1) return sirven[0]
+    const deEseProveedor = sirven.filter(mismoProveedor)
+    return deEseProveedor.length === 1 ? deEseProveedor[0] : null
+  }
+  function autoElegirPedidoFlota(slot) {
+    // Sin lista cargada (todavía) no se decide nada: no borrar lo elegido.
+    if (slot.tipo !== 'ingreso_arido' || slot.pedidoFlotaManual || !pedidosFlota.value.length) return
+    const unico = pedidoFlotaUnicoPara(slot.form.material, slot.form.proveedor)
+    if (unico) {
+      slot.form.flota_item_id = unico.item_id
+      slot.pedidoFlotaAuto = true
+    } else if (slot.pedidoFlotaAuto) {
+      // Cambió el material o el proveedor: lo elegido solo ya no corresponde.
+      slot.form.flota_item_id = ''
+      slot.pedidoFlotaAuto = false
+    }
+  }
+  watch(
+    () => slots.value.map((s) => (s.tipo === 'ingreso_arido' ? `${s.id}|${s.form.material}|${s.form.proveedor}` : '')).join('\n')
+      + `#${pedidosFlota.value.length}`,
+    () => slots.value.forEach(autoElegirPedidoFlota),
+  )
 
   // -------------------------------------------------------------------------
   // Próximo N° de vale (header operativo — "X puertas abiertas · Próximo N°
@@ -417,7 +462,7 @@ export function useBascula() {
   /** "+ Abrir puerta" único (ya no 3 botones por tipo) — arranca en Vale Asfalto, cambiable con el select interno. */
   function crearSlot(tipoInicial = 'asfalto') {
     contadorSlot += 1
-    const slot = { id: contadorSlot, tipo: tipoInicial, form: formularioVacio(tipoInicial), guardando: false, colapsado: false, avisoPedido: null }
+    const slot = { id: contadorSlot, tipo: tipoInicial, form: formularioVacio(tipoInicial), guardando: false, colapsado: false, avisoPedido: null, pedidoFlotaManual: false, pedidoFlotaAuto: false }
     slots.value.push(slot)
   }
 
@@ -427,6 +472,8 @@ export function useBascula() {
     slot.tipo = nuevoTipo
     slot.form = formularioVacio(nuevoTipo)
     slot.avisoPedido = null
+    slot.pedidoFlotaManual = false
+    slot.pedidoFlotaAuto = false
   }
 
   function toggleColapso(slot) {
