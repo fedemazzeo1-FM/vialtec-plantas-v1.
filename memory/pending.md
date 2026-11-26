@@ -15,6 +15,15 @@
 - Front: `SelectorPedidoFlota.vue` (desplegable propio, filas altas), `useBascula.js` (etiqueta + elección automática).
 - Los pedidos Plantas de Flota hoy NO traen proveedor (Compras no lo carga) → se muestra la fecha del pedido.
 
+### ▶▶▶ 26/11 — PEDIDO DE LA SESIÓN DE FLOTA: cierre automático por la balanza (migración 80, SIN EMPEZAR)
+- Federico (26/11): los pedidos de Plantas los cierra la balanza, no Alejandro. Spec (borrador, espera decisiones D1–D6):
+  `vialtec-flota-v2/src/modules/pedidos/plantas-balanza.spec.md`. Lo de Plantas: `vincular_pesada_pedido_flota` marca el
+  ítem recibido cuando está completo y cierra el pedido (marca de transacción `vialtec.cierre_balanza` para que salga el
+  mail a facturas); reabrir al desvincular/anular (D4); función nueva `pesadas_de_pedido_flota(p_pedido_id)` (detalle por
+  camión para Flota); trigger de aviso "pesada sin pedido" en `plantas_ingresos`. No empezar hasta el OK de Federico.
+- 26/11: la 79 ya está en uso: balanza vinculó I-1103 → PED-0528 y felix.pereyra I-1014 → PED-0536 (I-1014 podría ser de
+  PED-0505, cerrado el 18/11: lo decide Federico).
+
 ### ▶▶▶ 25/11 — Ingreso contra pedido de Flota: 79 APLICADA y PUBLICADO (26/11)
 - **26/11 — PUBLICADO** con OK de Federico (`npx vercel --prod`, deploy `vialtec-plantas-v2-3cizjmte3`, alias
   produccion.vialtec.app). Flota también publicada el mismo día. Verificado en producción: Báscula → puerta Ingreso
