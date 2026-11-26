@@ -2,7 +2,11 @@
 
 ## ▶ RETOMAR AQUÍ
 
-### ▶▶▶ 25/11 — Ingreso contra pedido de Flota: 79 APLICADA (26/11); front COMMITEADO, SIN DEPLOY
+### ▶▶▶ 25/11 — Ingreso contra pedido de Flota: 79 APLICADA y PUBLICADO (26/11)
+- **26/11 — PUBLICADO** con OK de Federico (`npx vercel --prod`, deploy `vialtec-plantas-v2-3cizjmte3`, alias
+  produccion.vialtec.app). Flota también publicada el mismo día. Verificado en producción: Báscula → puerta Ingreso
+  Áridos muestra "Pedido de Flota (opcional)" con Sin pedido, PED-0514/0531/0536 (ASFALTO CA30) y PED-0528 (CEMENTO).
+  Sin pesadas de prueba (próximo ingreso seguía en I-01099). Falta: primer camión real contra pedido.
 - **26/11 — 79 APLICADA (OK de Federico, desde la sesión de Flota).** Antes: DRYRUN 79 re-corrido, OK A–L, base verificada
   intacta. Aplicada por psql (`--single-transaction`, ON_ERROR_STOP=1, lock_timeout 5 s, statement_timeout 120 s, pooler
   aws-1-us-east-2:6543), registrada en `supabase_migrations.schema_migrations` como `20261126153514
