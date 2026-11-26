@@ -2,6 +2,19 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 26/11 — Desplegable "Pedido de Flota" para Diego: 80 APLICADA y PUBLICADO
+- Pedido de Federico: (1) el pedido sale del desplegable apenas tiene todos sus camiones (o la cantidad, TN/KG), aunque
+  Compras no lo haya recibido; uno de más se guarda SIN pedido con aviso ("…ya tiene su camión…"); (2) opción =
+  "CA30 · Dacsur · falta 1 de 2", y sin proveedor "CA30 · falta 1 de 2 · pedido del 20/11", N° de pedido chico al final;
+  (3) un solo pedido pendiente de ese material (sin proveedor o del proveedor elegido) queda elegido solo, cambiable;
+  elegido a mano (incluso "Sin pedido") no se toca más.
+- **Migración 80 aplicada 26/11** (`20261126171054`): helper `plantas_item_flota_completo` (sin EXECUTE para la app),
+  `plantas_pedidos_flota_pendientes` filtra completos, `registrar_ingreso_pedido_flota` no suma a un completo.
+  No toca vincular/desvincular de Flota (Flota puede vincular después aunque esté completo). Ensayo
+  `dry_run_migracion_80.sql` OK A–G (2 veces), vuelta atrás `revertir_migracion_80.sql`.
+- Front: `SelectorPedidoFlota.vue` (desplegable propio, filas altas), `useBascula.js` (etiqueta + elección automática).
+- Los pedidos Plantas de Flota hoy NO traen proveedor (Compras no lo carga) → se muestra la fecha del pedido.
+
 ### ▶▶▶ 25/11 — Ingreso contra pedido de Flota: 79 APLICADA y PUBLICADO (26/11)
 - **26/11 — PUBLICADO** con OK de Federico (`npx vercel --prod`, deploy `vialtec-plantas-v2-3cizjmte3`, alias
   produccion.vialtec.app). Flota también publicada el mismo día. Verificado en producción: Báscula → puerta Ingreso
