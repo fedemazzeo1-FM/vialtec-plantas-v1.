@@ -2,6 +2,20 @@
 
 ## ▶ RETOMAR AQUÍ
 
+### ▶▶▶ 26/11 (noche) — DE LA SESIÓN DE FLOTA: lo de Flota adaptado a la 81 (sin aplicar)
+- Orden acordado: limpieza de pedidos (Flota) → `pedidos_plantas_balanza.sql` (Flota 1) → **81** →
+  `pedidos_plantas_balanza_post81.sql` (Flota 2: triggers sobre plantas_cierres_flota) → deploy de Flota. Ensayo conjunto
+  con la 81 de e849173: OK; después de la limpieza, la puesta al día de la 81 no encola mails. Si cambiás la 81, avisá
+  para re-ensayar (vuelta atrás de la 81: el ensayo le saca begin/commit).
+- Para el trigger de "pesada sin pedido" (D6), funciones de Flota (internas, sin EXECUTE para la app; llamarlas desde
+  SECURITY DEFINER):
+  · crear: `flota_aviso_compras_crear(p_tipo text, p_pedido_id uuid, p_ingreso_id uuid, p_titulo text, p_detalle jsonb,
+    p_html text) returns bigint` → p_tipo = 'pesada_sin_pedido', p_pedido_id = null, p_ingreso_id = la pesada; una sola
+    pendiente por pesada (devuelve null si ya existe). Manda el mail a Compras. p_detalle que usa la pantalla: material,
+    vale ('I-…'), proveedor, remito, patente, neto, unidad, fecha.
+  · al anular la pesada: `flota_aviso_compras_resolver_auto('pesada_sin_pedido', null, <ingreso_id>, 'Pesada anulada',
+    'descartado')`. Al vincularla se resuelve solo (trigger de Flota en flota_pedido_item_ingresos_planta).
+
 ### ▶▶▶ 26/11 — Desplegable "Pedido de Flota" para Diego: 80 APLICADA y PUBLICADO
 - Pedido de Federico: (1) el pedido sale del desplegable apenas tiene todos sus camiones (o la cantidad, TN/KG), aunque
   Compras no lo haya recibido; uno de más se guarda SIN pedido con aviso ("…ya tiene su camión…"); (2) opción =
