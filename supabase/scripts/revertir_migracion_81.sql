@@ -1,7 +1,8 @@
 -- ============================================================================
 -- Vuelta atrás de la migración 81 (cierre automático de pedidos Plantas).
--- Deja vincular / restar / desvincular como en la 79, el helper de "completo"
--- como en la 80, y borra la tabla plantas_cierres_flota y las funciones nuevas.
+-- Deja vincular / restar / desvincular como en la 79, el helper de "completo" y
+-- registrar_ingreso_pedido_flota como en la 80, borra los permisos de "vincular después" y el aviso de pesada sin pedido
+-- (el trigger de anulación vuelve a la 79), y borra la tabla plantas_cierres_flota y las funciones nuevas.
 -- NO deshace datos de Flota: los ítems que la balanza dejó "recibido" y los
 -- pedidos que cerró quedan así (Alejandro los maneja a mano, como antes).
 -- Antes de correrla, guardar el listado:  select * from plantas_cierres_flota;
@@ -152,7 +153,78 @@ as $f$
   end
 $f$;
 
+create or replace function public.registrar_ingreso_pedido_flota(
+  p_flota_item_id uuid, p_peso_bruto numeric, p_tara numeric, p_material text, p_proveedor text,
+  p_numero_remito text, p_cantidad_remito numeric, p_patente text default null, p_unidad text default 'tn',
+  p_observaciones text default null, p_fecha_pesada timestamptz default now()
+)
+returns jsonb language plpgsql security definer set search_path to 'public'
+as $f$
+declare
+  v_item       flota_pedido_items;
+  v_pedido     flota_pedidos;
+  v_vale       plantas_vales;
+  v_ingreso_id uuid;
+  v_aviso      text;
+  v_motivo     text;
+begin
+  if coalesce(plantas_rol_actual(), '') not in ('admin', 'plantista', 'balancero') then
+    raise exception 'Tu rol (%) no puede registrar pesadas de báscula.', coalesce(plantas_rol_actual(), 'sin rol asignado');
+  end if;
+
+  select * into v_item from flota_pedido_items where id = p_flota_item_id for update;
+  if not found then raise exception 'El ítem del pedido de Flota no existe.'; end if;
+  select * into v_pedido from flota_pedidos where id = v_item.pedido_id;
+  if plantas_buscar_material_id(p_material) is distinct from v_item.material_planta_id then
+    raise exception 'El pedido % es de %, no de %.', v_pedido.numero,
+      coalesce((select nombre from plantas_materiales where id = v_item.material_planta_id), 'otro material'), p_material;
+  end if;
+
+  v_vale := registrar_pesada_bascula(
+    p_tipo_vale => 'ingreso_arido', p_peso_bruto => p_peso_bruto, p_tara => p_tara, p_patente => p_patente,
+    p_unidad => coalesce(p_unidad, 'tn'), p_observaciones => p_observaciones, p_fecha_pesada => coalesce(p_fecha_pesada, now()),
+    p_material => p_material, p_proveedor => p_proveedor, p_numero_remito => p_numero_remito, p_cantidad_remito => p_cantidad_remito);
+  select id into v_ingreso_id from plantas_ingresos where vale_id = v_vale.id;
+
+  if v_pedido.modulo = 'plantas' and v_pedido.estado in ('en_compras', 'parcialmente_abierto')
+     and v_item.estado_item = 'pendiente' and upper(coalesce(v_item.unidad, '')) in ('TN', 'KG')
+     and not plantas_item_flota_completo(v_item) then
+    perform vincular_pesada_pedido_flota(v_ingreso_id, v_item.id);
+    return jsonb_build_object('vale_id', v_vale.id, 'vinculado', true, 'aviso', null);
+  end if;
+
+  v_motivo := case
+    when v_item.estado_item <> 'pendiente' then 'ítem ' || v_item.estado_item
+    when v_pedido.estado not in ('en_compras', 'parcialmente_abierto') then 'pedido ' || v_pedido.estado
+    when plantas_item_flota_completo(v_item) and v_item.pedido_por = 'camion' then
+      case when v_item.camiones = 1 then 'ya tiene su camión' else format('ya tiene sus %s camiones', v_item.camiones) end
+    when plantas_item_flota_completo(v_item) then
+      format('ya tiene sus %s %s', replace(trim_scale(v_item.cantidad)::text, '.', ','), upper(v_item.unidad))
+    else 'pedido ' || v_pedido.estado
+  end;
+  v_aviso := format('Pesada I-%s guardada SIN pedido: el pedido %s ya no la recibe (%s). Compras puede vincularla desde Flota.',
+                    v_vale.numero_vale_arido, v_pedido.numero, v_motivo);
+  return jsonb_build_object('vale_id', v_vale.id, 'vinculado', false, 'aviso', v_aviso);
+end;
+$f$;
+
+create or replace function public.plantas_trg_ingreso_anulado_flota()
+returns trigger language plpgsql security definer set search_path to 'public'
+as $f$
+begin
+  if new.anulado and not coalesce(old.anulado, false) then
+    perform plantas_restar_pesada_de_item(new.id, null, true);
+  end if;
+  return new;
+end;
+$f$;
+
+drop trigger if exists plantas_ingresos_sin_pedido_flota on public.plantas_ingresos;
+drop function if exists public.plantas_trg_ingreso_sin_pedido_flota();
 drop function if exists public.pesadas_de_pedido_flota(uuid);
+drop function if exists public.plantas_vincular_pesada_interna(uuid, uuid);
+drop function if exists public.plantas_puede_vincular_despues();
+drop table if exists public.plantas_vinculo_flota_autorizados;
 drop function if exists public.plantas_cerrar_item_flota_si_completo(uuid);
 drop function if exists public.plantas_recalcular_pedido_flota(uuid);
 drop table if exists public.plantas_cierres_flota;

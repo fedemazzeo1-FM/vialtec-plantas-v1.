@@ -25,20 +25,48 @@
 --   Desvincular ahora acepta un pedido `cerrado` si lo cerró la balanza.
 --
 --   Nuevo:      plantas_cierres_flota (tabla, quién/cuándo cerró y reabrió)
+--               plantas_vinculo_flota_autorizados + plantas_puede_vincular_despues()
+--               trigger diferido plantas_ingresos_sin_pedido_flota (aviso D6)
 --               plantas_cerrar_item_flota_si_completo(item)  (interna)
 --               pesadas_de_pedido_flota(p_pedido_id)          (Flota: detalle por camión)
 --   Reemplaza:  plantas_item_flota_completo (95 % en TN)
---               vincular_pesada_pedido_flota (cierra al completar)
+--               vincular_pesada_pedido_flota (solo autorizados; vincula con plantas_vincular_pesada_interna, que cierra)
+--               registrar_ingreso_pedido_flota (la balanza vincula con la interna)
 --               plantas_restar_pesada_de_item (reabre)
 --               desvincular_pesada_pedido_flota (acepta cerrado por balanza)
 --   Puesta al día: los ítems pendientes que YA están completos por pesadas
 --   vinculadas se cierran al aplicar, SIN mandar mails (el trigger de avisos
 --   se apaga solo durante ese paso). Correr después de la limpieza de Flota.
 --
+--   Permisos (Federico, 26/11): al pesar, la balanza sigue eligiendo el pedido
+--   (registrar_ingreso_pedido_flota). Vincular o desvincular DESPUÉS (Pesadas
+--   sin pedido / Avisos) solo: admin de Plantas, Flota Admin o gerente_compras
+--   (Alejandro), y los mails de plantas_vinculo_flota_autorizados (Félix).
+--   Balanceros y demás plantistas no.
+--
+--   Aviso "pesada sin pedido" (D6, con Flota): al confirmar una pesada de
+--   ingreso de un material que se pide por Flota (se_pide_por_flota, TN/KG) que
+--   no quedó vinculada, se crea el aviso a Compras (flota_aviso_compras_crear,
+--   tipo 'pesada_sin_pedido'). Trigger diferido: corre al final de la
+--   transacción, cuando la balanza ya vinculó (o no). Al anular la pesada, el
+--   aviso se descarta solo. Si los avisos de Flota fallan, la pesada se guarda
+--   igual (solo queda un warning).
+--
+--   REQUIERE ANTES: limpieza de pedidos y pedidos_plantas_balanza.sql (Flota 1).
+--   DESPUÉS: pedidos_plantas_balanza_post81.sql (Flota 2).
+--
 -- No toca registrar_pesada_bascula / anular / corregir, ni fn_pedidos_avisos.
 -- Ensayo:       supabase/scripts/dry_run_migracion_81.sql
 -- Vuelta atrás: supabase/scripts/revertir_migracion_81.sql
 -- ============================================================================
+
+do $pre$
+begin
+  if to_regprocedure('public.flota_aviso_compras_crear(text, uuid, uuid, text, jsonb, text)') is null
+     or to_regprocedure('public.flota_aviso_compras_resolver_auto(text, uuid, uuid, text, text)') is null then
+    raise exception 'Falta la migración de Flota pedidos_plantas_balanza.sql: aplicarla antes que la 81.';
+  end if;
+end $pre$;
 
 insert into plantas_auditoria_entidades (modulo, entidad, modulo_etiqueta, entidad_etiqueta, orden)
 values ('bascula', 'cierre_flota', 'Báscula', 'Cierre de pedido de Flota', 25);
@@ -61,6 +89,26 @@ create policy plantas_cierres_flota_leer on public.plantas_cierres_flota
   for select to authenticated using (plantas_puede_vincular_flota());
 revoke all on public.plantas_cierres_flota from anon;
 revoke insert, update, delete on public.plantas_cierres_flota from authenticated;
+
+-- Quién vincula/desvincula DESPUÉS de pesar (además de los roles de abajo).
+create table public.plantas_vinculo_flota_autorizados (
+  email     text primary key check (email = lower(btrim(email))),
+  nota      text,
+  creado_at timestamptz not null default now()
+);
+alter table public.plantas_vinculo_flota_autorizados enable row level security;
+revoke all on public.plantas_vinculo_flota_autorizados from anon, authenticated;
+insert into public.plantas_vinculo_flota_autorizados (email, nota)
+values ('felix.pereyra@vialtec.com.ar', 'Félix — Federico 26/11');
+
+create or replace function public.plantas_puede_vincular_despues()
+returns boolean language sql stable security definer set search_path to 'public'
+as $f$
+  select coalesce(plantas_rol_actual(), '') = 'admin'
+      or exists (select 1 from flota_usuarios_email u
+                  where lower(u.email) = lower(auth.email()) and u.activo and u.rol in ('Admin', 'gerente_compras'))
+      or exists (select 1 from plantas_vinculo_flota_autorizados a where a.email = lower(auth.email()))
+$f$;
 
 -- D2: 95 % en TN.
 create or replace function public.plantas_item_flota_completo(i flota_pedido_items)
@@ -160,9 +208,10 @@ end;
 $f$;
 
 -- ---------------------------------------------------------------------------
--- vincular: igual que la 79 + cierre al completar.
+-- Vincular (interna, sin control de quién): igual que la 79 + cierre al
+-- completar. La usan la balanza al pesar y vincular_pesada_pedido_flota.
 -- ---------------------------------------------------------------------------
-create or replace function public.vincular_pesada_pedido_flota(p_ingreso_id uuid, p_flota_item_id uuid)
+create or replace function public.plantas_vincular_pesada_interna(p_ingreso_id uuid, p_flota_item_id uuid)
 returns jsonb language plpgsql security definer set search_path to 'public'
 as $f$
 declare
@@ -174,10 +223,6 @@ declare
   v_neto   numeric;
   v_cerro  boolean;
 begin
-  if not plantas_puede_vincular_flota() then
-    raise exception 'No tenés permiso para vincular pesadas a pedidos de Flota.';
-  end if;
-
   select * into v_item from flota_pedido_items where id = p_flota_item_id for update;
   if not found then raise exception 'El ítem del pedido de Flota no existe.'; end if;
   select * into v_pedido from flota_pedidos where id = v_item.pedido_id;
@@ -232,6 +277,75 @@ begin
                             'camiones_recibidos', v_item.camiones_recibidos, 'cantidad_real', v_item.cantidad_real,
                             'item_recibido', v_cerro,
                             'pedido_cerrado', (select estado = 'cerrado' from flota_pedidos where id = v_item.pedido_id));
+end;
+$f$;
+
+-- Vincular DESPUÉS (Pesadas sin pedido / Avisos): solo los autorizados.
+create or replace function public.vincular_pesada_pedido_flota(p_ingreso_id uuid, p_flota_item_id uuid)
+returns jsonb language plpgsql security definer set search_path to 'public'
+as $f$
+begin
+  if not plantas_puede_vincular_despues() then
+    raise exception 'Vincular una pesada después de pesar lo hacen admin, Félix o Compras.';
+  end if;
+  return plantas_vincular_pesada_interna(p_ingreso_id, p_flota_item_id);
+end;
+$f$;
+
+-- Balanza al pesar: igual que la 80, pero vincula con la interna (el balancero
+-- elige el pedido en la puerta, como hoy).
+create or replace function public.registrar_ingreso_pedido_flota(
+  p_flota_item_id uuid, p_peso_bruto numeric, p_tara numeric, p_material text, p_proveedor text,
+  p_numero_remito text, p_cantidad_remito numeric, p_patente text default null, p_unidad text default 'tn',
+  p_observaciones text default null, p_fecha_pesada timestamptz default now()
+)
+returns jsonb language plpgsql security definer set search_path to 'public'
+as $f$
+declare
+  v_item       flota_pedido_items;
+  v_pedido     flota_pedidos;
+  v_vale       plantas_vales;
+  v_ingreso_id uuid;
+  v_aviso      text;
+  v_motivo     text;
+begin
+  if coalesce(plantas_rol_actual(), '') not in ('admin', 'plantista', 'balancero') then
+    raise exception 'Tu rol (%) no puede registrar pesadas de báscula.', coalesce(plantas_rol_actual(), 'sin rol asignado');
+  end if;
+
+  select * into v_item from flota_pedido_items where id = p_flota_item_id for update;
+  if not found then raise exception 'El ítem del pedido de Flota no existe.'; end if;
+  select * into v_pedido from flota_pedidos where id = v_item.pedido_id;
+  if plantas_buscar_material_id(p_material) is distinct from v_item.material_planta_id then
+    raise exception 'El pedido % es de %, no de %.', v_pedido.numero,
+      coalesce((select nombre from plantas_materiales where id = v_item.material_planta_id), 'otro material'), p_material;
+  end if;
+
+  v_vale := registrar_pesada_bascula(
+    p_tipo_vale => 'ingreso_arido', p_peso_bruto => p_peso_bruto, p_tara => p_tara, p_patente => p_patente,
+    p_unidad => coalesce(p_unidad, 'tn'), p_observaciones => p_observaciones, p_fecha_pesada => coalesce(p_fecha_pesada, now()),
+    p_material => p_material, p_proveedor => p_proveedor, p_numero_remito => p_numero_remito, p_cantidad_remito => p_cantidad_remito);
+  select id into v_ingreso_id from plantas_ingresos where vale_id = v_vale.id;
+
+  if v_pedido.modulo = 'plantas' and v_pedido.estado in ('en_compras', 'parcialmente_abierto')
+     and v_item.estado_item = 'pendiente' and upper(coalesce(v_item.unidad, '')) in ('TN', 'KG')
+     and not plantas_item_flota_completo(v_item) then
+    perform plantas_vincular_pesada_interna(v_ingreso_id, v_item.id);
+    return jsonb_build_object('vale_id', v_vale.id, 'vinculado', true, 'aviso', null);
+  end if;
+
+  v_motivo := case
+    when v_item.estado_item <> 'pendiente' then 'ítem ' || v_item.estado_item
+    when v_pedido.estado not in ('en_compras', 'parcialmente_abierto') then 'pedido ' || v_pedido.estado
+    when plantas_item_flota_completo(v_item) and v_item.pedido_por = 'camion' then
+      case when v_item.camiones = 1 then 'ya tiene su camión' else format('ya tiene sus %s camiones', v_item.camiones) end
+    when plantas_item_flota_completo(v_item) then
+      format('ya tiene sus %s %s', replace(trim_scale(v_item.cantidad)::text, '.', ','), upper(v_item.unidad))
+    else 'pedido ' || v_pedido.estado
+  end;
+  v_aviso := format('Pesada I-%s guardada SIN pedido: el pedido %s ya no la recibe (%s). Compras puede vincularla desde Flota.',
+                    v_vale.numero_vale_arido, v_pedido.numero, v_motivo);
+  return jsonb_build_object('vale_id', v_vale.id, 'vinculado', false, 'aviso', v_aviso);
 end;
 $f$;
 
@@ -317,8 +431,8 @@ declare
   v_numero  text;
   v_item_id uuid;
 begin
-  if not plantas_puede_vincular_flota() then
-    raise exception 'No tenés permiso para desvincular pesadas de pedidos de Flota.';
+  if not plantas_puede_vincular_despues() then
+    raise exception 'Desvincular una pesada lo hacen admin, Félix o Compras.';
   end if;
   if p_motivo is null or btrim(p_motivo) = '' then
     raise exception 'El motivo es obligatorio para desvincular una pesada.';
@@ -366,8 +480,73 @@ begin
 end;
 $f$;
 
+-- ---------------------------------------------------------------------------
+-- D6: aviso a Compras por pesada de ingreso sin pedido (trigger diferido).
+-- ---------------------------------------------------------------------------
+create or replace function public.plantas_trg_ingreso_sin_pedido_flota()
+returns trigger language plpgsql security definer set search_path to 'public'
+as $f$
+declare
+  v_ing  plantas_ingresos;
+  v_vale plantas_vales;
+  v_mat  plantas_materiales;
+  v_neto numeric;
+begin
+  select * into v_ing from plantas_ingresos where id = new.id;
+  if not found or v_ing.vale_id is null or coalesce(v_ing.anulado, false) then return null; end if;
+  if exists (select 1 from flota_pedido_item_ingresos_planta where ingreso_id = v_ing.id) then return null; end if;
+  select * into v_mat from plantas_materiales where id = plantas_buscar_material_id(v_ing.material);
+  if not coalesce(v_mat.se_pide_por_flota, false) or upper(coalesce(v_mat.unidad, '')) not in ('TN', 'KG') then return null; end if;
+  select * into v_vale from plantas_vales where id = v_ing.vale_id;
+  if coalesce(v_vale.anulado, false) then return null; end if;
+  if to_regprocedure('public.flota_aviso_compras_crear(text, uuid, uuid, text, jsonb, text)') is null then return null; end if;
+  v_neto := round(case when coalesce(v_vale.unidad, 'tn') = 'kg' then v_vale.peso_neto / 1000 else v_vale.peso_neto end, 3);
+  begin
+    perform flota_aviso_compras_crear('pesada_sin_pedido', null, v_ing.id,
+      'Pesada sin pedido: ' || v_mat.nombre || ' (vale I-' || v_vale.numero_vale_arido || ')',
+      jsonb_build_object('material', v_mat.nombre, 'vale', 'I-' || v_vale.numero_vale_arido, 'proveedor', v_ing.proveedor,
+                         'remito', v_ing.numero_remito, 'patente', v_vale.patente, 'neto', v_neto, 'unidad', 'TN',
+                         'fecha', coalesce(v_vale.fecha_pesada, v_ing.fecha_ingreso)),
+      format('<p>Entró a la planta una pesada de <b>%s</b> sin pedido de Flota: vale I-%s, %s TN, proveedor %s, remito %s, patente %s.</p>',
+             v_mat.nombre, v_vale.numero_vale_arido, replace(v_neto::text, '.', ','),
+             coalesce(nullif(v_ing.proveedor, ''), '—'), coalesce(nullif(v_ing.numero_remito, ''), '—'), coalesce(nullif(v_vale.patente, ''), '—')));
+  exception when others then
+    raise warning 'Pesada I-% sin aviso a Compras: %', v_vale.numero_vale_arido, sqlerrm;
+  end;
+  return null;
+end;
+$f$;
+
+create constraint trigger plantas_ingresos_sin_pedido_flota
+  after insert on public.plantas_ingresos
+  deferrable initially deferred
+  for each row execute function public.plantas_trg_ingreso_sin_pedido_flota();
+
+-- Anular la pesada: resta del ítem (79) y descarta su aviso de "sin pedido".
+create or replace function public.plantas_trg_ingreso_anulado_flota()
+returns trigger language plpgsql security definer set search_path to 'public'
+as $f$
+begin
+  if new.anulado and not coalesce(old.anulado, false) then
+    perform plantas_restar_pesada_de_item(new.id, null, true);
+    if to_regprocedure('public.flota_aviso_compras_resolver_auto(text, uuid, uuid, text, text)') is not null then
+      begin
+        perform flota_aviso_compras_resolver_auto('pesada_sin_pedido', null, new.id, 'Pesada anulada', 'descartado');
+      exception when others then
+        raise warning 'Aviso de la pesada % sin descartar: %', new.id, sqlerrm;
+      end;
+    end if;
+  end if;
+  return new;
+end;
+$f$;
+
+revoke execute on function public.plantas_trg_ingreso_sin_pedido_flota() from public, anon, authenticated;
 revoke execute on function public.plantas_recalcular_pedido_flota(uuid) from public, anon, authenticated;
 revoke execute on function public.plantas_cerrar_item_flota_si_completo(uuid) from public, anon, authenticated;
+revoke execute on function public.plantas_vincular_pesada_interna(uuid, uuid) from public, anon, authenticated;
+revoke execute on function public.plantas_puede_vincular_despues() from public, anon;
+grant  execute on function public.plantas_puede_vincular_despues() to authenticated;
 revoke execute on function public.pesadas_de_pedido_flota(uuid) from public, anon;
 grant  execute on function public.pesadas_de_pedido_flota(uuid) to authenticated;
 

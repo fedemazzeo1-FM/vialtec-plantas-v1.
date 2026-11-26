@@ -6,14 +6,22 @@
 -- 0531, 0536 al 26/11) e incluye la vuelta atrás (revertir_migracion_81.sql).
 -- [ANTES]:
 --   create temp table _md5_80 on commit drop as select proname, md5(pg_get_functiondef(oid)) h from pg_proc
---    where proname in ('vincular_pesada_pedido_flota','plantas_restar_pesada_de_item','desvincular_pesada_pedido_flota','plantas_item_flota_completo');
+--    where proname in ('vincular_pesada_pedido_flota','plantas_restar_pesada_de_item','desvincular_pesada_pedido_flota','plantas_item_flota_completo','registrar_ingreso_pedido_flota','plantas_trg_ingreso_anulado_flota');
+--   Si la migración de Flota (pedidos_plantas_balanza.sql) todavía no está aplicada, antes de la 81 crear
+--   dobles de sus dos funciones de avisos que anotan las llamadas (se deshacen con el ensayo):
+--   create temp table _avisos (accion text, tipo text, ingreso_id uuid, titulo text) on commit drop;
+--   create function public.flota_aviso_compras_crear(p_tipo text, p_pedido_id uuid, p_ingreso_id uuid, p_titulo text, p_detalle jsonb, p_html text)
+--   returns bigint language sql as $s$ insert into pg_temp._avisos values ('crear', p_tipo, p_ingreso_id, p_titulo) returning 1::bigint $s$;
+--   create function public.flota_aviso_compras_resolver_auto(p_tipo text, p_pedido_id uuid, p_ingreso_id uuid, p_nota text, p_estado text default 'resuelto')
+--   returns integer language sql as $s$ insert into pg_temp._avisos values (p_estado, p_tipo, p_ingreso_id, p_nota) returning 1 $s$;
+--   (con la de Flota aplicada, los avisos van a flota_avisos_compras: cambiar pg_temp._avisos por esa tabla en K)
 -- ============================================================================
 do $dry$
 declare
   v_ok text[] := '{}'; v_seq_antes bigint; v_seq_llam boolean;
   v_531 flota_pedido_items; v_536 flota_pedido_items; v_528 flota_pedido_items; v_514 flota_pedido_items; v_it flota_pedido_items;
   v_p flota_pedidos; v_c plantas_cierres_flota; v_r jsonb; v_n int; v_ing uuid; v_ing2 uuid; v_link_528 uuid;
-  v_otros text; v_otros_d text; v_md5 text; v_md5_d text; v_items_536 int;
+  v_otros text; v_otros_d text; v_md5 text; v_md5_d text; v_items_536 int; v_ing_b uuid; v_ing_k uuid;
   c_balanza   constant text := '{"email":"balanza@vialtec.com.ar","role":"authenticated"}';
   c_alejandro constant text := '{"email":"alejandro.fernandez@vialtec.com.ar","role":"authenticated"}';
   c_nadie     constant text := '{"email":"nadie.ensayo81@example.com","role":"authenticated"}';
@@ -28,7 +36,7 @@ begin
   v_otros := (select md5(string_agg(i::text, ',' order by i.id)) from flota_pedido_items i where i.pedido_id not in (v_531.pedido_id, v_536.pedido_id, v_528.pedido_id, v_514.pedido_id));
   v_md5 := (select string_agg(md5(pg_get_functiondef(oid)), ',' order by proname) from pg_proc
              where proname in ('registrar_pesada_bascula', 'anular_vale_bascula', 'corregir_vale_bascula', 'fn_pedidos_avisos',
-                               'registrar_ingreso_pedido_flota', 'plantas_pedidos_flota_pendientes', 'pesadas_sin_pedido_flota'));
+                               'plantas_pedidos_flota_pendientes', 'pesadas_sin_pedido_flota'));
 
   -- A. Puesta al día: PED-0531 (1 de 1 con pesada) quedó recibido y el pedido cerrado.
   select * into v_it from flota_pedido_items where id = v_531.id;
@@ -50,6 +58,7 @@ begin
   v_r := registrar_ingreso_pedido_flota(v_536.id, 40, 13, 'ASFALTO CA30', 'PROVEEDOR ENSAYO 81', 'ENSAYO81-B', 27);
   if not (v_r->>'vinculado')::boolean then raise exception 'B1: %', v_r; end if;
   select id into v_ing from plantas_ingresos where vale_id = (v_r->>'vale_id')::uuid;
+  v_ing_b := v_ing;
   select * into v_it from flota_pedido_items where id = v_536.id;
   select * into v_p from flota_pedidos where id = v_536.pedido_id;
   if v_it.estado_item <> 'recibido' or v_it.camiones_recibidos <> 2 or v_it.nro_remito not like '%ENSAYO81-B%' then raise exception 'B2: % % %', v_it.estado_item, v_it.camiones_recibidos, v_it.nro_remito; end if;
@@ -118,18 +127,55 @@ begin
   exception when others then if sqlerrm not like '%No tenés permiso para ver%' then raise; end if; end;
   v_ok := v_ok || 'G pesadas_de_pedido_flota: 2 camiones de PED-0528 para Compras; sin permiso, rechaza'::text;
 
+  -- J. Permisos: vincular/desvincular DESPUÉS solo admin, Compras/Admin de Flota y autorizados (Félix).
+  perform set_config('request.jwt.claims', c_balanza, true);
+  v_r := registrar_ingreso_pedido_flota(v_514.id, 40, 13, 'ASFALTO CA30', 'PROVEEDOR ENSAYO 81', 'ENSAYO81-J', 27);  -- balanza al pesar: sí
+  if not (v_r->>'vinculado')::boolean then raise exception 'J1: la balanza no pudo pesar contra el pedido'; end if;
+  select id into v_ing from plantas_ingresos where vale_id = (v_r->>'vale_id')::uuid;
+  begin perform desvincular_pesada_pedido_flota(v_ing, 'x'); raise exception 'J2';
+  exception when others then if sqlerrm not like '%lo hacen admin, Félix o Compras%' then raise; end if; end;
+  perform set_config('request.jwt.claims', '{"email":"juan.marun@vialtec.com.ar","role":"authenticated"}', true);  -- otro plantista: no
+  begin perform desvincular_pesada_pedido_flota(v_ing, 'x'); raise exception 'J3';
+  exception when others then if sqlerrm not like '%lo hacen admin, Félix o Compras%' then raise; end if; end;
+  perform set_config('request.jwt.claims', '{"email":"felix.pereyra@vialtec.com.ar","role":"authenticated"}', true);  -- Félix: sí
+  perform desvincular_pesada_pedido_flota(v_ing, 'Ensayo 81 Félix');
+  perform set_config('request.jwt.claims', c_balanza, true);
+  begin perform vincular_pesada_pedido_flota(v_ing, v_514.id); raise exception 'J4';
+  exception when others then if sqlerrm not like '%lo hacen admin, Félix o Compras%' then raise; end if; end;
+  perform set_config('request.jwt.claims', '{"email":"federico.mazzeo@vialtec.com.ar","role":"authenticated"}', true);  -- admin: sí
+  v_r := vincular_pesada_pedido_flota(v_ing, v_514.id);
+  if not (v_r->>'item_recibido')::boolean then raise exception 'J5: %', v_r; end if;
+  if has_function_privilege('authenticated', 'plantas_vincular_pesada_interna(uuid, uuid)', 'execute') then raise exception 'J6: interna expuesta'; end if;
+  v_ok := v_ok || 'J permisos: balanza pesa contra pedido; balancero y otro plantista no vinculan/desvinculan después; Félix, Alejandro y admin sí'::text;
+
+  -- K. D6: aviso "pesada sin pedido" al confirmar (trigger diferido), y descartado al anular.
+  perform set_config('request.jwt.claims', c_balanza, true);
+  v_r := registrar_ingreso_pedido_flota(v_531.id, 40, 13, 'ASFALTO CA30', 'PROVEEDOR ENSAYO 81', 'ENSAYO81-K', 27);  -- 0531 ya recibido: sin pedido
+  if (v_r->>'vinculado')::boolean then raise exception 'K1: %', v_r; end if;
+  select id into v_ing_k from plantas_ingresos where vale_id = (v_r->>'vale_id')::uuid;
+  if exists (select 1 from pg_temp._avisos where ingreso_id = v_ing_k) then raise exception 'K2: el aviso salió antes de confirmar'; end if;
+  set constraints plantas_ingresos_sin_pedido_flota immediate;  -- como al confirmar la transacción
+  if not exists (select 1 from pg_temp._avisos where accion = 'crear' and tipo = 'pesada_sin_pedido' and ingreso_id = v_ing_k and titulo like '%ASFALTO CA30%') then raise exception 'K3: sin aviso'; end if;
+  if not exists (select 1 from pg_temp._avisos where accion = 'crear' and ingreso_id = v_ing_b) then raise exception 'K4: la desvinculada (B/C) no avisó'; end if;
+  if exists (select 1 from pg_temp._avisos where accion = 'crear' and ingreso_id = v_ing) then raise exception 'K5: avisó una pesada vinculada (J)'; end if;
+  update plantas_ingresos set anulado = true where id = v_ing_k;
+  if not exists (select 1 from pg_temp._avisos where accion = 'descartado' and tipo = 'pesada_sin_pedido' and ingreso_id = v_ing_k) then raise exception 'K6: no se descartó al anular'; end if;
+  v_ok := v_ok || 'K aviso pesada sin pedido: sale al confirmar (no antes), también la desvinculada, no la vinculada; al anular se descarta'::text;
+
   -- H. Nada más cambió.
   v_otros_d := (select md5(string_agg(i::text, ',' order by i.id)) from flota_pedido_items i where i.pedido_id not in (v_531.pedido_id, v_536.pedido_id, v_528.pedido_id, v_514.pedido_id));
   v_md5_d := (select string_agg(md5(pg_get_functiondef(oid)), ',' order by proname) from pg_proc
                where proname in ('registrar_pesada_bascula', 'anular_vale_bascula', 'corregir_vale_bascula', 'fn_pedidos_avisos',
-                                 'registrar_ingreso_pedido_flota', 'plantas_pedidos_flota_pendientes', 'pesadas_sin_pedido_flota'));
+                                 'plantas_pedidos_flota_pendientes', 'pesadas_sin_pedido_flota'));
   if v_otros_d <> v_otros then raise exception 'H1: se movieron otros pedidos'; end if;
   if v_md5_d <> v_md5 then raise exception 'H2: cambió una función que no debía'; end if;
   if has_function_privilege('authenticated', 'plantas_cerrar_item_flota_si_completo(uuid)', 'execute')
      or has_function_privilege('authenticated', 'plantas_recalcular_pedido_flota(uuid)', 'execute')
      or has_function_privilege('anon', 'pesadas_de_pedido_flota(uuid)', 'execute')
      or not has_function_privilege('authenticated', 'pesadas_de_pedido_flota(uuid)', 'execute')
-     or has_table_privilege('authenticated', 'plantas_cierres_flota', 'insert') then
+     or has_table_privilege('authenticated', 'plantas_cierres_flota', 'insert')
+     or has_table_privilege('authenticated', 'plantas_vinculo_flota_autorizados', 'select')
+     or has_function_privilege('authenticated', 'plantas_trg_ingreso_sin_pedido_flota()', 'execute') then
     raise exception 'H3: permisos'; end if;
   v_ok := v_ok || 'H otros pedidos y funciones intactos, permisos OK'::text;
 
@@ -278,19 +324,93 @@ as $f$
   end
 $f$;
 
+create or replace function public.registrar_ingreso_pedido_flota(
+  p_flota_item_id uuid, p_peso_bruto numeric, p_tara numeric, p_material text, p_proveedor text,
+  p_numero_remito text, p_cantidad_remito numeric, p_patente text default null, p_unidad text default 'tn',
+  p_observaciones text default null, p_fecha_pesada timestamptz default now()
+)
+returns jsonb language plpgsql security definer set search_path to 'public'
+as $f$
+declare
+  v_item       flota_pedido_items;
+  v_pedido     flota_pedidos;
+  v_vale       plantas_vales;
+  v_ingreso_id uuid;
+  v_aviso      text;
+  v_motivo     text;
+begin
+  if coalesce(plantas_rol_actual(), '') not in ('admin', 'plantista', 'balancero') then
+    raise exception 'Tu rol (%) no puede registrar pesadas de báscula.', coalesce(plantas_rol_actual(), 'sin rol asignado');
+  end if;
+
+  select * into v_item from flota_pedido_items where id = p_flota_item_id for update;
+  if not found then raise exception 'El ítem del pedido de Flota no existe.'; end if;
+  select * into v_pedido from flota_pedidos where id = v_item.pedido_id;
+  if plantas_buscar_material_id(p_material) is distinct from v_item.material_planta_id then
+    raise exception 'El pedido % es de %, no de %.', v_pedido.numero,
+      coalesce((select nombre from plantas_materiales where id = v_item.material_planta_id), 'otro material'), p_material;
+  end if;
+
+  v_vale := registrar_pesada_bascula(
+    p_tipo_vale => 'ingreso_arido', p_peso_bruto => p_peso_bruto, p_tara => p_tara, p_patente => p_patente,
+    p_unidad => coalesce(p_unidad, 'tn'), p_observaciones => p_observaciones, p_fecha_pesada => coalesce(p_fecha_pesada, now()),
+    p_material => p_material, p_proveedor => p_proveedor, p_numero_remito => p_numero_remito, p_cantidad_remito => p_cantidad_remito);
+  select id into v_ingreso_id from plantas_ingresos where vale_id = v_vale.id;
+
+  if v_pedido.modulo = 'plantas' and v_pedido.estado in ('en_compras', 'parcialmente_abierto')
+     and v_item.estado_item = 'pendiente' and upper(coalesce(v_item.unidad, '')) in ('TN', 'KG')
+     and not plantas_item_flota_completo(v_item) then
+    perform vincular_pesada_pedido_flota(v_ingreso_id, v_item.id);
+    return jsonb_build_object('vale_id', v_vale.id, 'vinculado', true, 'aviso', null);
+  end if;
+
+  v_motivo := case
+    when v_item.estado_item <> 'pendiente' then 'ítem ' || v_item.estado_item
+    when v_pedido.estado not in ('en_compras', 'parcialmente_abierto') then 'pedido ' || v_pedido.estado
+    when plantas_item_flota_completo(v_item) and v_item.pedido_por = 'camion' then
+      case when v_item.camiones = 1 then 'ya tiene su camión' else format('ya tiene sus %s camiones', v_item.camiones) end
+    when plantas_item_flota_completo(v_item) then
+      format('ya tiene sus %s %s', replace(trim_scale(v_item.cantidad)::text, '.', ','), upper(v_item.unidad))
+    else 'pedido ' || v_pedido.estado
+  end;
+  v_aviso := format('Pesada I-%s guardada SIN pedido: el pedido %s ya no la recibe (%s). Compras puede vincularla desde Flota.',
+                    v_vale.numero_vale_arido, v_pedido.numero, v_motivo);
+  return jsonb_build_object('vale_id', v_vale.id, 'vinculado', false, 'aviso', v_aviso);
+end;
+$f$;
+
+create or replace function public.plantas_trg_ingreso_anulado_flota()
+returns trigger language plpgsql security definer set search_path to 'public'
+as $f$
+begin
+  if new.anulado and not coalesce(old.anulado, false) then
+    perform plantas_restar_pesada_de_item(new.id, null, true);
+  end if;
+  return new;
+end;
+$f$;
+
+drop trigger if exists plantas_ingresos_sin_pedido_flota on public.plantas_ingresos;
+drop function if exists public.plantas_trg_ingreso_sin_pedido_flota();
 drop function if exists public.pesadas_de_pedido_flota(uuid);
+drop function if exists public.plantas_vincular_pesada_interna(uuid, uuid);
+drop function if exists public.plantas_puede_vincular_despues();
+drop table if exists public.plantas_vinculo_flota_autorizados;
 drop function if exists public.plantas_cerrar_item_flota_si_completo(uuid);
 drop function if exists public.plantas_recalcular_pedido_flota(uuid);
 drop table if exists public.plantas_cierres_flota;
 delete from public.plantas_auditoria_entidades e
  where e.modulo = 'bascula' and e.entidad = 'cierre_flota'
    and not exists (select 1 from public.plantas_auditoria a where a.modulo = 'bascula' and a.entidad = 'cierre_flota');
-  if exists (select 1 from pg_proc where proname in ('pesadas_de_pedido_flota', 'plantas_cerrar_item_flota_si_completo', 'plantas_recalcular_pedido_flota'))
+  if exists (select 1 from pg_proc where proname in ('pesadas_de_pedido_flota', 'plantas_cerrar_item_flota_si_completo', 'plantas_recalcular_pedido_flota',
+                                                     'plantas_vincular_pesada_interna', 'plantas_puede_vincular_despues', 'plantas_trg_ingreso_sin_pedido_flota'))
+     or to_regclass('public.plantas_vinculo_flota_autorizados') is not null
+     or exists (select 1 from pg_trigger where tgname = 'plantas_ingresos_sin_pedido_flota')
      or to_regclass('public.plantas_cierres_flota') is not null
      or exists (select 1 from pg_proc p join pg_temp._md5_80 a on a.proname = p.proname where md5(pg_get_functiondef(p.oid)) <> a.h)
-     or (select count(*) from pg_temp._md5_80) <> 4 then
+     or (select count(*) from pg_temp._md5_80) <> 6 then
     raise exception 'I: la vuelta atrás dejó restos o funciones distintas'; end if;
-  v_ok := v_ok || 'I vuelta atrás: funciones como antes de la 81, tabla y funciones nuevas borradas'::text;
+  v_ok := v_ok || 'I vuelta atrás: las 6 funciones como antes de la 81, tablas, trigger y funciones nuevas borradas'::text;
 
   perform setval('plantas_vales_numero_arido_seq', v_seq_antes, v_seq_llam);
   raise exception 'DRYRUN 81 OK — %', array_to_string(v_ok, ' || ');
