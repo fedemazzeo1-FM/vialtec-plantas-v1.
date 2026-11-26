@@ -38,6 +38,7 @@
 -- corregir_vale_bascula. Limitación aceptada: corregir el neto de un vale ya
 -- vinculado no recalcula lo sumado (al restar se usa cantidad_sumada).
 --
+-- APLICADA 26/11/2026 (OK de Federico) por psql, single-transaction: schema_migrations 20261126153514.
 -- Ensayo: supabase/scripts/dry_run_migracion_79.sql
 -- Vuelta atrás: supabase/scripts/revertir_migracion_79.sql
 -- ============================================================================

@@ -2,7 +2,14 @@
 
 ## ▶ RETOMAR AQUÍ
 
-### ▶▶▶ 25/11 — Ingreso contra pedido de Flota: 79 ENSAYADA, SIN APLICAR; front SIN COMMIT NI DEPLOY
+### ▶▶▶ 25/11 — Ingreso contra pedido de Flota: 79 APLICADA (26/11); front COMMITEADO, SIN DEPLOY
+- **26/11 — 79 APLICADA (OK de Federico, desde la sesión de Flota).** Antes: DRYRUN 79 re-corrido, OK A–L, base verificada
+  intacta. Aplicada por psql (`--single-transaction`, ON_ERROR_STOP=1, lock_timeout 5 s, statement_timeout 120 s, pooler
+  aws-1-us-east-2:6543), registrada en `supabase_migrations.schema_migrations` como `20261126153514
+  79_ingreso_contra_pedido_flota`. Verificado: 8 funciones, trigger `plantas_ingresos_anulado_flota`, `cantidad_sumada`,
+  UNIQUE(ingreso_id), entidad de auditoría bascula/vinculo_flota, anon sin EXECUTE, interna sin EXECUTE. **NO volver a
+  aplicarla.** Falta: prueba de Flota en local (vincular/desvincular con una pesada real), y publicar Plantas + Flota el
+  MISMO día con OK de Federico; después, camión real (PED-0528 cemento, PED-0514/PED-0531 CA30).
 - Decisiones de Federico: campo OPCIONAL "Pedido de Flota" en la puerta Ingreso Áridos; al guardar suma en Flota
   (vínculo `flota_pedido_item_ingresos_planta`, `camiones_recibidos` +1, `cantidad_real` + neto en la unidad del ítem).
   Plantas NO cierra (Alejandro sigue cerrando). Stock como siempre (remito). Sin foto, sin avisos. Fuel oil se pedirá en
