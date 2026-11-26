@@ -15,7 +15,14 @@
 - Front: `SelectorPedidoFlota.vue` (desplegable propio, filas altas), `useBascula.js` (etiqueta + elección automática).
 - Los pedidos Plantas de Flota hoy NO traen proveedor (Compras no lo carga) → se muestra la fecha del pedido.
 
-### ▶▶▶ 26/11 — PEDIDO DE LA SESIÓN DE FLOTA: cierre automático por la balanza (migración 80, SIN EMPEZAR)
+### ▶▶▶ 26/11 — MIGRACIÓN 80 (cierre por balanza) ARMADA POR LA SESIÓN DE FLOTA: ENSAYADA OK, SIN APLICAR
+- `supabase/migrations/80_cierre_balanza_pedidos_flota.sql` + `supabase/scripts/revertir_migracion_80.sql`. Requiere ANTES
+  la migración de Flota `vialtec-flota-v2/scripts/migraciones/pedidos_plantas_balanza.sql`; la vuelta atrás de la 80 va
+  ANTES que la de Flota. Ensayo conjunto (las dos + vueltas atrás): `vialtec-flota-v2/scripts/migraciones/
+  pedidos_plantas_balanza_ensayo.sql` → OK A–L el 26/11, base intacta (vales en 1108). Aplicar solo con OK de Federico,
+  el mismo día que se publica Flota. Plantas: no hace falta tocar el front (la balanza ya llama a la función de vincular).
+- Decisiones D1–D6 en la spec de Flota (`src/modules/pedidos/plantas-balanza.spec.md`).
+### (antes) 26/11 — PEDIDO DE LA SESIÓN DE FLOTA: cierre automático por la balanza
 - Federico (26/11): los pedidos de Plantas los cierra la balanza, no Alejandro. Spec (borrador, espera decisiones D1–D6):
   `vialtec-flota-v2/src/modules/pedidos/plantas-balanza.spec.md`. Lo de Plantas: `vincular_pesada_pedido_flota` marca el
   ítem recibido cuando está completo y cierra el pedido (marca de transacción `vialtec.cierre_balanza` para que salga el
